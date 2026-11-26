@@ -36,12 +36,14 @@ cargo run --release --example bot 3 72       # 自动玩家跑 3 个种子各 72
 cargo run --release --example militia        # 各圈层：民兵 / 单人驻守 / 三人小队的胜率
 cargo run --release --example opening        # 开局总部第一次来潮
 cargo run --example dump_view                # 打印一份视图 JSON
-cargo run --release --example synergy        # 220 支三人队爬难度梯子：加法模型、两两交互（加 equip 看装备）
+cargo run --release --example synergy        # 220 支三人队爬难度梯子：加法模型、两两交互（加 equip 看装备，loop 开闭环）
 cargo run --release --example doctrines      # 规则改写发给全队：单独、两两、成套（stack）、汇率（rate）
 cargo run --release --example fixtures       # 守城：驻守职业 × 设施固定物组合
+cargo run --release --example population     # 人口、岗位、闲置、人才和候选从哪来（docs/ideas.md）
+cargo run --release --example customize      # 定制新队员值多少：指定词条 / 稀有度保底（加 loop 开闭环）
 ```
 
-后三个是玩法探索用的，结果和读法见 `docs/gameplay-exploration.md`。
+后五个是玩法探索用的：synergy、doctrines、fixtures 的结果和读法见 `docs/gameplay-exploration.md`，population、customize 见 `docs/ideas.md`。
 
 ## 数值现状
 

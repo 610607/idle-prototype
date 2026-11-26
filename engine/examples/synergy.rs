@@ -174,6 +174,30 @@ pub fn ladder(team: &[Operative], pool: &[Vec<Enc>]) -> Score {
             ));
         }
     }
+    // `loop` on the command line: the reaction table plus the two transmutes that close the
+    // shock → mark → erosion loop (the strongest stack in the doctrine probe).
+    if std::env::args().any(|a| a == "loop") {
+        use idle_engine::content::{Tag, TagEvent, TraitEffect};
+        for s in specs.iter_mut() {
+            for e in [
+                TraitEffect::TagReactions,
+                TraitEffect::Transmute {
+                    on: TagEvent::Consumed,
+                    from: Tag::Shock,
+                    to: Tag::Mark,
+                    stacks: 1,
+                },
+                TraitEffect::Transmute {
+                    on: TagEvent::Consumed,
+                    from: Tag::Mark,
+                    to: Tag::Erosion,
+                    stacks: 2,
+                },
+            ] {
+                s.effects.push(("loop".into(), e));
+            }
+        }
+    }
     // `react` on the command line: the prototype tag-reaction table is on for the squad.
     if std::env::args().any(|a| a == "react") {
         for s in specs.iter_mut() {
