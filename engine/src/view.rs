@@ -1,0 +1,1101 @@
+//! View models out: everything a client needs to draw, already decided. Clients never compute rules;
+//! they render these and send commands back.
+
+use crate::actions;
+use crate::content::{balance, content, Gambit, Resources, Stat, Tag, Trigger};
+use crate::economy::{self, EconCalc};
+use crate::geom::{self, ring, TILES};
+use crate::operative::{self, Derived, RARITY_NAMES};
+use crate::sim::{self, CycleResults};
+use crate::state::*;
+use crate::world;
+use serde::Serialize;
+use std::collections::BTreeMap;
+
+#[derive(Serialize)]
+pub struct TraitView {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub desc: String,
+    pub reads: Vec<Tag>,
+    pub writes: Vec<Tag>,
+    pub exp: bool,
+}
+
+#[derive(Serialize)]
+pub struct SkillView {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub passive: bool,
+    pub desc: String,
+    pub reads: Vec<Tag>,
+    pub writes: Vec<Tag>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<Trigger>,
+}
+
+#[derive(Serialize)]
+pub struct GrowingView {
+    pub id: String,
+    pub name: String,
+    pub hint: String,
+    pub have: i32,
+    pub need: i32,
+}
+
+#[derive(Serialize)]
+pub struct ItemView {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub rarity: i32,
+    pub desc: String,
+    pub reads: Vec<Tag>,
+    pub writes: Vec<Tag>,
+}
+
+#[derive(Serialize)]
+pub struct OpView {
+    pub id: u32,
+    pub name: String,
+    pub class: String,
+    pub class_name: String,
+    pub icon: String,
+    pub side: String,
+    pub front: bool,
+    pub rarity: u8,
+    pub rarity_name: &'static str,
+    pub origin: String,
+    pub stats: [i32; 9],
+    pub derived: Derived,
+    pub traits: Vec<TraitView>,
+    pub growing: Vec<GrowingView>,
+    pub skills: Vec<SkillView>,
+    pub gambits: Vec<Gambit>,
+    pub assignment: Assignment,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub equipment: Option<ItemView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub special: Option<String>,
+    pub locked: bool,
+    pub reads: Vec<Tag>,
+    pub writes: Vec<Tag>,
+}
+
+#[derive(Serialize)]
+pub struct CandidateView {
+    pub id: u32,
+    pub source: String,
+    pub arrived: i64,
+    pub op: OpView,
+    pub cost: i64,
+}
+
+#[derive(Serialize)]
+pub struct RiftView {
+    pub kind: String,
+    pub name: String,
+    pub resident: String,
+    pub dial: Dial,
+    pub residents: i32,
+    pub talent_pct: i32,
+}
+
+#[derive(Serialize)]
+pub struct TileView {
+    pub i: u16,
+    pub label: String,
+    pub terrain: &'static str,
+    pub ring: i32,
+    pub revealed: bool,
+    pub owned: bool,
+    pub warden: i32,
+    pub alert: bool,
+    pub claimable: bool,
+    pub border: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub district: Option<u16>,
+    pub usage: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frozen: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub garrison: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rift: Option<RiftView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub special: Option<SpecialKind>,
+    pub special_done: bool,
+    pub natives: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_surge: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub surge_source: Option<u16>,
+    pub enemies: Vec<Vec<EnemyBrief>>,
+    pub squads: Vec<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workers: Option<(i32, i32)>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct EnemyBrief {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub writes: Vec<Tag>,
+}
+
+#[derive(Serialize)]
+pub struct TalentView {
+    pub prof: String,
+    pub name: String,
+    pub icon: String,
+    pub workers: i32,
+    pub jobs: i32,
+    pub pct: i32,
+    pub rate: i32,
+    pub eta_hours: Option<i32>,
+    pub instructors: i32,
+}
+
+#[derive(Serialize)]
+pub struct PolicyOption {
+    pub id: String,
+    pub name: String,
+    pub desc: String,
+    pub available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct DistrictView {
+    pub id: u16,
+    pub name: String,
+    pub tiles: Vec<u16>,
+    pub owned: usize,
+    pub total: usize,
+    pub contiguous: bool,
+    pub trust: i32,
+    pub trust_target: i32,
+    pub trust_factors: Vec<(String, i32)>,
+    pub population: i32,
+    pub housing: i32,
+    pub unhoused: i32,
+    pub employed: i32,
+    pub militia: i32,
+    pub talent: Vec<TalentView>,
+    pub training_bp: i32,
+    pub policy: Option<String>,
+    pub policy_unlocked: bool,
+    pub policy_options: Vec<PolicyOption>,
+    pub priority: Vec<String>,
+    pub flavor: TraitView,
+}
+
+#[derive(Serialize)]
+pub struct TripView {
+    pub start: i64,
+    pub end: i64,
+    pub outcome: crate::combat::Outcome,
+    pub walked: Vec<u16>,
+    pub results: Vec<TileResultView>,
+    pub loot: Resources,
+    pub drops: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct TileResultView {
+    pub tile: u16,
+    pub label: String,
+    pub outcome: crate::combat::Outcome,
+    pub report: Option<u32>,
+}
+
+#[derive(Serialize)]
+pub struct SquadView {
+    pub id: u32,
+    pub name: String,
+    pub members: Vec<u32>,
+    pub route: Vec<u16>,
+    pub running: Option<TripView>,
+    pub last: Option<TripView>,
+    pub rest_until: i64,
+    pub trips: u32,
+    pub deepest: i32,
+}
+
+#[derive(Serialize)]
+pub struct FacilityOption {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub kind: crate::content::FacilityKind,
+    pub profession: Option<String>,
+    pub jobs: i32,
+    pub power: i32,
+    pub cost: Resources,
+    pub desc: String,
+    pub visible: bool,
+    pub affordable: bool,
+}
+
+#[derive(Serialize)]
+pub struct TideView {
+    pub t: i64,
+    pub tile: u16,
+    pub label: String,
+    pub held: bool,
+    pub lost_wave: Option<u8>,
+    pub total_waves: u8,
+    pub warden_before: i32,
+    pub warden_after: i32,
+    pub source: u16,
+    pub skipped: bool,
+}
+
+#[derive(Serialize)]
+pub struct PendingView {
+    pub kind: &'static str,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tile: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub op: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub candidate: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub district: Option<u16>,
+}
+
+#[derive(Serialize)]
+pub struct SpecialView {
+    pub id: String,
+    pub name: String,
+    pub side: String,
+    pub rule: String,
+    pub hint: String,
+    pub have: i32,
+    pub need: i32,
+    pub met: bool,
+    pub recruited: bool,
+    pub icon: String,
+}
+
+#[derive(Serialize)]
+pub struct RuleView {
+    pub id: String,
+    pub name: String,
+    pub desc: String,
+    pub on: bool,
+}
+
+#[derive(Serialize)]
+pub struct PerkView {
+    pub level: u32,
+    pub text: &'static str,
+    pub unlocked: bool,
+}
+
+#[derive(Serialize)]
+pub struct OrgView {
+    pub level: u32,
+    pub exp: i64,
+    pub next: Option<i64>,
+    pub cycles: u32,
+    pub rules: Vec<RuleView>,
+    pub specials: Vec<SpecialView>,
+    pub perks: Vec<PerkView>,
+    pub history: Vec<CycleSummary>,
+    pub sealed_slots: usize,
+}
+
+#[derive(Serialize)]
+pub struct PreviewView {
+    pub index: usize,
+    pub modifier: String,
+    pub modifier_name: String,
+    pub modifier_desc: String,
+    pub barriers: Vec<u16>,
+    pub rifts: i32,
+    pub specials: i32,
+    pub districts: i32,
+}
+
+#[derive(Serialize)]
+pub struct View {
+    pub time: i64,
+    pub revision: u64,
+    pub phase: Phase,
+    pub cycle: u32,
+    pub started_at: i64,
+    pub modifier: Option<(String, String, String)>,
+    pub previews: Vec<PreviewView>,
+    pub resources: Resources,
+    /// Income per hour x100 per resource (scrap, parts, intel, crystal).
+    pub income: [i64; 4],
+    pub power: (i32, i32, i32),
+    pub attention: (i32, i32, i32),
+    pub self_sufficient: bool,
+    pub border_count: usize,
+    pub tiles: Vec<TileView>,
+    pub districts: Vec<DistrictView>,
+    pub squads: Vec<SquadView>,
+    pub operatives: Vec<OpView>,
+    pub candidates: Vec<CandidateView>,
+    pub queue: usize,
+    pub roster_cap: usize,
+    pub inventory: Vec<ItemView>,
+    pub sealed: Vec<ItemView>,
+    pub facilities: Vec<FacilityOption>,
+    pub tide: Vec<TideView>,
+    pub pending: Vec<PendingView>,
+    pub events: Vec<Event>,
+    pub org: OrgView,
+    pub results: CycleResults,
+    pub hire_cost: i64,
+}
+
+pub fn trait_view(id: &str, exp: bool) -> TraitView {
+    let c = content();
+    match c.traits.get(id) {
+        Some(t) => TraitView {
+            id: id.into(),
+            name: t.name.clone(),
+            icon: t.icon.clone(),
+            desc: t.desc.clone(),
+            reads: t.reads(),
+            writes: t.writes(),
+            exp,
+        },
+        None => TraitView {
+            id: id.into(),
+            name: id.into(),
+            icon: "trait".into(),
+            desc: String::new(),
+            reads: vec![],
+            writes: vec![],
+            exp,
+        },
+    }
+}
+
+pub fn item_view(id: &str) -> ItemView {
+    let c = content();
+    match c.equip(id) {
+        Some(e) => {
+            let mut reads = Vec::new();
+            let mut writes = Vec::new();
+            for ef in &e.effects {
+                reads.extend(ef.reads());
+                writes.extend(ef.writes());
+            }
+            reads.sort();
+            reads.dedup();
+            writes.sort();
+            writes.dedup();
+            ItemView {
+                id: id.into(),
+                name: e.name.clone(),
+                icon: e.icon.clone(),
+                rarity: e.rarity,
+                desc: e.desc.clone(),
+                reads,
+                writes,
+            }
+        }
+        None => ItemView {
+            id: id.into(),
+            name: id.into(),
+            icon: "equip".into(),
+            rarity: 0,
+            desc: String::new(),
+            reads: vec![],
+            writes: vec![],
+        },
+    }
+}
+
+pub fn op_view(state: &GameState, op: &Operative) -> OpView {
+    let c = content();
+    let class = &c.classes[&op.class];
+    let mut traits: Vec<TraitView> = op.traits.iter().map(|t| trait_view(t, false)).collect();
+    traits.extend(op.exp_traits.iter().map(|t| trait_view(t, true)));
+    let skills: Vec<SkillView> = class
+        .skills
+        .iter()
+        .filter_map(|s| c.skills.get(s))
+        .map(|s| SkillView {
+            id: s.id.clone(),
+            name: s.name.clone(),
+            icon: s.icon.clone(),
+            passive: s.kind == crate::content::SkillKind::Passive,
+            desc: s.desc.clone(),
+            reads: s.reads(),
+            writes: s.writes(),
+            trigger: s.trigger,
+        })
+        .collect();
+    let growing: Vec<GrowingView> = c
+        .exp_traits
+        .iter()
+        .filter(|x| !op.exp_traits.contains(&x.trait_id) && !op.traits.contains(&x.trait_id))
+        .map(|x| GrowingView {
+            id: x.trait_id.clone(),
+            name: c
+                .traits
+                .get(&x.trait_id)
+                .map(|t| t.name.clone())
+                .unwrap_or_default(),
+            hint: x.hint.clone(),
+            have: op
+                .counters
+                .get(&x.counter)
+                .copied()
+                .unwrap_or(0)
+                .min(x.need),
+            need: x.need,
+        })
+        .filter(|g| g.have > 0)
+        .collect();
+    let equipment = op.equipment.as_deref().map(item_view);
+    let mut reads: Vec<Tag> = Vec::new();
+    let mut writes: Vec<Tag> = Vec::new();
+    for t in &traits {
+        reads.extend(t.reads.iter().copied());
+        writes.extend(t.writes.iter().copied());
+    }
+    for s in &skills {
+        reads.extend(s.reads.iter().copied());
+        writes.extend(s.writes.iter().copied());
+    }
+    if let Some(e) = &equipment {
+        reads.extend(e.reads.iter().copied());
+        writes.extend(e.writes.iter().copied());
+    }
+    reads.sort();
+    reads.dedup();
+    writes.sort();
+    writes.dedup();
+    let status = match op.assignment {
+        Assignment::Idle => "空闲".to_string(),
+        Assignment::Squad { squad } => {
+            let s = state.cycle.squads.iter().find(|s| s.id == squad);
+            match s {
+                Some(s) if s.trip.is_some() => format!("{} · 路线中", s.name),
+                Some(s) if s.rest_until > state.time => format!("{} · 休整", s.name),
+                Some(s) => format!("{} · 待命", s.name),
+                None => "空闲".into(),
+            }
+        }
+        Assignment::Garrison { tile } => format!("驻扎 {}", geom::label(tile)),
+    };
+    OpView {
+        id: op.id,
+        name: op.name.clone(),
+        class: op.class.clone(),
+        class_name: class.name.clone(),
+        icon: class.icon.clone(),
+        side: class.side.clone(),
+        front: class.row == crate::content::Row::Front,
+        rarity: op.rarity,
+        rarity_name: RARITY_NAMES[op.rarity.min(3) as usize],
+        origin: op.origin.clone(),
+        stats: op.stats,
+        derived: operative::derived(op),
+        traits,
+        growing,
+        skills,
+        gambits: op.gambits.clone(),
+        assignment: op.assignment.clone(),
+        status,
+        equipment,
+        special: op.special.clone(),
+        locked: op.locked,
+        reads,
+        writes,
+    }
+}
+
+fn enemy_brief(id: &str) -> EnemyBrief {
+    let c = content();
+    let e = &c.enemies[id];
+    EnemyBrief {
+        id: id.into(),
+        name: e.name.clone(),
+        icon: e.icon.clone(),
+        writes: e.writes(),
+    }
+}
+
+fn trip_view(t: &Trip) -> TripView {
+    TripView {
+        start: t.start,
+        end: t.end,
+        outcome: t.outcome,
+        walked: t.walked.clone(),
+        results: t
+            .results
+            .iter()
+            .map(|r| TileResultView {
+                tile: r.tile,
+                label: geom::label(r.tile),
+                outcome: r.outcome,
+                report: r.report,
+            })
+            .collect(),
+        loot: t.loot.clone(),
+        drops: t.drops.clone(),
+    }
+}
+
+fn terrain_name(t: &Tile) -> &'static str {
+    if !t.revealed && t.terrain != Terrain::Barrier {
+        return "unknown";
+    }
+    match t.terrain {
+        Terrain::Hq => "hq",
+        Terrain::City => "city",
+        Terrain::Rift => "rift",
+        Terrain::Special => "special",
+        Terrain::Barrier => "barrier",
+    }
+}
+
+pub fn tide_view(entries: &[TideEntry]) -> Vec<TideView> {
+    entries
+        .iter()
+        .map(|e| TideView {
+            t: e.t,
+            tile: e.tile,
+            label: geom::label(e.tile),
+            held: e.held,
+            lost_wave: e.lost_wave,
+            total_waves: e.total_waves,
+            warden_before: e.warden_before,
+            warden_after: e.warden_after,
+            source: e.source,
+            skipped: e.skipped_alert,
+        })
+        .collect()
+}
+
+pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
+    let c = content();
+    let b = balance();
+    let cy = &state.cycle;
+    let level = sim::org_level(state);
+    let org = OrgView {
+        level,
+        exp: state.org.exp,
+        next: sim::ORG_LEVELS.get(level as usize).copied(),
+        cycles: state.org.cycles,
+        rules: c
+            .rules
+            .iter()
+            .map(|r| RuleView {
+                id: r.id.clone(),
+                name: r.name.clone(),
+                desc: r.desc.clone(),
+                on: state.org.rules.get(&r.id).copied().unwrap_or(false),
+            })
+            .collect(),
+        specials: c
+            .specials
+            .iter()
+            .map(|s| {
+                let (have, need) = if cy.phase == Phase::Active {
+                    sim::special_progress(state, &s.id)
+                } else {
+                    (0, s.need)
+                };
+                SpecialView {
+                    id: s.id.clone(),
+                    name: s.name.clone(),
+                    side: s.side.clone(),
+                    rule: s.rule.clone(),
+                    hint: s.hint.clone(),
+                    have,
+                    need,
+                    met: state.org.met_specials.contains(&s.id),
+                    recruited: state
+                        .org
+                        .specials
+                        .iter()
+                        .any(|o| o.special.as_deref() == Some(&s.id)),
+                    icon: c
+                        .classes
+                        .get(&s.class)
+                        .map(|x| x.icon.clone())
+                        .unwrap_or_default(),
+                }
+            })
+            .collect(),
+        perks: vec![
+            PerkView {
+                level: 2,
+                text: "第二支小队",
+                unlocked: level >= 2,
+            },
+            PerkView {
+                level: 3,
+                text: "快反规章：开局第一圈格子镇守度满",
+                unlocked: level >= 3,
+            },
+            PerkView {
+                level: 4,
+                text: "招募池 +1",
+                unlocked: level >= 4,
+            },
+            PerkView {
+                level: 5,
+                text: "封存格 +1",
+                unlocked: level >= 5,
+            },
+            PerkView {
+                level: 6,
+                text: "开局材料 +50%",
+                unlocked: level >= 6,
+            },
+        ],
+        history: state.org.history.clone(),
+        sealed_slots: b.sealed_slots + if level >= 5 { 1 } else { 0 },
+    };
+    let previews = cy
+        .previews
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let m = c.modifier(&p.modifier);
+            PreviewView {
+                index: i,
+                modifier: p.modifier.clone(),
+                modifier_name: m.map(|m| m.name.clone()).unwrap_or_default(),
+                modifier_desc: m.map(|m| m.desc.clone()).unwrap_or_default(),
+                barriers: p.barriers.clone(),
+                rifts: p.rifts,
+                specials: p.specials,
+                districts: p.districts,
+            }
+        })
+        .collect();
+    let mut events: Vec<Event> = state.events.iter().rev().take(60).cloned().collect();
+    events.truncate(60);
+
+    if cy.phase != Phase::Active {
+        return View {
+            time: state.time,
+            revision: state.revision,
+            phase: cy.phase,
+            cycle: cy.number,
+            started_at: cy.started_at,
+            modifier: None,
+            previews,
+            resources: Resources::default(),
+            income: [0; 4],
+            power: (0, 0, 10_000),
+            attention: (0, 0, 10_000),
+            self_sufficient: false,
+            border_count: 0,
+            tiles: vec![],
+            districts: vec![],
+            squads: vec![],
+            operatives: vec![],
+            candidates: vec![],
+            queue: 0,
+            roster_cap: b.roster_cap,
+            inventory: vec![],
+            sealed: state.org.sealed.iter().map(|s| item_view(s)).collect(),
+            facilities: vec![],
+            tide: vec![],
+            pending: vec![PendingView {
+                kind: "map",
+                text: "从三张地图里选一张，开始这一轮".into(),
+                tile: None,
+                op: None,
+                candidate: None,
+                district: None,
+            }],
+            events,
+            org,
+            results: sim::cycle_results(state),
+            hire_cost: b.hire_cost_scrap,
+        };
+    }
+
+    let calc: EconCalc = economy::calc(state);
+    let border: Vec<u16> = world::border_tiles(cy);
+    let mut squads_on: BTreeMap<u16, Vec<u32>> = BTreeMap::new();
+    for s in &cy.squads {
+        for t in &s.route {
+            squads_on.entry(*t).or_default().push(s.id);
+        }
+    }
+    let tiles: Vec<TileView> = (0..TILES as u16)
+        .map(|i| {
+            let t = &cy.tiles[i as usize];
+            let is_border = border.contains(&i);
+            let rift = t.rift.as_ref().filter(|_| t.revealed).map(|r| {
+                let k = c.rift_kind(&r.kind);
+                RiftView {
+                    kind: r.kind.clone(),
+                    name: k.map(|k| k.name.clone()).unwrap_or_default(),
+                    resident: k.map(|k| k.resident.clone()).unwrap_or_default(),
+                    dial: r.dial,
+                    residents: r.residents,
+                    talent_pct: r.talent * 100 / (b.otherworld_talent_per_candidate * 100).max(1),
+                }
+            });
+            let usage = match &t.usage {
+                TileUse::None => "none".to_string(),
+                TileUse::Housing => "housing".to_string(),
+                TileUse::Facility { id } => id.clone(),
+            };
+            let frozen = t.frozen.as_ref().map(|u| match u {
+                TileUse::Housing => "housing".to_string(),
+                TileUse::Facility { id } => id.clone(),
+                TileUse::None => "none".to_string(),
+            });
+            let workers = calc
+                .facilities
+                .iter()
+                .find(|f| f.tile == i)
+                .map(|f| (f.workers, f.jobs));
+            TileView {
+                i,
+                label: geom::label(i),
+                terrain: terrain_name(t),
+                ring: ring(i),
+                revealed: t.revealed,
+                owned: t.owned,
+                warden: if t.revealed { t.warden } else { 0 },
+                alert: t.alert(),
+                claimable: t.claimable(),
+                border: is_border,
+                district: if t.revealed { t.district } else { None },
+                usage,
+                frozen,
+                garrison: world::garrison_on(cy, i),
+                rift,
+                special: if t.revealed { t.special } else { None },
+                special_done: t.special_done,
+                natives: if t.revealed { t.natives } else { 0 },
+                next_surge: is_border.then(|| crate::defense::next_surge_after(i, state.time)),
+                surge_source: if is_border {
+                    world::surge_source(cy, i)
+                } else {
+                    None
+                },
+                enemies: if t.revealed && !t.owned {
+                    t.waves
+                        .iter()
+                        .map(|w| w.iter().map(|e| enemy_brief(e)).collect())
+                        .collect()
+                } else {
+                    vec![]
+                },
+                squads: squads_on.get(&i).cloned().unwrap_or_default(),
+                workers,
+            }
+        })
+        .collect();
+
+    let districts: Vec<DistrictView> = cy
+        .districts
+        .iter()
+        .map(|d| {
+            let dc = calc
+                .districts
+                .iter()
+                .find(|x| x.id == d.id)
+                .cloned()
+                .unwrap_or_default();
+            let threshold = b.talent_per_candidate * 100;
+            let talent = c
+                .professions
+                .iter()
+                .map(|p| {
+                    let have = d.talent.get(&p.id).copied().unwrap_or(0);
+                    let rate = dc.talent_rate.get(&p.id).copied().unwrap_or(0);
+                    TalentView {
+                        prof: p.id.clone(),
+                        name: p.name.clone(),
+                        icon: p.icon.clone(),
+                        workers: dc.workers.get(&p.id).copied().unwrap_or(0),
+                        jobs: dc.jobs.get(&p.id).copied().unwrap_or(0),
+                        pct: have * 100 / threshold.max(1),
+                        rate,
+                        eta_hours: (rate > 0).then(|| (threshold - have + rate - 1) / rate),
+                        instructors: d.instructors.get(&p.id).copied().unwrap_or(0),
+                    }
+                })
+                .collect();
+            let policy_unlocked = d.trust >= b.trust_policy;
+            let policy_options = c
+                .policies
+                .iter()
+                .map(|p| {
+                    let r = actions::policy_check(state, d.id, Some(&p.id));
+                    PolicyOption {
+                        id: p.id.clone(),
+                        name: p.name.clone(),
+                        desc: p.desc.clone(),
+                        available: r.is_ok(),
+                        reason: r.err(),
+                    }
+                })
+                .collect();
+            DistrictView {
+                id: d.id,
+                name: d.name.clone(),
+                tiles: d.tiles.clone(),
+                owned: dc.owned,
+                total: d.tiles.len(),
+                contiguous: d.contiguous,
+                trust: d.trust,
+                trust_target: dc.trust_target,
+                trust_factors: dc.trust_factors.clone(),
+                population: d.population,
+                housing: dc.housing,
+                unhoused: dc.unhoused,
+                employed: dc.employed,
+                militia: dc.militia,
+                talent,
+                training_bp: dc.training_bp,
+                policy: d.policy.clone(),
+                policy_unlocked,
+                policy_options,
+                priority: d.priority.clone(),
+                flavor: trait_view(&d.flavor, false),
+            }
+        })
+        .collect();
+
+    let squads = cy
+        .squads
+        .iter()
+        .map(|s| SquadView {
+            id: s.id,
+            name: s.name.clone(),
+            members: s.members.clone(),
+            route: s.route.clone(),
+            running: s.trip.as_ref().map(trip_view),
+            last: s.last.as_ref().map(trip_view),
+            rest_until: s.rest_until,
+            trips: s.trips,
+            deepest: s.route.iter().map(|i| ring(*i)).max().unwrap_or(0),
+        })
+        .collect();
+
+    let operatives: Vec<OpView> = cy.operatives.iter().map(|o| op_view(state, o)).collect();
+    let cap = actions::pool_cap(state);
+    let candidates = cy
+        .candidates
+        .iter()
+        .take(cap)
+        .map(|cd| CandidateView {
+            id: cd.id,
+            source: cd.source.clone(),
+            arrived: cd.arrived,
+            op: op_view(state, &cd.op),
+            cost: if cd.op.special.is_some() {
+                0
+            } else {
+                b.hire_cost_scrap
+            },
+        })
+        .collect();
+
+    let facilities = c
+        .facilities
+        .iter()
+        .map(|f| FacilityOption {
+            id: f.id.clone(),
+            name: f.name.clone(),
+            icon: f.icon.clone(),
+            kind: f.kind,
+            profession: f.profession.clone(),
+            jobs: f.jobs,
+            power: f.power,
+            cost: f.cost.clone(),
+            desc: f.desc.clone(),
+            visible: cy.seen_facilities.contains(&f.id) || cy.resources.half_covers(&f.cost),
+            affordable: cy.resources.covers(&f.cost),
+        })
+        .collect();
+
+    // 待你决定: things only the player decides.
+    let mut pending = Vec::new();
+    for i in actions::alert_tiles(state) {
+        pending.push(PendingView {
+            kind: "alert",
+            text: format!("{} 告急：反击、放弃或暂不处理", geom::label(i)),
+            tile: Some(i),
+            op: None,
+            candidate: None,
+            district: None,
+        });
+    }
+    for i in actions::claimable_tiles(state) {
+        let t = &cy.tiles[i as usize];
+        let (before, after) = actions::border_after_claim(state, i);
+        let what = if t.terrain == Terrain::Rift {
+            "可镇压"
+        } else {
+            "可占领"
+        };
+        pending.push(PendingView {
+            kind: "claim",
+            text: format!("{} {}（边界 {} → {}）", geom::label(i), what, before, after),
+            tile: Some(i),
+            op: None,
+            candidate: None,
+            district: None,
+        });
+    }
+    for cd in cy.candidates.iter().take(cap) {
+        pending.push(PendingView {
+            kind: "candidate",
+            text: format!(
+                "候选 {} {}（{}）",
+                RARITY_NAMES[cd.op.rarity.min(3) as usize],
+                cd.op.name,
+                cd.source
+            ),
+            tile: None,
+            op: None,
+            candidate: Some(cd.id),
+            district: None,
+        });
+    }
+    for d in &cy.districts {
+        if d.policy.is_none() && d.trust >= b.trust_policy && world::district_owned(cy, d.id) > 0 {
+            pending.push(PendingView {
+                kind: "policy",
+                text: format!("{} 信任到 {}，可以定政策", d.name, d.trust),
+                tile: d.tiles.first().copied(),
+                op: None,
+                candidate: None,
+                district: Some(d.id),
+            });
+        }
+    }
+    for s in &cy.squads {
+        if s.members.is_empty() {
+            continue;
+        }
+        if s.route.is_empty() {
+            pending.push(PendingView {
+                kind: "route",
+                text: format!("{}还没有路线", s.name),
+                tile: None,
+                op: None,
+                candidate: None,
+                district: None,
+            });
+        }
+    }
+
+    let income = calc.income.map(|v| v / 100);
+    View {
+        time: state.time,
+        revision: state.revision,
+        phase: cy.phase,
+        cycle: cy.number,
+        started_at: cy.started_at,
+        modifier: c
+            .modifier(&cy.modifier)
+            .map(|m| (m.id.clone(), m.name.clone(), m.desc.clone())),
+        previews,
+        resources: cy.resources.clone(),
+        income,
+        power: (calc.power_supply, calc.power_demand, calc.power_bp),
+        attention: (
+            world::attention_level(cy),
+            world::deepest_route(cy),
+            world::attention_bp(cy),
+        ),
+        self_sufficient: sim::self_sufficient(state),
+        border_count: border.len(),
+        tiles,
+        districts,
+        squads,
+        operatives,
+        candidates,
+        queue: cy.candidates.len().saturating_sub(cap),
+        roster_cap: b.roster_cap,
+        inventory: cy.inventory.iter().map(|s| item_view(s)).collect(),
+        sealed: state.org.sealed.iter().map(|s| item_view(s)).collect(),
+        facilities,
+        tide: tide_view(tide),
+        pending,
+        events,
+        org,
+        results: sim::cycle_results(state),
+        hire_cost: b.hire_cost_scrap,
+    }
+}
+
+/// Static content the client needs once: tag meta, names, icons.
+#[derive(Serialize)]
+pub struct ContentView {
+    pub tags: Vec<crate::content::TagDef>,
+    pub professions: Vec<crate::content::ProfessionDef>,
+    pub facilities: Vec<crate::content::FacilityDef>,
+    pub stats: Vec<(&'static str, &'static str)>,
+    pub skills: Vec<SkillView>,
+    pub classes: Vec<(String, String, String)>,
+    pub policies: Vec<crate::content::PolicyDef>,
+    pub rift_kinds: Vec<crate::content::RiftKindDef>,
+}
+
+pub fn content_view() -> ContentView {
+    let c = content();
+    ContentView {
+        tags: c.tags.clone(),
+        professions: c.professions.clone(),
+        facilities: c.facilities.clone(),
+        stats: Stat::ALL
+            .iter()
+            .map(|s| {
+                (
+                    match s {
+                        Stat::Str => "str",
+                        Stat::Con => "con",
+                        Stat::Siz => "siz",
+                        Stat::Dex => "dex",
+                        Stat::App => "app",
+                        Stat::Int => "int",
+                        Stat::Pow => "pow",
+                        Stat::Edu => "edu",
+                        Stat::Luk => "luk",
+                    },
+                    s.name(),
+                )
+            })
+            .collect(),
+        skills: c
+            .skills
+            .values()
+            .map(|s| SkillView {
+                id: s.id.clone(),
+                name: s.name.clone(),
+                icon: s.icon.clone(),
+                passive: s.kind == crate::content::SkillKind::Passive,
+                desc: s.desc.clone(),
+                reads: s.reads(),
+                writes: s.writes(),
+                trigger: s.trigger,
+            })
+            .collect(),
+        classes: c
+            .classes
+            .values()
+            .map(|cl| (cl.id.clone(), cl.name.clone(), cl.icon.clone()))
+            .collect(),
+        policies: c.policies.clone(),
+        rift_kinds: c.rift_kinds.clone(),
+    }
+}

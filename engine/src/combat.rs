@@ -1,0 +1,2208 @@
+//! Deterministic auto-battle.
+//!
+//! Front/back rows, AP actions driven by tactic rules (condition -> action -> target), PP reactions,
+//! and six tags. Same input, same result, on every platform: integer maths only, percentages in basis
+//! points, no floats, fixed iteration order. The log is a cause chain: every reaction points at the
+//! entry that triggered it, and damage lines carry the formula that produced the number.
+
+use crate::content::{
+    balance, content, Act, ApplyTo, BaseStats, Cond, Effect, Gambit, Row, SkillKind, Stat, Tag,
+    TagBonus, Target, TraitEffect, Trigger,
+};
+use serde::{Deserialize, Serialize};
+
+pub const MAX_ROUNDS: u8 = 15;
+const MAX_CHAIN_DEPTH: u8 = 4;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Side {
+    Ally,
+    Enemy,
+}
+
+impl Side {
+    fn other(self) -> Side {
+        match self {
+            Side::Ally => Side::Enemy,
+            Side::Enemy => Side::Ally,
+        }
+    }
+}
+
+/// Everything the battle needs to know about one combatant.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UnitSpec {
+    /// Stable key: "op:12" for operatives, enemy content id, "militia", "hq_guard".
+    pub key: String,
+    pub name: String,
+    pub icon: String,
+    pub row: Row,
+    pub max_hp: i32,
+    pub atk: i32,
+    pub def: i32,
+    pub spd: i32,
+    pub ap: i32,
+    pub pp: i32,
+    pub stats: [i32; 9],
+    pub skills: Vec<String>,
+    pub gambits: Vec<Gambit>,
+    /// Combat-relevant effects from traits and equipment, with the id of their source.
+    pub effects: Vec<(String, TraitEffect)>,
+    pub start_tags: Vec<(Tag, i32)>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BattleKind {
+    Route,
+    Surge,
+    Core,
+    Counter,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BattleInput {
+    pub kind: BattleKind,
+    pub allies: Vec<UnitSpec>,
+    pub waves: Vec<Vec<UnitSpec>>,
+    /// Extra tags every ally starts with (cycle modifier, facilities, policies).
+    pub ally_tags: Vec<(Tag, i32)>,
+    /// Extra tags every enemy starts with (watchtowers, street lamps).
+    pub enemy_tags: Vec<(Tag, i32)>,
+    /// Map-layer hook: wardenship gained per [shock] stack consumed (grounding grid).
+    pub grounding: i32,
+    /// Defence battles enable `defense_only` start tags.
+    pub defense: bool,
+    /// Keep the full log (previews and offline batches can skip it).
+    pub record: bool,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    Victory,
+    Planned,
+    Emergency,
+    Wipe,
+}
+
+impl Outcome {
+    pub fn yield_bp(self) -> i32 {
+        match self {
+            Outcome::Victory | Outcome::Planned => 10_000,
+            Outcome::Emergency => 6_000,
+            Outcome::Wipe => 3_000,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogKind {
+    Wave,
+    Round,
+    Action,
+    Reaction,
+    Dot,
+    Tag,
+    Extra,
+    Facility,
+    Death,
+    Retreat,
+    End,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LogEntry {
+    pub id: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cause: Option<u32>,
+    pub depth: u8,
+    pub wave: u8,
+    pub round: u8,
+    pub kind: LogKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    /// Which rule fired: skill, trait, equipment or facility id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    pub amount: i32,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formula: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<Tag>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UnitReport {
+    pub key: String,
+    pub name: String,
+    pub icon: String,
+    pub side: Side,
+    pub alive: bool,
+    pub hp: i32,
+    pub max_hp: i32,
+    pub dealt: i32,
+    pub taken: i32,
+    pub healed: i32,
+    pub reactions: i32,
+    pub tags_received: [i32; 6],
+    pub tags_consumed: i32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BattleReport {
+    pub kind: BattleKind,
+    pub outcome: Outcome,
+    pub waves_cleared: u8,
+    pub total_waves: u8,
+    pub rounds: u32,
+    /// Defence previews say "lost at wave N".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lost_wave: Option<u8>,
+    pub yield_bp: i32,
+    pub applied: [i32; 6],
+    pub consumed: [i32; 6],
+    pub warden_gain: i32,
+    pub units: Vec<UnitReport>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub log: Vec<LogEntry>,
+}
+
+impl BattleReport {
+    pub fn won(&self) -> bool {
+        self.outcome == Outcome::Victory
+    }
+    pub fn seconds(&self) -> i64 {
+        self.rounds as i64 * balance().battle_round_secs
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Building enemy specs
+// ---------------------------------------------------------------------------
+
+/// Turn an enemy content id into a unit at `ring`, scaled by `mult_bp` (attention, modifiers).
+pub fn enemy_spec(id: &str, ring: i32, mult_bp: i32) -> UnitSpec {
+    let c = content();
+    let e = &c.enemies[id];
+    let ring_bp = 10_000 + (ring - 1).max(0) * balance().enemy_ring_step_bp;
+    let scale = |v: i32| -> i32 {
+        ((v as i64 * ring_bp as i64 / 10_000) * mult_bp as i64 / 10_000).max(1) as i32
+    };
+    let mut gambits = Vec::new();
+    for s in &e.skills {
+        let sk = &c.skills[s];
+        let consume_tag = sk.effects.iter().find_map(|ef| match ef {
+            Effect::Damage {
+                consume: Some(TagBonus { tag, .. }),
+                ..
+            } => Some(*tag),
+            _ => None,
+        });
+        match consume_tag {
+            Some(tag) => gambits.push(Gambit {
+                cond: Cond::EnemyHasTag { tag },
+                cond2: None,
+                act: Act::Skill { skill: s.clone() },
+                target: Target::WithTag,
+                on: true,
+            }),
+            None => gambits.push(Gambit {
+                cond: Cond::Always,
+                cond2: None,
+                act: Act::Skill { skill: s.clone() },
+                target: Target::Default,
+                on: true,
+            }),
+        }
+    }
+    // Enemies scale with ring through their stats; their attributes stay average.
+    let BaseStats {
+        hp,
+        atk,
+        def,
+        spd,
+        ap,
+        pp,
+    } = e.base.clone();
+    UnitSpec {
+        key: e.id.clone(),
+        name: e.name.clone(),
+        icon: e.icon.clone(),
+        row: e.row,
+        max_hp: scale(hp),
+        atk: scale(atk),
+        def: def + (ring - 1).max(0) / 2,
+        spd,
+        ap,
+        pp,
+        stats: [50; 9],
+        skills: e.skills.clone(),
+        gambits,
+        effects: vec![],
+        start_tags: e.start_tags.clone(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Runtime
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug)]
+struct Unit {
+    key: String,
+    name: String,
+    icon: String,
+    side: Side,
+    row: Row,
+    slot: u8,
+    hp: i32,
+    max_hp: i32,
+    shield: i32,
+    atk: i32,
+    def: i32,
+    spd: i32,
+    ap: i32,
+    max_ap: i32,
+    pp: i32,
+    max_pp: i32,
+    alive: bool,
+    tags: [i32; 6],
+    charge: [i32; 6],
+    stats: [i32; 9],
+    skills: Vec<String>,
+    gambits: Vec<Gambit>,
+    effects: Vec<(String, TraitEffect)>,
+    resonance_used: bool,
+    dealt: i32,
+    taken: i32,
+    healed: i32,
+    reactions: i32,
+    tags_received: [i32; 6],
+    tags_consumed: i32,
+}
+
+impl Unit {
+    fn from_spec(spec: &UnitSpec, side: Side, slot: u8) -> Unit {
+        Unit {
+            key: spec.key.clone(),
+            name: spec.name.clone(),
+            icon: spec.icon.clone(),
+            side,
+            row: spec.row,
+            slot,
+            hp: spec.max_hp,
+            max_hp: spec.max_hp,
+            shield: 0,
+            atk: spec.atk,
+            def: spec.def,
+            spd: spec.spd,
+            ap: spec.ap,
+            max_ap: spec.ap,
+            pp: spec.pp,
+            max_pp: spec.pp,
+            alive: true,
+            tags: [0; 6],
+            charge: [0; 6],
+            stats: spec.stats,
+            skills: spec.skills.clone(),
+            gambits: spec.gambits.clone(),
+            effects: spec.effects.clone(),
+            resonance_used: false,
+            dealt: 0,
+            taken: 0,
+            healed: 0,
+            reactions: 0,
+            tags_received: [0; 6],
+            tags_consumed: 0,
+        }
+    }
+
+    fn hp_pct_lt(&self, pct: i32) -> bool {
+        (self.hp as i64) * 100 < (pct as i64) * (self.max_hp as i64)
+    }
+
+    fn total_tags(&self) -> i32 {
+        Tag::ALL
+            .iter()
+            .filter(|t| **t != Tag::Shield)
+            .map(|t| self.tags[t.idx()])
+            .sum()
+    }
+}
+
+enum Choice {
+    Skill {
+        skill: String,
+        target: usize,
+        rule: Option<usize>,
+    },
+    Emergency,
+}
+
+struct HitResult {
+    dealt: i32,
+    consumed: Vec<(Tag, i32)>,
+    formula: Option<String>,
+    killed: bool,
+}
+
+struct Battle<'a> {
+    input: &'a BattleInput,
+    units: Vec<Unit>,
+    log: Vec<LogEntry>,
+    next_id: u32,
+    wave: u8,
+    round: u8,
+    applied: [i32; 6],
+    consumed: [i32; 6],
+    warden_gain: i32,
+    reacted: Vec<bool>,
+}
+
+fn pct(bp: i64) -> String {
+    let sign = if bp < 0 { "-" } else { "" };
+    let bp = bp.abs();
+    if bp % 100 == 0 {
+        format!("{sign}{}%", bp / 100)
+    } else {
+        format!("{sign}{}.{}%", bp / 100, (bp % 100) / 10)
+    }
+}
+
+pub fn simulate(input: &BattleInput) -> BattleReport {
+    Battle::new(input).run()
+}
+
+impl<'a> Battle<'a> {
+    fn new(input: &'a BattleInput) -> Self {
+        Battle {
+            input,
+            units: Vec::new(),
+            log: Vec::new(),
+            next_id: 1,
+            wave: 0,
+            round: 0,
+            applied: [0; 6],
+            consumed: [0; 6],
+            warden_gain: 0,
+            reacted: Vec::new(),
+        }
+    }
+
+    // ---- logging -----------------------------------------------------------
+
+    #[allow(clippy::too_many_arguments)]
+    fn push(
+        &mut self,
+        kind: LogKind,
+        cause: Option<u32>,
+        depth: u8,
+        actor: Option<usize>,
+        target: Option<usize>,
+        source: Option<&str>,
+        amount: i32,
+        text: String,
+        formula: Option<String>,
+        tags: Vec<Tag>,
+    ) -> u32 {
+        let id = self.next_id;
+        self.next_id += 1;
+        if self.input.record {
+            let actor = actor.map(|i| self.units[i].name.clone());
+            let target = target.map(|i| self.units[i].name.clone());
+            self.log.push(LogEntry {
+                id,
+                cause,
+                depth,
+                wave: self.wave,
+                round: self.round,
+                kind,
+                actor,
+                target,
+                source: source.map(|s| s.to_string()),
+                amount,
+                text,
+                formula,
+                tags,
+            });
+        }
+        id
+    }
+
+    fn rec(&self) -> bool {
+        self.input.record
+    }
+
+    // ---- setup -------------------------------------------------------------
+
+    fn spawn(&mut self, spec: &UnitSpec, side: Side) {
+        let same_row = self
+            .units
+            .iter()
+            .filter(|u| u.side == side && u.row == spec.row)
+            .count() as u8;
+        let mut u = Unit::from_spec(spec, side, same_row);
+        let idx = self.units.len();
+        // Start tags: spec, effects (some only in defence), and battle-wide tags.
+        let mut start: Vec<(Tag, i32, String)> = spec
+            .start_tags
+            .iter()
+            .map(|(t, n)| (*t, *n, String::from("start")))
+            .collect();
+        for (src, e) in &spec.effects {
+            if let TraitEffect::StartTag {
+                tag,
+                stacks,
+                defense_only,
+            } = e
+            {
+                if !*defense_only || self.input.defense {
+                    start.push((*tag, *stacks, src.clone()));
+                }
+            }
+        }
+        let extra = match side {
+            Side::Ally => &self.input.ally_tags,
+            Side::Enemy => &self.input.enemy_tags,
+        };
+        for (t, n) in extra {
+            start.push((*t, *n, String::from("battle")));
+        }
+        u.resonance_used = false;
+        self.units.push(u);
+        self.reacted.push(false);
+        for (tag, n, _src) in start {
+            self.add_tag(idx, tag, n, None, 0, false);
+        }
+    }
+
+    fn living(&self, side: Side) -> impl Iterator<Item = usize> + '_ {
+        self.units
+            .iter()
+            .enumerate()
+            .filter(move |(_, u)| u.side == side && u.alive)
+            .map(|(i, _)| i)
+    }
+
+    fn side_alive(&self, side: Side) -> bool {
+        self.units.iter().any(|u| u.side == side && u.alive)
+    }
+
+    // ---- main loop ---------------------------------------------------------
+
+    fn run(mut self) -> BattleReport {
+        let input = self.input;
+        for spec in &input.allies {
+            self.spawn(spec, Side::Ally);
+        }
+        let total_waves = input.waves.len() as u8;
+        let mut outcome = Outcome::Victory;
+        let mut waves_cleared = 0u8;
+        let mut lost_wave = None;
+        let mut rounds = 0u32;
+
+        'waves: for (wi, wave) in input.waves.iter().enumerate() {
+            self.wave = wi as u8 + 1;
+            self.round = 0;
+            // Clear the previous wave's enemies but keep ally state (HP, tags) between waves.
+            let keep: Vec<bool> = self.units.iter().map(|u| u.side == Side::Ally).collect();
+            let mut k = 0;
+            self.units.retain(|_| {
+                let r = keep[k];
+                k += 1;
+                r
+            });
+            self.reacted = vec![false; self.units.len()];
+            for spec in wave {
+                self.spawn(spec, Side::Enemy);
+            }
+            if self.rec() {
+                let names: Vec<String> = self
+                    .units
+                    .iter()
+                    .filter(|u| u.side == Side::Enemy)
+                    .map(|u| {
+                        format!(
+                            "{}（{}）",
+                            u.name,
+                            if u.row == Row::Front { "前" } else { "后" }
+                        )
+                    })
+                    .collect();
+                let text = format!(
+                    "第 {}/{} 波接敌：{}",
+                    self.wave,
+                    total_waves,
+                    names.join("、")
+                );
+                self.push(
+                    LogKind::Wave,
+                    None,
+                    0,
+                    None,
+                    None,
+                    None,
+                    0,
+                    text,
+                    None,
+                    vec![],
+                );
+            }
+
+            let mut cleared = false;
+            for r in 1..=MAX_ROUNDS {
+                self.round = r;
+                rounds += 1;
+                for u in self.units.iter_mut().filter(|u| u.alive) {
+                    u.ap = u.max_ap;
+                    u.pp = u.max_pp;
+                    u.resonance_used = false;
+                }
+                if self.rec() {
+                    self.push(
+                        LogKind::Round,
+                        None,
+                        0,
+                        None,
+                        None,
+                        None,
+                        0,
+                        format!("第 {} 回合", r),
+                        None,
+                        vec![],
+                    );
+                }
+                self.dots();
+                if !self.side_alive(Side::Enemy) {
+                    cleared = true;
+                    break;
+                }
+                if !self.side_alive(Side::Ally) {
+                    break;
+                }
+                for actor in self.turn_order() {
+                    let mut safety = 0;
+                    while self.units[actor].alive && self.units[actor].ap > 0 && safety < 6 {
+                        safety += 1;
+                        if !self.side_alive(Side::Enemy) || !self.side_alive(Side::Ally) {
+                            break;
+                        }
+                        match self.choose(actor) {
+                            Some(Choice::Skill {
+                                skill,
+                                target,
+                                rule,
+                            }) => self.act(actor, &skill, target, rule),
+                            Some(Choice::Emergency) => {
+                                outcome = Outcome::Emergency;
+                                let text = format!(
+                                    "{} 按战术规则下令紧急撤退，小队立刻脱战。",
+                                    self.units[actor].name
+                                );
+                                self.push(
+                                    LogKind::Retreat,
+                                    None,
+                                    0,
+                                    Some(actor),
+                                    None,
+                                    None,
+                                    0,
+                                    text,
+                                    None,
+                                    vec![],
+                                );
+                                break 'waves;
+                            }
+                            None => break,
+                        }
+                    }
+                    if !self.side_alive(Side::Enemy) || !self.side_alive(Side::Ally) {
+                        break;
+                    }
+                }
+                if !self.side_alive(Side::Enemy) {
+                    cleared = true;
+                    break;
+                }
+                if !self.side_alive(Side::Ally) {
+                    break;
+                }
+            }
+
+            if !cleared {
+                outcome = Outcome::Wipe;
+                lost_wave = Some(self.wave);
+                let text = if self.side_alive(Side::Ally) {
+                    format!(
+                        "第 {} 波拖满 {} 回合没打下来，判负。",
+                        self.wave, MAX_ROUNDS
+                    )
+                } else {
+                    format!("第 {} 波全员倒下。", self.wave)
+                };
+                self.push(
+                    LogKind::End,
+                    None,
+                    0,
+                    None,
+                    None,
+                    None,
+                    0,
+                    text,
+                    None,
+                    vec![],
+                );
+                break;
+            }
+            waves_cleared += 1;
+
+            // Planned retreat is only possible between waves.
+            if (wi as u8) + 1 < total_waves {
+                let allies: Vec<usize> = self.living(Side::Ally).collect();
+                for a in allies {
+                    let gambits = self.units[a].gambits.clone();
+                    for g in gambits
+                        .iter()
+                        .filter(|g| g.on && g.act == Act::RetreatPlanned)
+                    {
+                        if self.cond_ok(a, &g.cond)
+                            && g.cond2.as_ref().is_none_or(|c| self.cond_ok(a, c))
+                        {
+                            outcome = Outcome::Planned;
+                            let text = format!(
+                                "第 {} 波清空后，{} 按计划收队，带回全部所得。",
+                                self.wave, self.units[a].name
+                            );
+                            self.push(
+                                LogKind::Retreat,
+                                None,
+                                0,
+                                Some(a),
+                                None,
+                                None,
+                                0,
+                                text,
+                                None,
+                                vec![],
+                            );
+                            break 'waves;
+                        }
+                    }
+                }
+            }
+        }
+
+        if outcome == Outcome::Victory {
+            let text = format!("{} 波全部肃清。", total_waves);
+            self.push(
+                LogKind::End,
+                None,
+                0,
+                None,
+                None,
+                None,
+                0,
+                text,
+                None,
+                vec![],
+            );
+        }
+
+        let units = self
+            .units
+            .iter()
+            .filter(|u| u.side == Side::Ally)
+            .map(|u| UnitReport {
+                key: u.key.clone(),
+                name: u.name.clone(),
+                icon: u.icon.clone(),
+                side: u.side,
+                alive: u.alive,
+                hp: u.hp.max(0),
+                max_hp: u.max_hp,
+                dealt: u.dealt,
+                taken: u.taken,
+                healed: u.healed,
+                reactions: u.reactions,
+                tags_received: u.tags_received,
+                tags_consumed: u.tags_consumed,
+            })
+            .collect();
+
+        BattleReport {
+            kind: input.kind,
+            outcome,
+            waves_cleared,
+            total_waves,
+            rounds,
+            lost_wave,
+            yield_bp: outcome.yield_bp(),
+            applied: self.applied,
+            consumed: self.consumed,
+            warden_gain: self.warden_gain,
+            units,
+            log: self.log,
+        }
+    }
+
+    fn turn_order(&self) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..self.units.len())
+            .filter(|i| self.units[*i].alive)
+            .collect();
+        order.sort_by(|&a, &b| {
+            let ua = &self.units[a];
+            let ub = &self.units[b];
+            ub.spd
+                .cmp(&ua.spd)
+                .then_with(|| (ua.side != Side::Ally).cmp(&(ub.side != Side::Ally)))
+                .then_with(|| (ua.row != Row::Front).cmp(&(ub.row != Row::Front)))
+                .then_with(|| ua.slot.cmp(&ub.slot))
+                .then_with(|| a.cmp(&b))
+        });
+        order
+    }
+
+    // ---- start-of-round erosion -------------------------------------------
+
+    fn dots(&mut self) {
+        for i in 0..self.units.len() {
+            if !self.units[i].alive {
+                continue;
+            }
+            let stacks = self.units[i].tags[Tag::Erosion.idx()];
+            if stacks <= 0 {
+                continue;
+            }
+            let base = ((self.units[i].max_hp as i64 * 400 * stacks as i64) / 10_000).max(2) as i32;
+            let cut: i32 = self.units[i]
+                .effects
+                .iter()
+                .filter_map(|(_, e)| match e {
+                    TraitEffect::FeedOn {
+                        tag: Tag::Erosion,
+                        dot_cut_bp,
+                        ..
+                    } => Some(*dot_cut_bp),
+                    _ => None,
+                })
+                .max()
+                .unwrap_or(0);
+            let dmg = (base as i64 * (10_000 - cut as i64) / 10_000).max(1) as i32;
+            let taken = self.take_damage(i, dmg, None);
+            let formula = if self.rec() {
+                let mut f = format!(
+                    "最大生命 {} × 4% × {} 层 = {}",
+                    self.units[i].max_hp, stacks, base
+                );
+                if cut > 0 {
+                    f.push_str(&format!("；减免 {} → {}", pct(cut as i64), dmg));
+                }
+                Some(f)
+            } else {
+                None
+            };
+            let text = format!(
+                "{} 受 {} 层 [侵蚀] 侵蚀，损失 {} 生命",
+                self.units[i].name, stacks, taken
+            );
+            let id = self.push(
+                LogKind::Dot,
+                None,
+                0,
+                None,
+                Some(i),
+                Some("erosion"),
+                taken,
+                text,
+                formula,
+                vec![Tag::Erosion],
+            );
+            self.check_death(i, id, 1);
+        }
+    }
+
+    // ---- choosing an action ------------------------------------------------
+
+    fn cond_ok(&self, a: usize, cond: &Cond) -> bool {
+        let me = &self.units[a];
+        let own = me.side;
+        let opp = own.other();
+        match cond {
+            Cond::Always => true,
+            Cond::SelfHpBelow { pct } => me.hp_pct_lt(*pct),
+            Cond::SelfHpAbove { pct } => !me.hp_pct_lt(*pct),
+            Cond::AllyHpBelow { pct } => self.living(own).any(|i| self.units[i].hp_pct_lt(*pct)),
+            Cond::EnemyHasTag { tag } => {
+                self.living(opp).any(|i| self.units[i].tags[tag.idx()] > 0)
+            }
+            Cond::SelfHasTag { tag } => me.tags[tag.idx()] > 0,
+            Cond::EnemyTagAtLeast { tag, n } => self
+                .living(opp)
+                .any(|i| self.units[i].tags[tag.idx()] >= *n),
+            Cond::AnyTagAtLeast { n } => self.living(opp).any(|i| {
+                Tag::ALL
+                    .iter()
+                    .any(|t| *t != Tag::Shield && self.units[i].tags[t.idx()] >= *n)
+            }),
+            Cond::EnemyCountAtLeast { n } => self.living(opp).count() as i32 >= *n,
+            Cond::WaveAtLeast { n } => self.wave as i32 >= *n,
+            Cond::RoundAtLeast { n } => self.round as i32 >= *n,
+        }
+    }
+
+    fn rule_tag(g: &Gambit, skill: &str) -> Option<Tag> {
+        let from_cond = |c: &Cond| match c {
+            Cond::EnemyHasTag { tag } | Cond::EnemyTagAtLeast { tag, .. } => Some(*tag),
+            _ => None,
+        };
+        from_cond(&g.cond)
+            .or_else(|| g.cond2.as_ref().and_then(from_cond))
+            .or_else(|| {
+                content().skills.get(skill).and_then(|s| {
+                    s.effects.iter().find_map(|e| match e {
+                        Effect::Damage {
+                            consume: Some(b), ..
+                        }
+                        | Effect::Damage { bonus: Some(b), .. } => Some(b.tag),
+                        _ => None,
+                    })
+                })
+            })
+    }
+
+    fn choose(&self, a: usize) -> Option<Choice> {
+        let c = content();
+        let me = &self.units[a];
+        for (ri, g) in me.gambits.iter().enumerate() {
+            if !g.on {
+                continue;
+            }
+            match &g.act {
+                Act::RetreatPlanned => continue,
+                Act::RetreatEmergency => {
+                    if me.side == Side::Ally
+                        && self.cond_ok(a, &g.cond)
+                        && g.cond2.as_ref().is_none_or(|c2| self.cond_ok(a, c2))
+                    {
+                        return Some(Choice::Emergency);
+                    }
+                }
+                Act::Skill { skill } => {
+                    let Some(sk) = c.skills.get(skill) else {
+                        continue;
+                    };
+                    if sk.kind != SkillKind::Active || !me.skills.contains(skill) || me.ap < sk.ap {
+                        continue;
+                    }
+                    if !self.cond_ok(a, &g.cond)
+                        || !g.cond2.as_ref().is_none_or(|c2| self.cond_ok(a, c2))
+                    {
+                        continue;
+                    }
+                    let tag = Self::rule_tag(g, skill);
+                    if let Some(t) = self.select_target(
+                        a,
+                        sk.target_ally,
+                        sk.range == crate::content::Range::Melee,
+                        g.target,
+                        tag,
+                    ) {
+                        return Some(Choice::Skill {
+                            skill: skill.clone(),
+                            target: t,
+                            rule: Some(ri),
+                        });
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn select_target(
+        &self,
+        a: usize,
+        ally: bool,
+        melee: bool,
+        sel: Target,
+        tag: Option<Tag>,
+    ) -> Option<usize> {
+        let me = &self.units[a];
+        let side = if ally { me.side } else { me.side.other() };
+        let mut cands: Vec<usize> = self.living(side).collect();
+        if cands.is_empty() {
+            return None;
+        }
+        if ally {
+            return match sel {
+                Target::SelfUnit => Some(a),
+                _ => {
+                    cands.sort_by(|&x, &y| {
+                        let ux = &self.units[x];
+                        let uy = &self.units[y];
+                        // Lowest HP ratio first: compare hp_x / max_x with hp_y / max_y without division.
+                        ((ux.hp as i64) * (uy.max_hp as i64))
+                            .cmp(&((uy.hp as i64) * (ux.max_hp as i64)))
+                            .then_with(|| self.default_cmp(x, y))
+                    });
+                    cands.first().copied()
+                }
+            };
+        }
+        if sel == Target::SelfUnit {
+            return None;
+        }
+        if melee {
+            let front: Vec<usize> = cands
+                .iter()
+                .copied()
+                .filter(|i| self.units[*i].row == Row::Front)
+                .collect();
+            if !front.is_empty() {
+                cands = front;
+            }
+        }
+        match sel {
+            Target::Default | Target::LowestAlly | Target::SelfUnit => {
+                cands.sort_by(|&x, &y| self.default_cmp(x, y));
+            }
+            Target::FrontLowest => cands.sort_by(|&x, &y| {
+                let (ux, uy) = (&self.units[x], &self.units[y]);
+                (ux.row != Row::Front)
+                    .cmp(&(uy.row != Row::Front))
+                    .then(ux.hp.cmp(&uy.hp))
+                    .then_with(|| self.default_cmp(x, y))
+            }),
+            Target::BackFirst => cands.sort_by(|&x, &y| {
+                let (ux, uy) = (&self.units[x], &self.units[y]);
+                (ux.row != Row::Back)
+                    .cmp(&(uy.row != Row::Back))
+                    .then(ux.hp.cmp(&uy.hp))
+                    .then_with(|| self.default_cmp(x, y))
+            }),
+            Target::HighestAtk => cands.sort_by(|&x, &y| {
+                self.units[y]
+                    .atk
+                    .cmp(&self.units[x].atk)
+                    .then_with(|| self.default_cmp(x, y))
+            }),
+            Target::WithTag => {
+                cands.retain(|i| match tag {
+                    Some(t) => self.units[*i].tags[t.idx()] > 0,
+                    None => self.units[*i].total_tags() > 0,
+                });
+                cands.sort_by(|&x, &y| {
+                    self.units[x]
+                        .hp
+                        .cmp(&self.units[y].hp)
+                        .then_with(|| self.default_cmp(x, y))
+                });
+            }
+            Target::MostTags => cands.sort_by(|&x, &y| {
+                self.units[y]
+                    .total_tags()
+                    .cmp(&self.units[x].total_tags())
+                    .then_with(|| self.default_cmp(x, y))
+            }),
+        }
+        cands.first().copied()
+    }
+
+    fn default_cmp(&self, x: usize, y: usize) -> std::cmp::Ordering {
+        let (ux, uy) = (&self.units[x], &self.units[y]);
+        (ux.row != Row::Front)
+            .cmp(&(uy.row != Row::Front))
+            .then(ux.slot.cmp(&uy.slot))
+            .then(x.cmp(&y))
+    }
+
+    // ---- tags --------------------------------------------------------------
+
+    fn has_effect<F: Fn(&TraitEffect) -> bool>(&self, u: usize, f: F) -> Option<String> {
+        self.units[u]
+            .effects
+            .iter()
+            .find(|(_, e)| f(e))
+            .map(|(s, _)| s.clone())
+    }
+
+    /// Add stacks of a tag. Returns how many stacks actually landed.
+    fn add_tag(
+        &mut self,
+        u: usize,
+        tag: Tag,
+        stacks: i32,
+        cause: Option<u32>,
+        depth: u8,
+        log: bool,
+    ) -> i32 {
+        if stacks <= 0 || !self.units[u].alive {
+            return 0;
+        }
+        if tag == Tag::Shield {
+            return 0;
+        }
+        self.units[u].tags_received[tag.idx()] += stacks;
+        // Tag as resource: absorbers store the stacks for their next attack instead.
+        if let Some(src) = self.has_effect(
+            u,
+            |e| matches!(e, TraitEffect::Absorb { tag: t } if *t == tag),
+        ) {
+            let before = self.units[u].charge[tag.idx()];
+            let after = (before + stacks).min(tag.max());
+            self.units[u].charge[tag.idx()] = after;
+            if log && self.rec() && after > before {
+                let name = trait_name(&src);
+                let text = format!(
+                    "{}「{}」把 {} 层 [{}] 存了下来（共 {} 层）",
+                    self.units[u].name,
+                    name,
+                    after - before,
+                    tag.name(),
+                    after
+                );
+                self.push(
+                    LogKind::Tag,
+                    cause,
+                    depth,
+                    Some(u),
+                    None,
+                    Some(&src),
+                    after - before,
+                    text,
+                    None,
+                    vec![tag],
+                );
+            }
+            return 0;
+        }
+        let before = self.units[u].tags[tag.idx()];
+        let after = (before + stacks).min(tag.max());
+        self.units[u].tags[tag.idx()] = after;
+        let landed = after - before;
+        self.applied[tag.idx()] += landed;
+        if landed > 0 && tag == Tag::Mark {
+            if let Some(src) = self.has_effect(u, |e| matches!(e, TraitEffect::MarkedGainPp)) {
+                self.units[u].pp += 1;
+                if log && self.rec() {
+                    let text = format!(
+                        "{}「{}」：被盯上了，PP +1",
+                        self.units[u].name,
+                        trait_name(&src)
+                    );
+                    self.push(
+                        LogKind::Tag,
+                        cause,
+                        depth,
+                        Some(u),
+                        None,
+                        Some(&src),
+                        1,
+                        text,
+                        None,
+                        vec![Tag::Mark],
+                    );
+                }
+            }
+        }
+        landed
+    }
+
+    fn note_consumed(&mut self, by: usize, consumed: &[(Tag, i32)], cause: u32, depth: u8) {
+        for (tag, n) in consumed {
+            if *n <= 0 {
+                continue;
+            }
+            self.consumed[tag.idx()] += n;
+            self.units[by].tags_consumed += n;
+            if *tag == Tag::Shock && self.input.grounding > 0 {
+                let gain = self.input.grounding * n;
+                self.warden_gain += gain;
+                let text = format!("接地网导走 {} 层 [震荡]：本格镇守度 +{}", n, gain);
+                self.push(
+                    LogKind::Facility,
+                    Some(cause),
+                    depth,
+                    None,
+                    None,
+                    Some("grounding_grid"),
+                    gain,
+                    text,
+                    None,
+                    vec![Tag::Shock],
+                );
+            }
+        }
+        let total: i32 = consumed.iter().map(|(_, n)| *n).sum();
+        if total > 0 && self.units[by].alive {
+            let heal_bp: i32 = self.units[by]
+                .effects
+                .iter()
+                .filter_map(|(_, e)| match e {
+                    TraitEffect::ConsumeHeal { bp } => Some(*bp),
+                    _ => None,
+                })
+                .sum();
+            if heal_bp > 0 {
+                let amount =
+                    (self.units[by].max_hp as i64 * heal_bp as i64 * total as i64 / 10_000) as i32;
+                let healed = self.heal(by, by, amount);
+                if healed > 0 {
+                    let src = self
+                        .has_effect(by, |e| matches!(e, TraitEffect::ConsumeHeal { .. }))
+                        .unwrap_or_default();
+                    let text = format!(
+                        "{}「{}」：拆掉 {} 层标签，恢复 {} 生命",
+                        self.units[by].name,
+                        trait_name(&src),
+                        total,
+                        healed
+                    );
+                    self.push(
+                        LogKind::Tag,
+                        Some(cause),
+                        depth,
+                        Some(by),
+                        None,
+                        Some(&src),
+                        healed,
+                        text,
+                        None,
+                        vec![],
+                    );
+                }
+            }
+        }
+    }
+
+    // ---- damage, healing ---------------------------------------------------
+
+    fn take_damage(&mut self, d: usize, dmg: i32, attacker: Option<usize>) -> i32 {
+        let mut rem = dmg;
+        let mut broke = 0;
+        if self.units[d].shield > 0 {
+            let absorbed = self.units[d].shield.min(rem);
+            self.units[d].shield -= absorbed;
+            rem -= absorbed;
+            if self.units[d].shield == 0 {
+                self.units[d].tags[Tag::Shield.idx()] = 0;
+                broke = absorbed;
+            }
+        }
+        self.units[d].hp -= rem;
+        self.units[d].taken += rem;
+        if let Some(a) = attacker {
+            self.units[a].dealt += dmg;
+        }
+        if broke > 0 {
+            if let (Some(a), Some(src)) = (
+                attacker,
+                self.has_effect(d, |e| matches!(e, TraitEffect::ShieldBurst { .. })),
+            ) {
+                let bp = self.units[d]
+                    .effects
+                    .iter()
+                    .find_map(|(_, e)| match e {
+                        TraitEffect::ShieldBurst { bp } => Some(*bp),
+                        _ => None,
+                    })
+                    .unwrap_or(0);
+                let back = (broke as i64 * bp as i64 / 10_000).max(1) as i32;
+                if self.units[a].alive {
+                    self.units[a].hp -= back;
+                    self.units[a].taken += back;
+                    self.units[d].dealt += back;
+                    let text = format!(
+                        "{}「{}」：护盾碎裂，把 {} 点还给 {}",
+                        self.units[d].name,
+                        trait_name(&src),
+                        back,
+                        self.units[a].name
+                    );
+                    let id = self.push(
+                        LogKind::Tag,
+                        None,
+                        1,
+                        Some(d),
+                        Some(a),
+                        Some(&src),
+                        back,
+                        text,
+                        None,
+                        vec![Tag::Shield],
+                    );
+                    self.check_death(a, id, 2);
+                }
+            }
+        }
+        rem
+    }
+
+    fn heal(&mut self, by: usize, to: usize, amount: i32) -> i32 {
+        if !self.units[to].alive || amount <= 0 {
+            return 0;
+        }
+        let before = self.units[to].hp;
+        self.units[to].hp = (before + amount).min(self.units[to].max_hp);
+        let healed = self.units[to].hp - before;
+        self.units[by].healed += healed;
+        healed
+    }
+
+    fn give_shield(&mut self, by: usize, to: usize, amount: i32) -> i32 {
+        if !self.units[to].alive || amount <= 0 {
+            return 0;
+        }
+        self.units[to].shield += amount;
+        self.units[to].tags[Tag::Shield.idx()] = 1;
+        self.units[by].healed += amount;
+        amount
+    }
+
+    fn check_death(&mut self, u: usize, cause: u32, depth: u8) -> bool {
+        if self.units[u].alive && self.units[u].hp <= 0 {
+            self.units[u].hp = 0;
+            self.units[u].alive = false;
+            let text = format!("{} 倒下", self.units[u].name);
+            self.push(
+                LogKind::Death,
+                Some(cause),
+                depth,
+                None,
+                Some(u),
+                None,
+                0,
+                text,
+                None,
+                vec![],
+            );
+            return true;
+        }
+        false
+    }
+
+    fn hit(
+        &mut self,
+        a: usize,
+        d: usize,
+        power: i32,
+        scale: Option<Stat>,
+        consume: Option<&TagBonus>,
+        bonus: Option<&TagBonus>,
+    ) -> HitResult {
+        let rec = self.rec();
+        let mut notes: Vec<String> = Vec::new();
+        let stat = scale.map(|s| self.units[a].stats[s.idx()]).unwrap_or(50);
+        let stat_bp = 10_000 + (stat - 40).max(0) as i64 * 50;
+        let mut f: i64 = power as i64 * stat_bp / 10_000;
+        if rec {
+            notes.push(format!("威力 {}", pct(power as i64)));
+            if let Some(s) = scale {
+                notes.push(format!("{} {} ×{}", s.name(), stat, pct(stat_bp)));
+            }
+        }
+        let mul = |f: &mut i64, bp: i64| *f = *f * (10_000 + bp) / 10_000;
+
+        let over = self.units[a].tags[Tag::Overload.idx()] as i64;
+        if over > 0 {
+            mul(&mut f, 1500 * over);
+            if rec {
+                notes.push(format!("自身过载 {} 层 +{}", over, pct(1500 * over)));
+            }
+        }
+        let effects = self.units[a].effects.clone();
+        for (src, e) in &effects {
+            match e {
+                TraitEffect::FeedOn {
+                    tag, bp_per_stack, ..
+                } if *bp_per_stack > 0 => {
+                    let n = self.units[a].tags[tag.idx()] as i64;
+                    if n > 0 {
+                        mul(&mut f, *bp_per_stack as i64 * n);
+                        if rec {
+                            notes.push(format!(
+                                "「{}」自身{} {} 层 +{}",
+                                trait_name(src),
+                                tag.name(),
+                                n,
+                                pct(*bp_per_stack as i64 * n)
+                            ));
+                        }
+                    }
+                }
+                TraitEffect::LowHpBonus { below, bp } if self.units[a].hp_pct_lt(*below) => {
+                    mul(&mut f, *bp as i64);
+                    if rec {
+                        notes.push(format!("「{}」+{}", trait_name(src), pct(*bp as i64)));
+                    }
+                }
+                TraitEffect::BonusVsTag { tag, bp } if self.units[d].tags[tag.idx()] > 0 => {
+                    mul(&mut f, *bp as i64);
+                    if rec {
+                        notes.push(format!(
+                            "「{}」对{} +{}",
+                            trait_name(src),
+                            tag.name(),
+                            pct(*bp as i64)
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(b) = bonus {
+            let n = self.units[d].tags[b.tag.idx()] as i64;
+            if n > 0 {
+                mul(&mut f, b.per_stack as i64 * n);
+                if rec {
+                    notes.push(format!(
+                        "目标{} {} 层 +{}",
+                        b.tag.name(),
+                        n,
+                        pct(b.per_stack as i64 * n)
+                    ));
+                }
+            }
+        }
+        let mut consumed = Vec::new();
+        if let Some(cb) = consume {
+            let have = self.units[d].tags[cb.tag.idx()];
+            let n = cb.max.map(|m| have.min(m)).unwrap_or(have);
+            if n > 0 {
+                mul(&mut f, cb.per_stack as i64 * n as i64);
+                self.units[d].tags[cb.tag.idx()] -= n;
+                consumed.push((cb.tag, n));
+                if rec {
+                    notes.push(format!(
+                        "消耗目标{} {} 层 +{}",
+                        cb.tag.name(),
+                        n,
+                        pct(cb.per_stack as i64 * n as i64)
+                    ));
+                }
+            }
+        }
+        let atk = self.units[a].atk as i64;
+        let raw = atk * f / 10_000;
+        let def = self.units[d].def as i64;
+        let mitigated = raw * 1000 / (1000 + def * 22);
+        let shock = self.units[d].tags[Tag::Shock.idx()] as i64;
+        let dover = self.units[d].tags[Tag::Overload.idx()] as i64;
+        let mut mult: i64 = 10_000 + 1000 * shock + 800 * dover;
+        let mut taken_notes = Vec::new();
+        if rec && shock > 0 {
+            taken_notes.push(format!("震荡 {} 层 +{}", shock, pct(1000 * shock)));
+        }
+        if rec && dover > 0 {
+            taken_notes.push(format!("过载 {} 层 +{}", dover, pct(800 * dover)));
+        }
+        if self.units[d].tags[Tag::Fortify.idx()] > 0 {
+            mult = mult * 7000 / 10_000;
+            self.units[d].tags[Tag::Fortify.idx()] -= 1;
+            consumed.push((Tag::Fortify, 1));
+            if rec {
+                taken_notes.push("固守 -30%（消耗 1 层）".to_string());
+            }
+        }
+        let dmg = (mitigated * mult / 10_000).max(1) as i32;
+        let formula = if rec {
+            let mut s = format!("攻击 {} × {} = {}", atk, notes.join(" × "), raw);
+            s.push_str(&format!("；防御 {} 减伤 → {}", def, mitigated));
+            if !taken_notes.is_empty() {
+                s.push_str(&format!("；{} → {}", taken_notes.join("，"), dmg));
+            } else if dmg as i64 != mitigated {
+                s.push_str(&format!("；保底 → {}", dmg));
+            }
+            Some(s)
+        } else {
+            None
+        };
+        let dealt = dmg;
+        self.take_damage(d, dmg, Some(a));
+        HitResult {
+            dealt,
+            consumed,
+            formula,
+            killed: self.units[d].hp <= 0,
+        }
+    }
+
+    // ---- active actions ----------------------------------------------------
+
+    fn act(&mut self, a: usize, skill_id: &str, t: usize, rule: Option<usize>) {
+        let c = content();
+        let sk = &c.skills[skill_id];
+        self.units[a].ap -= sk.ap;
+        for r in self.reacted.iter_mut() {
+            *r = false;
+        }
+        let rule_note = rule.map(|r| format!("规则 {}", r + 1));
+        let id = self.push(
+            LogKind::Action,
+            None,
+            0,
+            Some(a),
+            Some(t),
+            Some(skill_id),
+            0,
+            String::new(),
+            None,
+            vec![],
+        );
+
+        if sk.target_ally {
+            let mut parts = Vec::new();
+            let mut tags = Vec::new();
+            for e in &sk.effects {
+                match e {
+                    Effect::Heal { ratio, scale } => {
+                        let st = scale.map(|s| self.units[a].stats[s.idx()]).unwrap_or(50);
+                        let amt = (self.units[a].atk as i64 * *ratio as i64 / 10_000
+                            * (10_000 + (st - 40).max(0) as i64 * 50)
+                            / 10_000) as i32;
+                        let h = self.heal(a, t, amt);
+                        parts.push(format!("恢复 {} 生命", h));
+                    }
+                    Effect::Shield { ratio } => {
+                        let amt = (self.units[t].max_hp as i64 * *ratio as i64 / 10_000) as i32;
+                        let s = self.give_shield(a, t, amt);
+                        parts.push(format!("护盾 {}", s));
+                        tags.push(Tag::Shield);
+                    }
+                    Effect::Apply { tag, stacks, to } => {
+                        let who = if *to == ApplyTo::SelfUnit { a } else { t };
+                        let n = self.add_tag(who, *tag, *stacks, Some(id), 1, true);
+                        if n > 0 {
+                            parts.push(format!("{} 层 [{}]", n, tag.name()));
+                            tags.push(*tag);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if self.rec() {
+                let text = format!(
+                    "{} 对 {} 使用「{}」：{}",
+                    self.units[a].name,
+                    if t == a {
+                        "自己".to_string()
+                    } else {
+                        self.units[t].name.clone()
+                    },
+                    sk.name,
+                    parts.join("，")
+                );
+                self.fill(id, text, None, tags, 0, rule_note);
+            }
+            return;
+        }
+
+        // Offensive: allies of the target may step in front.
+        let mut target = t;
+        if let Some(g) = self.react(
+            Trigger::AllyTargeted,
+            self.units[t].side,
+            ReactCtx {
+                target: t,
+                attacker: Some(a),
+                tag: None,
+            },
+            id,
+            1,
+        ) {
+            target = g;
+        }
+        let before = self.units[target].tags;
+        let mut applied: Vec<Tag> = Vec::new();
+        let mut consumed: Vec<(Tag, i32)> = Vec::new();
+        let mut dealt = 0;
+        let mut formula = None;
+        let mut extra_text = Vec::new();
+
+        for e in &sk.effects {
+            match e {
+                Effect::SelfDamage { bp } => {
+                    let cost = (self.units[a].max_hp as i64 * *bp as i64 / 10_000).max(1) as i32;
+                    self.units[a].hp = (self.units[a].hp - cost).max(1);
+                    extra_text.push(format!("自损 {}", cost));
+                }
+                Effect::Damage {
+                    power,
+                    scale,
+                    consume,
+                    bonus,
+                } => {
+                    if !self.units[target].alive {
+                        continue;
+                    }
+                    let r = self.hit(a, target, *power, *scale, consume.as_ref(), bonus.as_ref());
+                    dealt += r.dealt;
+                    consumed.extend(r.consumed);
+                    formula = r.formula;
+                }
+                Effect::Apply { tag, stacks, to } => match to {
+                    ApplyTo::Target => {
+                        if self.add_tag(target, *tag, *stacks, Some(id), 1, true) > 0 {
+                            applied.push(*tag);
+                        }
+                    }
+                    ApplyTo::SelfUnit => {
+                        self.add_tag(a, *tag, *stacks, Some(id), 1, true);
+                    }
+                    ApplyTo::AllEnemies => {
+                        let opp: Vec<usize> = self.living(self.units[a].side.other()).collect();
+                        for o in opp {
+                            if self.add_tag(o, *tag, *stacks, Some(id), 1, true) > 0 && o == target
+                            {
+                                applied.push(*tag);
+                            }
+                        }
+                        extra_text.push(format!("全体敌人 +{} 层 [{}]", stacks, tag.name()));
+                    }
+                    ApplyTo::Attacker => {}
+                },
+                Effect::Spread { tag } => {
+                    if self.units[target].tags[tag.idx()] > 0 {
+                        let others: Vec<usize> = self
+                            .living(self.units[target].side)
+                            .filter(|o| *o != target)
+                            .collect();
+                        let mut n = 0;
+                        for o in others {
+                            n += self.add_tag(o, *tag, 1, Some(id), 1, true);
+                        }
+                        if n > 0 {
+                            extra_text.push(format!("[{}] 扩散到 {} 名敌人", tag.name(), n));
+                        }
+                    }
+                }
+                Effect::Amplify { stacks } => {
+                    if self.units[target].alive {
+                        for tag in Tag::ALL {
+                            if tag != Tag::Shield && self.units[target].tags[tag.idx()] > 0 {
+                                if self.add_tag(target, tag, *stacks, Some(id), 1, true) > 0 {
+                                    applied.push(tag);
+                                }
+                            }
+                        }
+                    }
+                }
+                Effect::Heal { .. } | Effect::Shield { .. } | Effect::Guard => {}
+            }
+        }
+
+        // On-hit traits and stored charges (tags as resources) land on the target.
+        if self.units[target].alive && dealt > 0 {
+            let effects = self.units[a].effects.clone();
+            for (_, e) in &effects {
+                if let TraitEffect::OnHitApply { tag, stacks } = e {
+                    if self.add_tag(target, *tag, *stacks, Some(id), 1, true) > 0 {
+                        applied.push(*tag);
+                    }
+                }
+            }
+            for tag in Tag::ALL {
+                let n = self.units[a].charge[tag.idx()];
+                if n > 0 {
+                    self.units[a].charge[tag.idx()] = 0;
+                    let landed = self.add_tag(target, tag, n, Some(id), 1, false);
+                    if landed > 0 {
+                        applied.push(tag);
+                        let src = self
+                            .has_effect(
+                                a,
+                                |e| matches!(e, TraitEffect::Absorb { tag: t } if *t == tag),
+                            )
+                            .unwrap_or_default();
+                        let text = format!(
+                            "{}「{}」把存下的 {} 层 [{}] 转给 {}",
+                            self.units[a].name,
+                            trait_name(&src),
+                            landed,
+                            tag.name(),
+                            self.units[target].name
+                        );
+                        self.push(
+                            LogKind::Tag,
+                            Some(id),
+                            1,
+                            Some(a),
+                            Some(target),
+                            Some(&src),
+                            landed,
+                            text,
+                            None,
+                            vec![tag],
+                        );
+                    }
+                }
+            }
+        }
+
+        if self.rec() {
+            let mut text = format!(
+                "{} 对 {} 使用「{}」，造成 {} 伤害",
+                self.units[a].name, self.units[target].name, sk.name, dealt
+            );
+            if target != t {
+                text.push_str(&format!("（{} 挡在了前面）", self.units[target].name));
+            }
+            let mut tags = applied.clone();
+            for (tg, n) in &consumed {
+                if *n > 0 {
+                    text.push_str(&format!("，消耗 {} 层 [{}]", n, tg.name()));
+                    tags.push(*tg);
+                }
+            }
+            if !applied.is_empty() {
+                let names: Vec<String> = dedup_tags(&applied)
+                    .iter()
+                    .map(|t| format!("[{}]", t.name()))
+                    .collect();
+                text.push_str(&format!("，挂上 {}", names.join("")));
+            }
+            if !extra_text.is_empty() {
+                text.push_str(&format!("（{}）", extra_text.join("，")));
+            }
+            self.fill(id, text, formula, dedup_tags(&tags), dealt, rule_note);
+        }
+        self.note_consumed(a, &consumed, id, 1);
+        self.check_death(target, id, 1);
+
+        // Generic rule: any tag reaching the threshold grants one extra action per round.
+        if self.units[a].alive && !self.units[a].resonance_used {
+            let res = self.units[a].effects.iter().find_map(|(s, e)| match e {
+                TraitEffect::Resonance { threshold } => Some((s.clone(), *threshold)),
+                _ => None,
+            });
+            if let Some((src, th)) = res {
+                let hit = Tag::ALL.iter().find(|tg| {
+                    **tg != Tag::Shield
+                        && before[tg.idx()] < th
+                        && self.units[target].tags[tg.idx()] >= th
+                });
+                if let Some(tg) = hit {
+                    self.units[a].resonance_used = true;
+                    self.units[a].ap += 1;
+                    let text = format!(
+                        "{}「{}」：{} 的 [{}] 叠到 {} 层，额外行动一次",
+                        self.units[a].name,
+                        trait_name(&src),
+                        self.units[target].name,
+                        tg.name(),
+                        th
+                    );
+                    self.push(
+                        LogKind::Extra,
+                        Some(id),
+                        1,
+                        Some(a),
+                        Some(target),
+                        Some(&src),
+                        1,
+                        text,
+                        None,
+                        vec![*tg],
+                    );
+                }
+            }
+        }
+
+        self.after_hit(a, target, &applied, &consumed, id, 1);
+    }
+
+    fn fill(
+        &mut self,
+        id: u32,
+        text: String,
+        formula: Option<String>,
+        tags: Vec<Tag>,
+        amount: i32,
+        rule: Option<String>,
+    ) {
+        if let Some(e) = self.log.iter_mut().rev().find(|e| e.id == id) {
+            e.text = match rule {
+                Some(r) => format!("{}　〔{}〕", text, r),
+                None => text,
+            };
+            e.formula = formula;
+            e.tags = tags;
+            e.amount = amount;
+        }
+    }
+
+    /// Fire the reactions an offensive hit can cause, in causal order.
+    fn after_hit(
+        &mut self,
+        a: usize,
+        target: usize,
+        applied: &[Tag],
+        consumed: &[(Tag, i32)],
+        cause: u32,
+        depth: u8,
+    ) {
+        if depth > MAX_CHAIN_DEPTH {
+            return;
+        }
+        let side = self.units[a].side;
+        for tag in dedup_tags(applied) {
+            if self.units[target].alive {
+                self.react(
+                    Trigger::TagApplied,
+                    side,
+                    ReactCtx {
+                        target,
+                        attacker: Some(a),
+                        tag: Some(tag),
+                    },
+                    cause,
+                    depth,
+                );
+            }
+        }
+        if self.units[target].alive {
+            self.react(
+                Trigger::AllyHit,
+                side,
+                ReactCtx {
+                    target,
+                    attacker: Some(a),
+                    tag: None,
+                },
+                cause,
+                depth,
+            );
+        }
+        if consumed.iter().any(|(_, n)| *n > 0) && self.units[target].alive {
+            self.react(
+                Trigger::TagConsumed,
+                side,
+                ReactCtx {
+                    target,
+                    attacker: Some(a),
+                    tag: None,
+                },
+                cause,
+                depth,
+            );
+        }
+        if self.units[target].alive && self.units[target].hp_pct_lt(45) {
+            self.react(
+                Trigger::AllyLowHp,
+                self.units[target].side,
+                ReactCtx {
+                    target,
+                    attacker: Some(a),
+                    tag: None,
+                },
+                cause,
+                depth,
+            );
+        }
+    }
+
+    // ---- reactions ---------------------------------------------------------
+
+    fn react(
+        &mut self,
+        trigger: Trigger,
+        side: Side,
+        ctx: ReactCtx,
+        cause: u32,
+        depth: u8,
+    ) -> Option<usize> {
+        if depth > MAX_CHAIN_DEPTH {
+            return None;
+        }
+        let c = content();
+        let mut order: Vec<usize> = self.living(side).collect();
+        order.sort_by(|&x, &y| self.default_cmp(x, y));
+        for u in order {
+            if self.reacted[u] || self.units[u].pp <= 0 || !self.units[u].alive {
+                continue;
+            }
+            if Some(u) == ctx.attacker && trigger != Trigger::AllyLowHp {
+                continue;
+            }
+            let skills = self.units[u].skills.clone();
+            for sid in &skills {
+                let Some(sk) = c.skills.get(sid) else {
+                    continue;
+                };
+                if sk.kind != SkillKind::Passive
+                    || sk.trigger != Some(trigger)
+                    || self.units[u].pp < sk.pp
+                {
+                    continue;
+                }
+                if let Some(st) = sk.self_tag {
+                    if self.units[u].tags[st.idx()] <= 0 {
+                        continue;
+                    }
+                }
+                let t = ctx.target;
+                let ok = match trigger {
+                    Trigger::AllyTargeted => {
+                        t != u && self.units[t].alive && self.units[t].side == side
+                    }
+                    Trigger::AllyHit | Trigger::TagConsumed => {
+                        self.units[t].alive
+                            && sk
+                                .trigger_tag
+                                .is_none_or(|tg| self.units[t].tags[tg.idx()] > 0)
+                    }
+                    Trigger::TagApplied => {
+                        self.units[t].alive && sk.trigger_tag.is_none_or(|tg| ctx.tag == Some(tg))
+                    }
+                    Trigger::AllyLowHp => {
+                        self.units[t].alive
+                            && self.units[t].side == side
+                            && self.units[t].hp_pct_lt(45)
+                    }
+                };
+                if !ok {
+                    continue;
+                }
+                self.units[u].pp -= sk.pp;
+                self.units[u].reactions += 1;
+                self.reacted[u] = true;
+                return self.run_reaction(u, sid, trigger, ctx, cause, depth);
+            }
+        }
+        None
+    }
+
+    fn run_reaction(
+        &mut self,
+        u: usize,
+        sid: &str,
+        trigger: Trigger,
+        ctx: ReactCtx,
+        cause: u32,
+        depth: u8,
+    ) -> Option<usize> {
+        let c = content();
+        let sk = &c.skills[sid];
+        let id = self.push(
+            LogKind::Reaction,
+            Some(cause),
+            depth,
+            Some(u),
+            Some(ctx.target),
+            Some(sid),
+            0,
+            String::new(),
+            None,
+            vec![],
+        );
+        let mut guard = None;
+        let mut parts = Vec::new();
+        let mut applied = Vec::new();
+        let mut consumed = Vec::new();
+        let mut dealt = 0;
+        let mut formula = None;
+        let t = ctx.target;
+        for e in &sk.effects {
+            match e {
+                Effect::Guard => {
+                    guard = Some(u);
+                    parts.push(format!("替 {} 挡下这一击", self.units[t].name));
+                }
+                Effect::Apply { tag, stacks, to } => {
+                    let who = match to {
+                        ApplyTo::SelfUnit => Some(u),
+                        ApplyTo::Attacker => ctx.attacker,
+                        ApplyTo::Target => Some(t),
+                        ApplyTo::AllEnemies => None,
+                    };
+                    if let Some(w) = who {
+                        let n = self.add_tag(w, *tag, *stacks, Some(id), depth + 1, true);
+                        if n > 0 {
+                            parts.push(format!(
+                                "{} +{} 层 [{}]",
+                                if w == u {
+                                    "自己".to_string()
+                                } else {
+                                    self.units[w].name.clone()
+                                },
+                                n,
+                                tag.name()
+                            ));
+                            if self.units[w].side != self.units[u].side {
+                                applied.push(*tag);
+                            }
+                        }
+                    }
+                }
+                Effect::Damage {
+                    power,
+                    scale,
+                    consume,
+                    bonus,
+                } => {
+                    if self.units[t].alive && self.units[t].side != self.units[u].side {
+                        let r = self.hit(u, t, *power, *scale, consume.as_ref(), bonus.as_ref());
+                        dealt += r.dealt;
+                        consumed.extend(r.consumed);
+                        formula = r.formula;
+                        parts.insert(
+                            0,
+                            format!("对 {} 造成 {} 伤害", self.units[t].name, r.dealt),
+                        );
+                        let _ = r.killed;
+                    }
+                }
+                Effect::Heal { ratio, scale } => {
+                    let st = scale.map(|s| self.units[u].stats[s.idx()]).unwrap_or(50);
+                    let amt = (self.units[u].atk as i64 * *ratio as i64 / 10_000
+                        * (10_000 + (st - 40).max(0) as i64 * 50)
+                        / 10_000) as i32;
+                    let h = self.heal(u, t, amt);
+                    parts.push(format!("为 {} 恢复 {} 生命", self.units[t].name, h));
+                }
+                Effect::Shield { ratio } => {
+                    let amt = (self.units[t].max_hp as i64 * *ratio as i64 / 10_000) as i32;
+                    let s = self.give_shield(u, t, amt);
+                    parts.push(format!("给 {} {} 护盾", self.units[t].name, s));
+                }
+                _ => {}
+            }
+        }
+        if self.rec() {
+            let why = match trigger {
+                Trigger::AllyTargeted => "队友被攻击",
+                Trigger::AllyHit => "队友命中",
+                Trigger::TagApplied => "标签挂上",
+                Trigger::AllyLowHp => "队友重伤",
+                Trigger::TagConsumed => "标签被消耗",
+            };
+            let mut text = format!(
+                "↳ {}（{}）发动「{}」：{}",
+                self.units[u].name,
+                why,
+                sk.name,
+                parts.join("，")
+            );
+            for (tg, n) in &consumed {
+                if *n > 0 {
+                    text.push_str(&format!("，消耗 {} 层 [{}]", n, tg.name()));
+                }
+            }
+            let mut tags: Vec<Tag> = applied.clone();
+            tags.extend(consumed.iter().map(|(t, _)| *t));
+            if let Some(tt) = ctx.tag {
+                tags.push(tt);
+            }
+            self.fill(id, text, formula, dedup_tags(&tags), dealt, None);
+        }
+        self.note_consumed(u, &consumed, id, depth + 1);
+        if dealt > 0 {
+            self.check_death(t, id, depth + 1);
+            self.after_hit(u, t, &applied, &consumed, id, depth + 1);
+        }
+        guard
+    }
+}
+
+#[derive(Copy, Clone)]
+struct ReactCtx {
+    target: usize,
+    attacker: Option<usize>,
+    tag: Option<Tag>,
+}
+
+fn dedup_tags(v: &[Tag]) -> Vec<Tag> {
+    let mut out: Vec<Tag> = Vec::new();
+    for t in v {
+        if !out.contains(t) {
+            out.push(*t);
+        }
+    }
+    out
+}
+
+fn trait_name(id: &str) -> String {
+    let c = content();
+    c.traits
+        .get(id)
+        .map(|t| t.name.clone())
+        .or_else(|| c.equip(id).map(|e| e.name.clone()))
+        .unwrap_or_else(|| id.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ally(class: &str, key: &str) -> UnitSpec {
+        let c = content();
+        let cl = &c.classes[class];
+        UnitSpec {
+            key: key.into(),
+            name: cl.name.clone(),
+            icon: cl.icon.clone(),
+            row: cl.row,
+            max_hp: cl.base.hp,
+            atk: cl.base.atk,
+            def: cl.base.def,
+            spd: cl.base.spd,
+            ap: cl.base.ap,
+            pp: cl.base.pp,
+            stats: [55; 9],
+            skills: cl.skills.clone(),
+            gambits: cl.gambits.clone(),
+            effects: vec![],
+            start_tags: vec![],
+        }
+    }
+
+    fn squad() -> Vec<UnitSpec> {
+        vec![
+            ally("vanguard", "op:1"),
+            ally("marksman", "op:2"),
+            ally("technician", "op:3"),
+        ]
+    }
+
+    fn input(allies: Vec<UnitSpec>, waves: Vec<Vec<UnitSpec>>, record: bool) -> BattleInput {
+        BattleInput {
+            kind: BattleKind::Route,
+            allies,
+            waves,
+            ally_tags: vec![],
+            enemy_tags: vec![],
+            grounding: 0,
+            defense: false,
+            record,
+        }
+    }
+
+    #[test]
+    fn same_input_same_report() {
+        let waves = vec![vec![
+            enemy_spec("grey_hound", 2, 10_000),
+            enemy_spec("lamp_ghoul", 2, 10_000),
+        ]];
+        let a = simulate(&input(squad(), waves.clone(), true));
+        let b = simulate(&input(squad(), waves, true));
+        assert_eq!(
+            serde_json::to_string(&a).unwrap(),
+            serde_json::to_string(&b).unwrap()
+        );
+    }
+
+    #[test]
+    fn starting_squad_beats_ring_one() {
+        let waves = vec![vec![
+            enemy_spec("grey_hound", 1, 10_000),
+            enemy_spec("lamp_ghoul", 1, 10_000),
+        ]];
+        let r = simulate(&input(squad(), waves, true));
+        assert_eq!(
+            r.outcome,
+            Outcome::Victory,
+            "{:#?}",
+            r.log.iter().map(|e| &e.text).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn deep_ring_beats_starting_squad() {
+        let waves = vec![
+            vec![
+                enemy_spec("gate_guard", 7, 10_000),
+                enemy_spec("rift_observer", 7, 10_000),
+            ],
+            vec![
+                enemy_spec("gate_guard", 7, 10_000),
+                enemy_spec("clock_crow", 7, 10_000),
+            ],
+        ];
+        let r = simulate(&input(squad(), waves, false));
+        assert_ne!(r.outcome, Outcome::Victory);
+        assert_eq!(r.lost_wave, Some(1));
+    }
+
+    #[test]
+    fn reactions_point_at_their_cause() {
+        let waves = vec![vec![
+            enemy_spec("rust_drone", 2, 10_000),
+            enemy_spec("signal_ghost", 2, 10_000),
+        ]];
+        let r = simulate(&input(squad(), waves, true));
+        let ids: Vec<u32> = r.log.iter().map(|e| e.id).collect();
+        for e in r.log.iter().filter(|e| e.kind == LogKind::Reaction) {
+            let cause = e.cause.expect("reaction without cause");
+            assert!(ids.contains(&cause));
+            assert!(cause < e.id, "cause must come first");
+        }
+        assert!(
+            r.log.iter().any(|e| e.kind == LogKind::Reaction),
+            "expected at least one PP reaction"
+        );
+    }
+
+    #[test]
+    fn grounding_turns_consumed_shock_into_wardenship() {
+        let mut inp = input(
+            squad(),
+            vec![vec![
+                enemy_spec("signal_ghost", 2, 10_000),
+                enemy_spec("lamp_ghoul", 2, 10_000),
+            ]],
+            true,
+        );
+        inp.grounding = 1;
+        inp.defense = true;
+        let r = simulate(&inp);
+        assert_eq!(r.warden_gain, r.consumed[Tag::Shock.idx()]);
+        assert!(
+            r.consumed[Tag::Shock.idx()] > 0,
+            "technician should consume shock"
+        );
+    }
+
+    #[test]
+    fn conductor_stores_shock_and_passes_it_on() {
+        let mut v = ally("vanguard", "op:9");
+        v.effects
+            .push(("conductor".into(), TraitEffect::Absorb { tag: Tag::Shock }));
+        let mut inp = input(
+            vec![v],
+            vec![vec![enemy_spec("lamp_ghoul", 1, 10_000)]],
+            true,
+        );
+        inp.ally_tags = vec![(Tag::Shock, 1)];
+        let r = simulate(&inp);
+        assert!(
+            r.log
+                .iter()
+                .any(|e| e.source.as_deref() == Some("conductor")),
+            "conductor should fire"
+        );
+    }
+
+    #[test]
+    fn damage_formula_matches_amount() {
+        let waves = vec![vec![enemy_spec("grey_hound", 1, 10_000)]];
+        let r = simulate(&input(vec![ally("striker", "op:4")], waves, true));
+        for e in r
+            .log
+            .iter()
+            .filter(|e| e.kind == LogKind::Action && e.amount > 0)
+        {
+            let f = e.formula.as_ref().expect("damage line needs a formula");
+            assert!(
+                f.ends_with(&e.amount.to_string()),
+                "formula `{f}` does not end in {}",
+                e.amount
+            );
+        }
+    }
+}

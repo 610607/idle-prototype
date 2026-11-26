@@ -1,0 +1,119 @@
+[
+  { "id": "vanguard", "name": "街头防暴卫", "icon": "class-vanguard", "side": "city", "row": "front",
+    "base": { "hp": 132, "atk": 16, "def": 10, "spd": 11, "ap": 1, "pp": 2 }, "atk_stat": "str",
+    "bias": { "str": 8, "con": 12, "siz": 10 },
+    "skills": ["shield_bash", "baton_strike", "guard_cover"],
+    "gambits": [
+      { "if": { "t": "enemy_count_at_least", "n": 2 }, "do": { "t": "skill", "skill": "shield_bash" }, "target": "highest_atk" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "baton_strike" }, "target": "front_lowest" }
+    ],
+    "trait_pool": ["riot_veteran", "iron_lung", "night_market_voice", "decoy", "shield_burst"] },
+  { "id": "marksman", "name": "钟楼观测手", "icon": "class-marksman", "side": "city", "row": "back",
+    "base": { "hp": 86, "atk": 22, "def": 4, "spd": 15, "ap": 1, "pp": 2 }, "atk_stat": "dex",
+    "bias": { "dex": 14, "int": 8 },
+    "skills": ["tactical_mark", "snipe_marked", "mark_follow_up"],
+    "gambits": [
+      { "if": { "t": "enemy_has_tag", "tag": "mark" }, "do": { "t": "skill", "skill": "snipe_marked" }, "target": "with_tag" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "tactical_mark" }, "target": "highest_atk" }
+    ],
+    "trait_pool": ["rooftop_watcher", "steady_hand", "quick_draw", "precise", "resonance"] },
+  { "id": "medic", "name": "地下外伤医", "icon": "class-medic", "side": "city", "row": "back",
+    "base": { "hp": 92, "atk": 17, "def": 6, "spd": 14, "ap": 1, "pp": 2 }, "atk_stat": "dex",
+    "bias": { "edu": 14, "pow": 6 },
+    "skills": ["field_patch", "snap_shot", "emergency_aegis"],
+    "gambits": [
+      { "if": { "t": "ally_hp_below", "pct": 60 }, "do": { "t": "skill", "skill": "field_patch" }, "target": "lowest_ally" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "snap_shot" }, "target": "default" }
+    ],
+    "trait_pool": ["silver_tongue", "radio_tinker", "iron_lung", "defuser"] },
+  { "id": "striker", "name": "巷战突击手", "icon": "class-striker", "side": "city", "row": "front",
+    "base": { "hp": 106, "atk": 23, "def": 6, "spd": 16, "ap": 1, "pp": 1 }, "atk_stat": "str",
+    "bias": { "str": 14, "dex": 6 },
+    "skills": ["overclock_slash", "heavy_cleave", "overclock_echo"],
+    "gambits": [
+      { "if": { "t": "enemy_has_tag", "tag": "fortify" }, "do": { "t": "skill", "skill": "heavy_cleave" }, "target": "with_tag" },
+      { "if": { "t": "self_hp_above", "pct": 40 }, "do": { "t": "skill", "skill": "overclock_slash" }, "target": "front_lowest" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "heavy_cleave" }, "target": "front_lowest" }
+    ],
+    "trait_pool": ["overclock_nerve", "quick_draw", "scavenger_eye", "scarred"] },
+  { "id": "occultist", "name": "异常民俗学者", "icon": "class-occultist", "side": "city", "row": "back",
+    "base": { "hp": 88, "atk": 20, "def": 5, "spd": 13, "ap": 1, "pp": 2 }, "atk_stat": "pow",
+    "bias": { "pow": 14, "edu": 8 },
+    "skills": ["erosion_needle", "erosion_detonate", "aftershock"],
+    "gambits": [
+      { "if": { "t": "enemy_tag_at_least", "tag": "erosion", "n": 3 }, "do": { "t": "skill", "skill": "erosion_detonate" }, "target": "with_tag" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "erosion_needle" }, "target": "default" }
+    ],
+    "trait_pool": ["rift_sensitive", "archive_habit", "resonance", "rift_neighbor"] },
+  { "id": "technician", "name": "信号改装师", "icon": "class-technician", "side": "city", "row": "back",
+    "base": { "hp": 94, "atk": 19, "def": 6, "spd": 13, "ap": 1, "pp": 2 }, "atk_stat": "int",
+    "bias": { "int": 14, "edu": 6 },
+    "skills": ["suppression_burst", "static_discharge", "pursuit_shot"],
+    "gambits": [
+      { "if": { "t": "enemy_tag_at_least", "tag": "shock", "n": 2 }, "do": { "t": "skill", "skill": "static_discharge" }, "target": "with_tag" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "suppression_burst" }, "target": "default" }
+    ],
+    "trait_pool": ["radio_tinker", "electrician_roots", "resonance", "defuser"] },
+  { "id": "combat_sapper", "name": "战斗工兵", "icon": "class-sapper", "side": "city", "row": "front",
+    "base": { "hp": 124, "atk": 17, "def": 9, "spd": 12, "ap": 1, "pp": 2 }, "atk_stat": "str",
+    "bias": { "con": 10, "int": 10 },
+    "skills": ["deploy_barricade", "baton_strike", "guard_cover"],
+    "gambits": [
+      { "if": { "t": "round_at_least", "n": 1 }, "and": { "t": "self_has_tag", "tag": "fortify" }, "do": { "t": "skill", "skill": "baton_strike" }, "target": "front_lowest" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "deploy_barricade" }, "target": "self" }
+    ],
+    "trait_pool": ["shield_burst", "riot_veteran", "electrician_roots"] },
+
+  { "id": "mist_walker", "name": "雾行者", "icon": "class-mist", "side": "otherworld", "row": "front",
+    "base": { "hp": 112, "atk": 22, "def": 6, "spd": 17, "ap": 1, "pp": 1 }, "atk_stat": "dex",
+    "bias": { "dex": 12, "pow": 10 },
+    "skills": ["mist_step", "claw"],
+    "gambits": [{ "if": { "t": "always" }, "do": { "t": "skill", "skill": "mist_step" }, "target": "front_lowest" }],
+    "trait_pool": ["erosion_feeder", "rift_neighbor", "quick_draw"] },
+  { "id": "echo_body", "name": "回声体", "icon": "class-echo", "side": "otherworld", "row": "back",
+    "base": { "hp": 84, "atk": 19, "def": 5, "spd": 14, "ap": 1, "pp": 2 }, "atk_stat": "pow",
+    "bias": { "pow": 14, "int": 8 },
+    "skills": ["echo_repeat", "aftershock"],
+    "gambits": [
+      { "if": { "t": "any_tag_at_least", "n": 1 }, "do": { "t": "skill", "skill": "echo_repeat" }, "target": "most_tags" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "echo_repeat" }, "target": "default" }
+    ],
+    "trait_pool": ["resonance", "defuser"] },
+  { "id": "glass_gardener", "name": "玻璃花匠", "icon": "class-glass", "side": "otherworld", "row": "front",
+    "base": { "hp": 140, "atk": 15, "def": 11, "spd": 9, "ap": 1, "pp": 2 }, "atk_stat": "con",
+    "bias": { "con": 14, "siz": 8 },
+    "skills": ["glass_bloom", "claw", "guard_cover"],
+    "gambits": [
+      { "if": { "t": "ally_hp_below", "pct": 70 }, "do": { "t": "skill", "skill": "glass_bloom" }, "target": "lowest_ally" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "claw" }, "target": "default" }
+    ],
+    "trait_pool": ["shield_burst", "decoy"] },
+
+  { "id": "old_postman", "name": "老邮差", "icon": "class-postman", "side": "special", "row": "back",
+    "base": { "hp": 110, "atk": 18, "def": 7, "spd": 15, "ap": 1, "pp": 2 }, "atk_stat": "con",
+    "bias": { "con": 12, "luk": 14, "app": 8 },
+    "skills": ["parcel_drop", "snap_shot", "emergency_aegis"],
+    "gambits": [
+      { "if": { "t": "ally_hp_below", "pct": 55 }, "do": { "t": "skill", "skill": "parcel_drop" }, "target": "lowest_ally" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "snap_shot" }, "target": "default" }
+    ],
+    "trait_pool": [], "fixed_traits": ["barrier_runner", "silver_tongue"] },
+  { "id": "fog_man", "name": "雾中人", "icon": "class-fogman", "side": "special", "row": "back",
+    "base": { "hp": 96, "atk": 22, "def": 5, "spd": 16, "ap": 1, "pp": 2 }, "atk_stat": "pow",
+    "bias": { "pow": 16, "dex": 8 },
+    "skills": ["fog_veil", "erosion_detonate", "aftershock"],
+    "gambits": [
+      { "if": { "t": "enemy_tag_at_least", "tag": "erosion", "n": 3 }, "do": { "t": "skill", "skill": "erosion_detonate" }, "target": "with_tag" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "fog_veil" }, "target": "default" }
+    ],
+    "trait_pool": [], "fixed_traits": ["fog_sight", "erosion_feeder"] },
+  { "id": "operator", "name": "接线员", "icon": "class-operator", "side": "special", "row": "back",
+    "base": { "hp": 100, "atk": 19, "def": 6, "spd": 14, "ap": 1, "pp": 3 }, "atk_stat": "int",
+    "bias": { "int": 16, "app": 10 },
+    "skills": ["switchboard", "snipe_marked", "mark_follow_up"],
+    "gambits": [
+      { "if": { "t": "enemy_has_tag", "tag": "mark" }, "do": { "t": "skill", "skill": "snipe_marked" }, "target": "with_tag" },
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "switchboard" }, "target": "default" }
+    ],
+    "trait_pool": [], "fixed_traits": ["party_line", "decoy"] }
+]

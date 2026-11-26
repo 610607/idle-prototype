@@ -1,0 +1,13 @@
+{
+  "professions": [
+    { "id": "militia", "name": "民兵", "icon": "prof-militia", "class": "vanguard", "contribution": "本街区守城时的民兵力量" },
+    { "id": "watchman", "name": "巡更人", "icon": "prof-watchman", "class": "marksman", "contribution": "揭开更大范围的迷雾" },
+    { "id": "medic", "name": "医护", "icon": "prof-medic", "class": "medic", "contribution": "信任；告急后恢复更快" },
+    { "id": "worker", "name": "工人", "icon": "prof-worker", "class": "striker", "contribution": "废材" },
+    { "id": "clerk", "name": "文员", "icon": "prof-clerk", "class": "occultist", "contribution": "情报" },
+    { "id": "engineer", "name": "工程师", "icon": "prof-engineer", "class": "technician", "contribution": "零件；供电" }
+  ],
+  "mixed": [
+    { "a": "engineer", "b": "militia", "class": "combat_sapper", "name": "战斗工兵" }
+  ]
+}
