@@ -204,6 +204,16 @@ pub enum Trigger {
     TagConsumed,
 }
 
+/// What happened to a tag on an enemy, for rule changes that turn one tag into another.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TagEvent {
+    Consumed,
+    Applied,
+    /// Erosion damage ticking at the start of a round.
+    Tick,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApplyTo {
@@ -395,6 +405,32 @@ pub enum TraitEffect {
         below: i32,
         bp: i32,
     },
+    // Rule changes. These hold for the holder's whole side while the holder is standing, so one
+    // operative (or a doctrine given to everyone) rewires how the team's tags feed each other.
+    /// When this side consumes / applies `from` on an enemy, or `from` ticks on an enemy, that
+    /// enemy also gets `stacks` of `to`. One hop: tags it adds do not transmute again.
+    Transmute {
+        on: TagEvent,
+        from: Tag,
+        to: Tag,
+        stacks: i32,
+    },
+    /// A reaction can set off allies who already reacted to this action (twice per action at most;
+    /// PP and chain depth still bound it).
+    ChainReactions,
+    /// Stacks beyond a tag's cap on an enemy spill onto the enemy with the fewest of that tag.
+    Overflow,
+    /// Per unit: each stack this unit's skill consumes also deals `bp_per_stack` of the target's max HP.
+    ConsumeBurst {
+        bp_per_stack: i32,
+    },
+    /// Rule change (team-wide): this side's tags react with what the enemy already carries
+    /// (content/reactions.json).
+    TagReactions,
+    /// Per unit: heal `bp` of max HP at the start of every round (sustain handed in from the map).
+    Regen {
+        bp: i32,
+    },
     // Map-layer effects (read by routes/garrisons, ignored in combat):
     RevealBonus {
         tiles: i32,
@@ -419,6 +455,12 @@ impl TraitEffect {
                 .collect(),
             TraitEffect::ShieldBurst { .. } => vec![Tag::Shield],
             TraitEffect::MarkedGainPp => vec![Tag::Mark],
+            TraitEffect::Transmute { from, .. } => vec![*from],
+            TraitEffect::Overflow | TraitEffect::ConsumeBurst { .. } => Tag::ALL
+                .iter()
+                .copied()
+                .filter(|t| *t != Tag::Shield)
+                .collect(),
             _ => vec![],
         }
     }
@@ -429,6 +471,7 @@ impl TraitEffect {
             | TraitEffect::Absorb { tag } => {
                 vec![*tag]
             }
+            TraitEffect::Transmute { to, .. } => vec![*to],
             _ => vec![],
         }
     }
@@ -814,6 +857,39 @@ pub struct Balance {
     pub sealed_slots: usize,
 }
 
+/// Two different tags meeting on one enemy (prototype, see docs/gameplay-exploration.md).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReactionDef {
+    pub id: String,
+    pub name: String,
+    pub a: Tag,
+    pub b: Tag,
+    /// Tags whose stacks are all used up by the reaction.
+    pub consume: Vec<Tag>,
+    pub effects: Vec<ReactionEffect>,
+    pub desc: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ReactionEffect {
+    /// Per consumed stack, this share of the target's max HP, ignoring defence.
+    Burst {
+        bp_per_stack: i32,
+    },
+    Apply {
+        tag: Tag,
+        stacks: i32,
+    },
+    /// Every other enemy gets `stacks` of `tag`.
+    Spread {
+        tag: Tag,
+        stacks: i32,
+    },
+    /// The unit that set it off acts once more (one extra action per round from any source).
+    ExtraAction,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TagDef {
     pub id: Tag,
@@ -846,6 +922,7 @@ pub struct Content {
     pub policies: Vec<PolicyDef>,
     pub equipment: Vec<EquipDef>,
     pub rules: Vec<RuleDef>,
+    pub reactions: Vec<ReactionDef>,
     pub given_names: Vec<String>,
     pub family_names: Vec<String>,
     pub otherworld_names: Vec<String>,
@@ -910,6 +987,8 @@ fn load() -> Content {
     );
     let world: WorldFile = parse("world.json", include_str!("../content/world.json"));
     let balance: Balance = parse("balance.json", include_str!("../content/balance.json"));
+    let reactions: Vec<ReactionDef> =
+        parse("reactions.json", include_str!("../content/reactions.json"));
 
     Content {
         tags,
@@ -930,6 +1009,7 @@ fn load() -> Content {
         policies: world.policies,
         equipment: world.equipment,
         rules: world.rules,
+        reactions,
         given_names: world.given_names,
         family_names: world.family_names,
         otherworld_names: world.otherworld_names,

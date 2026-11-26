@@ -63,6 +63,7 @@ fn simple_unit(
         gambits,
         effects: vec![],
         start_tags: vec![],
+        fixture: false,
     }
 }
 

@@ -20,6 +20,7 @@ fn ally(class: &str, key: &str) -> UnitSpec {
         gambits: cl.gambits.clone(),
         effects: vec![],
         start_tags: vec![],
+        fixture: false,
     }
 }
 

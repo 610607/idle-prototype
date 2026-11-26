@@ -192,6 +192,7 @@ pub fn spec(op: &Operative) -> UnitSpec {
             .filter(|(_, e)| !matches!(e, TraitEffect::Stat { .. }))
             .collect(),
         start_tags: vec![],
+        fixture: false,
     }
 }
 

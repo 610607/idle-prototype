@@ -6,8 +6,8 @@
 //! entry that triggered it, and damage lines carry the formula that produced the number.
 
 use crate::content::{
-    balance, content, Act, ApplyTo, BaseStats, Cond, Effect, Gambit, Row, SkillKind, Stat, Tag,
-    TagBonus, Target, TraitEffect, Trigger,
+    balance, content, Act, ApplyTo, BaseStats, Cond, Effect, Gambit, ReactionEffect, Row,
+    SkillKind, Stat, Tag, TagBonus, TagEvent, Target, TraitEffect, Trigger,
 };
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +50,11 @@ pub struct UnitSpec {
     /// Combat-relevant effects from traits and equipment, with the id of their source.
     pub effects: Vec<(String, TraitEffect)>,
     pub start_tags: Vec<(Tag, i32)>,
+    /// A fixture (prototype): a facility standing with the defenders. It cannot be targeted, has no
+    /// turn of its own and never counts toward a side being alive; it only reacts (PP skills) and
+    /// lends its rule changes to its side.
+    #[serde(default)]
+    pub fixture: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -185,6 +190,9 @@ pub struct BattleReport {
     pub applied: [i32; 6],
     pub consumed: [i32; 6],
     pub warden_gain: i32,
+    /// Tag reactions set off, by id (prototype rule; empty unless a side holds `tag_reactions`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<(String, u32)>,
     pub units: Vec<UnitReport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub log: Vec<LogEntry>,
@@ -263,6 +271,7 @@ pub fn enemy_spec(id: &str, ring: i32, mult_bp: i32) -> UnitSpec {
         gambits,
         effects: vec![],
         start_tags: e.start_tags.clone(),
+        fixture: false,
     }
 }
 
@@ -272,6 +281,7 @@ pub fn enemy_spec(id: &str, ring: i32, mult_bp: i32) -> UnitSpec {
 
 #[derive(Clone, Debug)]
 struct Unit {
+    fixture: bool,
     key: String,
     name: String,
     icon: String,
@@ -307,6 +317,7 @@ struct Unit {
 impl Unit {
     fn from_spec(spec: &UnitSpec, side: Side, slot: u8) -> Unit {
         Unit {
+            fixture: spec.fixture,
             key: spec.key.clone(),
             name: spec.name.clone(),
             icon: spec.icon.clone(),
@@ -379,7 +390,9 @@ struct Battle<'a> {
     applied: [i32; 6],
     consumed: [i32; 6],
     warden_gain: i32,
-    reacted: Vec<bool>,
+    tag_reactions: Vec<(String, u32)>,
+    /// Reactions each unit has made to the current action.
+    reacted: Vec<u8>,
 }
 
 fn pct(bp: i64) -> String {
@@ -408,6 +421,7 @@ impl<'a> Battle<'a> {
             applied: [0; 6],
             consumed: [0; 6],
             warden_gain: 0,
+            tag_reactions: Vec::new(),
             reacted: Vec::new(),
         }
     }
@@ -479,7 +493,7 @@ impl<'a> Battle<'a> {
         let same_row = self
             .units
             .iter()
-            .filter(|u| u.side == side && u.row == spec.row)
+            .filter(|u| u.side == side && u.row == spec.row && !u.fixture)
             .count() as u8;
         let mut u = Unit::from_spec(spec, side, same_row);
         let idx = self.units.len();
@@ -510,7 +524,7 @@ impl<'a> Battle<'a> {
         }
         u.resonance_used = false;
         self.units.push(u);
-        self.reacted.push(false);
+        self.reacted.push(0);
         for (tag, n, _src) in start {
             self.add_tag(idx, tag, n, None, 0, false);
         }
@@ -520,12 +534,23 @@ impl<'a> Battle<'a> {
         self.units
             .iter()
             .enumerate()
+            .filter(move |(_, u)| u.side == side && u.alive && !u.fixture)
+            .map(|(i, _)| i)
+    }
+
+    /// Living units plus fixtures: everyone who can react or lend a rule.
+    fn present(&self, side: Side) -> impl Iterator<Item = usize> + '_ {
+        self.units
+            .iter()
+            .enumerate()
             .filter(move |(_, u)| u.side == side && u.alive)
             .map(|(i, _)| i)
     }
 
     fn side_alive(&self, side: Side) -> bool {
-        self.units.iter().any(|u| u.side == side && u.alive)
+        self.units
+            .iter()
+            .any(|u| u.side == side && u.alive && !u.fixture)
     }
 
     // ---- main loop ---------------------------------------------------------
@@ -552,7 +577,7 @@ impl<'a> Battle<'a> {
                 k += 1;
                 r
             });
-            self.reacted = vec![false; self.units.len()];
+            self.reacted = vec![0; self.units.len()];
             for spec in wave {
                 self.spawn(spec, Side::Enemy);
             }
@@ -816,6 +841,7 @@ impl<'a> Battle<'a> {
             applied: self.applied,
             consumed: self.consumed,
             warden_gain: self.warden_gain,
+            reactions: self.tag_reactions,
             units,
             log: self.log,
         }
@@ -823,7 +849,7 @@ impl<'a> Battle<'a> {
 
     fn turn_order(&self) -> Vec<usize> {
         let mut order: Vec<usize> = (0..self.units.len())
-            .filter(|i| self.units[*i].alive)
+            .filter(|i| self.units[*i].alive && !self.units[*i].fixture)
             .collect();
         order.sort_by(|&a, &b| {
             let ua = &self.units[a];
@@ -842,8 +868,35 @@ impl<'a> Battle<'a> {
 
     fn dots(&mut self) {
         for i in 0..self.units.len() {
-            if !self.units[i].alive {
+            if !self.units[i].alive || self.units[i].fixture {
                 continue;
+            }
+            let regen: i32 = self.units[i]
+                .effects
+                .iter()
+                .filter_map(|(_, e)| match e {
+                    TraitEffect::Regen { bp } => Some(*bp),
+                    _ => None,
+                })
+                .sum();
+            if regen > 0 {
+                let amount = (self.units[i].max_hp as i64 * regen as i64 / 10_000) as i32;
+                let healed = self.heal(i, i, amount);
+                if healed > 0 && self.rec() {
+                    let text = format!("{} 缓过一口气，回复 {} 生命", self.units[i].name, healed);
+                    self.push(
+                        LogKind::Facility,
+                        None,
+                        0,
+                        None,
+                        Some(i),
+                        Some("regen"),
+                        healed,
+                        text,
+                        None,
+                        vec![],
+                    );
+                }
             }
             let stacks = self.units[i].tags[Tag::Erosion.idx()];
             if stacks <= 0 {
@@ -896,6 +949,8 @@ impl<'a> Battle<'a> {
                 formula,
                 vec![Tag::Erosion],
             );
+            let side = self.units[i].side.other();
+            self.transmute(side, i, TagEvent::Tick, &[(Tag::Erosion, stacks)], id, 1);
             self.check_death(i, id, 1);
         }
     }
@@ -1105,6 +1160,204 @@ impl<'a> Battle<'a> {
             .map(|(s, _)| s.clone())
     }
 
+    /// First rule change of this kind held by anyone standing on `side`.
+    fn side_effect<F: Fn(&TraitEffect) -> bool>(
+        &self,
+        side: Side,
+        f: F,
+    ) -> Option<(String, TraitEffect)> {
+        self.present(side)
+            .find_map(|u| self.units[u].effects.iter().find(|(_, e)| f(e)).cloned())
+    }
+
+    /// Rule change: `side` did `event` with `tags` on enemy `target`; matching transmutes add their
+    /// tag to the same target. Each distinct rule fires once per event. Returns the tags that landed.
+    fn transmute(
+        &mut self,
+        side: Side,
+        target: usize,
+        event: TagEvent,
+        tags: &[(Tag, i32)],
+        cause: u32,
+        depth: u8,
+    ) -> Vec<Tag> {
+        let mut out = Vec::new();
+        if !self.units[target].alive || self.units[target].side == side {
+            return out;
+        }
+        let mut rules: Vec<(String, Tag, Tag, i32)> = Vec::new();
+        for u in self.present(side) {
+            for (src, e) in &self.units[u].effects {
+                if let TraitEffect::Transmute {
+                    on,
+                    from,
+                    to,
+                    stacks,
+                } = e
+                {
+                    if *on == event && !rules.iter().any(|r| r.0 == *src && r.1 == *from) {
+                        rules.push((src.clone(), *from, *to, *stacks));
+                    }
+                }
+            }
+        }
+        for (src, from, to, stacks) in rules {
+            if !tags.iter().any(|(t, n)| *t == from && *n > 0) {
+                continue;
+            }
+            let landed = self.add_tag(target, to, stacks, Some(cause), depth, false);
+            if landed > 0 {
+                out.push(to);
+                if self.rec() {
+                    let verb = match event {
+                        TagEvent::Consumed => "被消耗",
+                        TagEvent::Applied => "挂上",
+                        TagEvent::Tick => "发作",
+                    };
+                    let text = format!(
+                        "「{}」：{} 的 [{}] {}，转成 {} 层 [{}]",
+                        trait_name(&src),
+                        self.units[target].name,
+                        from.name(),
+                        verb,
+                        landed,
+                        to.name()
+                    );
+                    self.push(
+                        LogKind::Tag,
+                        Some(cause),
+                        depth,
+                        None,
+                        Some(target),
+                        Some(&src),
+                        landed,
+                        text,
+                        None,
+                        vec![from, to],
+                    );
+                }
+            }
+        }
+        out
+    }
+
+    /// Rule change: tags `side` just put on enemy `target` react with what it already carries
+    /// (content/reactions.json, first match per new tag). Returns (stacks consumed, tags added).
+    fn tag_reactions(
+        &mut self,
+        side: Side,
+        actor: usize,
+        target: usize,
+        applied: &[Tag],
+        cause: u32,
+        depth: u8,
+    ) -> (Vec<(Tag, i32)>, Vec<Tag>) {
+        let mut consumed = Vec::new();
+        let mut added = Vec::new();
+        if applied.is_empty()
+            || self.units[target].side == side
+            || self
+                .side_effect(side, |e| matches!(e, TraitEffect::TagReactions))
+                .is_none()
+        {
+            return (consumed, added);
+        }
+        let c = content();
+        for new in dedup_tags(applied) {
+            if !self.units[target].alive {
+                break;
+            }
+            let tags = self.units[target].tags;
+            let Some(r) = c.reactions.iter().find(|r| {
+                let other = if r.a == new {
+                    r.b
+                } else if r.b == new {
+                    r.a
+                } else {
+                    return false;
+                };
+                tags[new.idx()] > 0 && tags[other.idx()] > 0
+            }) else {
+                continue;
+            };
+            let mut n = 0;
+            for t in &r.consume {
+                let k = self.units[target].tags[t.idx()];
+                if k > 0 {
+                    self.units[target].tags[t.idx()] = 0;
+                    consumed.push((*t, k));
+                    n += k;
+                }
+            }
+            let mut parts = Vec::new();
+            for e in &r.effects {
+                match e {
+                    ReactionEffect::Burst { bp_per_stack } => {
+                        let dmg =
+                            (self.units[target].max_hp as i64 * *bp_per_stack as i64 * n as i64
+                                / 10_000)
+                                .max(1) as i32;
+                        let hp = self.take_damage(target, dmg, Some(actor));
+                        parts.push(format!("{} 伤害", hp));
+                    }
+                    ReactionEffect::Apply { tag, stacks } => {
+                        let k = self.add_tag(target, *tag, *stacks, Some(cause), depth, false);
+                        if k > 0 {
+                            added.push(*tag);
+                            parts.push(format!("+{} 层 [{}]", k, tag.name()));
+                        }
+                    }
+                    ReactionEffect::Spread { tag, stacks } => {
+                        let others: Vec<usize> = self
+                            .living(self.units[target].side)
+                            .filter(|o| *o != target)
+                            .collect();
+                        let mut m = 0;
+                        for o in others {
+                            m += self.add_tag(o, *tag, *stacks, Some(cause), depth, false);
+                        }
+                        if m > 0 {
+                            parts.push(format!("[{}] 扩散 {} 层", tag.name(), m));
+                        }
+                    }
+                    ReactionEffect::ExtraAction => {
+                        if self.units[actor].alive && !self.units[actor].resonance_used {
+                            self.units[actor].resonance_used = true;
+                            self.units[actor].ap += 1;
+                            parts.push(format!("{} 再行动一次", self.units[actor].name));
+                        }
+                    }
+                }
+            }
+            match self.tag_reactions.iter_mut().find(|(id, _)| *id == r.id) {
+                Some(x) => x.1 += 1,
+                None => self.tag_reactions.push((r.id.clone(), 1)),
+            }
+            let text = format!(
+                "【{}】{} 身上 [{}] 碰上 [{}]：{}",
+                r.name,
+                self.units[target].name,
+                r.a.name(),
+                r.b.name(),
+                parts.join("，")
+            );
+            let id = self.push(
+                LogKind::Tag,
+                Some(cause),
+                depth,
+                Some(actor),
+                Some(target),
+                Some(&r.id),
+                n,
+                text,
+                None,
+                vec![r.a, r.b],
+            );
+            self.check_death(target, id, depth + 1);
+        }
+        (consumed, added)
+    }
+
     /// Add stacks of a tag. Returns how many stacks actually landed.
     fn add_tag(
         &mut self,
@@ -1160,6 +1413,48 @@ impl<'a> Battle<'a> {
         self.units[u].tags[tag.idx()] = after;
         let landed = after - before;
         self.applied[tag.idx()] += landed;
+        // Rule change: what does not fit spills onto the enemy carrying the fewest stacks.
+        let excess = before + stacks - tag.max();
+        if excess > 0 && depth <= MAX_CHAIN_DEPTH {
+            let side = self.units[u].side;
+            if let Some((src, _)) =
+                self.side_effect(side.other(), |e| matches!(e, TraitEffect::Overflow))
+            {
+                let to = self
+                    .living(side)
+                    .filter(|o| *o != u && self.units[*o].tags[tag.idx()] < tag.max())
+                    .min_by(|x, y| {
+                        self.units[*x].tags[tag.idx()]
+                            .cmp(&self.units[*y].tags[tag.idx()])
+                            .then_with(|| self.default_cmp(*x, *y))
+                    });
+                if let Some(o) = to {
+                    let n = self.add_tag(o, tag, excess, cause, depth + 1, false);
+                    if n > 0 && log && self.rec() {
+                        let text = format!(
+                            "「{}」：{} 身上放不下的 {} 层 [{}] 溢到 {}",
+                            trait_name(&src),
+                            self.units[u].name,
+                            n,
+                            tag.name(),
+                            self.units[o].name
+                        );
+                        self.push(
+                            LogKind::Tag,
+                            cause,
+                            depth + 1,
+                            None,
+                            Some(o),
+                            Some(&src),
+                            n,
+                            text,
+                            None,
+                            vec![tag],
+                        );
+                    }
+                }
+            }
+        }
         if landed > 0 && tag == Tag::Mark {
             if let Some(src) = self.has_effect(u, |e| matches!(e, TraitEffect::MarkedGainPp)) {
                 self.units[u].pp += 1;
@@ -1483,7 +1778,27 @@ impl<'a> Battle<'a> {
                 taken_notes.push("固守 -30%（消耗 1 层）".to_string());
             }
         }
-        let dmg = (mitigated * mult / 10_000).max(1) as i32;
+        let mut dmg = (mitigated * mult / 10_000).max(1) as i32;
+        // Rule change: consumed stacks also tear off a slice of max HP, ignoring defence.
+        let burst_bp: i64 = effects
+            .iter()
+            .filter_map(|(_, e)| match e {
+                TraitEffect::ConsumeBurst { bp_per_stack } => Some(*bp_per_stack as i64),
+                _ => None,
+            })
+            .sum();
+        let burst_n: i64 = consumed
+            .iter()
+            .filter(|(t, _)| *t != Tag::Fortify)
+            .map(|(_, n)| *n as i64)
+            .sum();
+        if burst_bp > 0 && burst_n > 0 {
+            let extra = (self.units[d].max_hp as i64 * burst_bp * burst_n / 10_000) as i32;
+            dmg += extra;
+            if rec {
+                taken_notes.push(format!("消耗 {} 层爆裂 +{}", burst_n, extra));
+            }
+        }
         let formula = if rec {
             let mut s = format!("攻击 {} × {} = {}", atk, notes.join(" × "), raw);
             s.push_str(&format!("；防御 {} 减伤 → {}", def, mitigated));
@@ -1513,7 +1828,7 @@ impl<'a> Battle<'a> {
         let sk = &c.skills[skill_id];
         self.units[a].ap -= sk.ap;
         for r in self.reacted.iter_mut() {
-            *r = false;
+            *r = 0;
         }
         let rule_note = rule.map(|r| format!("规则 {}", r + 1));
         let id = self.push(
@@ -1746,6 +2061,19 @@ impl<'a> Battle<'a> {
             self.fill(id, text, formula, dedup_tags(&tags), dealt, rule_note);
         }
         self.note_consumed(a, &consumed, id, 1);
+        let side = self.units[a].side;
+        let mut more = self.transmute(side, target, TagEvent::Consumed, &consumed, id, 1);
+        let landed: Vec<(Tag, i32)> = dedup_tags(&applied).iter().map(|t| (*t, 1)).collect();
+        more.extend(self.transmute(side, target, TagEvent::Applied, &landed, id, 1));
+        applied.extend(more);
+        let (rc, ra) = self.tag_reactions(side, a, target, &applied, id, 1);
+        if !rc.is_empty() {
+            self.note_consumed(a, &rc, id, 1);
+            let more = self.transmute(side, target, TagEvent::Consumed, &rc, id, 1);
+            applied.extend(more);
+            consumed.extend(rc);
+        }
+        applied.extend(ra);
         self.check_death(target, id, 1);
 
         // Generic rule: any tag reaching the threshold grants one extra action per round.
@@ -1894,10 +2222,18 @@ impl<'a> Battle<'a> {
             return None;
         }
         let c = content();
-        let mut order: Vec<usize> = self.living(side).collect();
+        let mut order: Vec<usize> = self.present(side).collect();
         order.sort_by(|&x, &y| self.default_cmp(x, y));
+        let limit = if self
+            .side_effect(side, |e| matches!(e, TraitEffect::ChainReactions))
+            .is_some()
+        {
+            2
+        } else {
+            1
+        };
         for u in order {
-            if self.reacted[u] || self.units[u].pp <= 0 || !self.units[u].alive {
+            if self.reacted[u] >= limit || self.units[u].pp <= 0 || !self.units[u].alive {
                 continue;
             }
             if Some(u) == ctx.attacker && trigger != Trigger::AllyLowHp {
@@ -1912,6 +2248,10 @@ impl<'a> Battle<'a> {
                     || sk.trigger != Some(trigger)
                     || self.units[u].pp < sk.pp
                 {
+                    continue;
+                }
+                // A fixture cannot step in front of a blow: it is not on the field to be hit.
+                if self.units[u].fixture && sk.effects.iter().any(|e| matches!(e, Effect::Guard)) {
                     continue;
                 }
                 if let Some(st) = sk.self_tag {
@@ -1944,7 +2284,7 @@ impl<'a> Battle<'a> {
                 }
                 self.units[u].pp -= sk.pp;
                 self.units[u].reactions += 1;
-                self.reacted[u] = true;
+                self.reacted[u] += 1;
                 return self.run_reaction(u, sid, trigger, ctx, cause, depth);
             }
         }
@@ -2075,6 +2415,21 @@ impl<'a> Battle<'a> {
             self.fill(id, text, formula, dedup_tags(&tags), dealt, None);
         }
         self.note_consumed(u, &consumed, id, depth + 1);
+        if self.units[t].side != self.units[u].side {
+            let side = self.units[u].side;
+            let mut more = self.transmute(side, t, TagEvent::Consumed, &consumed, id, depth + 1);
+            let landed: Vec<(Tag, i32)> = dedup_tags(&applied).iter().map(|x| (*x, 1)).collect();
+            more.extend(self.transmute(side, t, TagEvent::Applied, &landed, id, depth + 1));
+            applied.extend(more);
+            let (rc, ra) = self.tag_reactions(side, u, t, &applied, id, depth + 1);
+            if !rc.is_empty() {
+                self.note_consumed(u, &rc, id, depth + 1);
+                let more = self.transmute(side, t, TagEvent::Consumed, &rc, id, depth + 1);
+                applied.extend(more);
+                consumed.extend(rc);
+            }
+            applied.extend(ra);
+        }
         if dealt > 0 {
             self.check_death(t, id, depth + 1);
             self.after_hit(u, t, &applied, &consumed, id, depth + 1);
@@ -2132,6 +2487,7 @@ mod tests {
             gambits: cl.gambits.clone(),
             effects: vec![],
             start_tags: vec![],
+            fixture: false,
         }
     }
 
