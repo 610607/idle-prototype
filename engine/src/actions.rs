@@ -267,6 +267,110 @@ pub fn hire(state: &mut GameState, candidate: u32) -> ActResult {
     Ok(())
 }
 
+/// Customised recruits open once a district is contiguous this cycle, or after the first cycle.
+pub fn customize_unlocked(state: &GameState) -> bool {
+    state.org.cycles >= 1 || state.cycle.stats.contiguous_districts > 0
+}
+
+/// Residents a customised recruit costs (see `balance.customize_*`).
+pub fn customize_cost(mixed: bool, lock: bool, rarity: Option<u8>) -> i32 {
+    let b = balance();
+    b.customize_base
+        + if mixed { b.customize_class } else { 0 }
+        + if lock { b.customize_lock } else { 0 }
+        + rarity
+            .map(|r| b.customize_rarity[r.min(3) as usize])
+            .unwrap_or(0)
+}
+
+/// Raise a candidate on purpose: residents of `district` leave home to train as `profession`'s
+/// class (or its mixed class), optionally with a locked trait and a rarity floor. The jobs they
+/// held refill from whoever is left, by priority, so a scarce district feels it until it regrows.
+pub fn customize(
+    state: &mut GameState,
+    district: u16,
+    profession: &str,
+    class: Option<&str>,
+    lock: Option<&str>,
+    rarity: Option<u8>,
+) -> ActResult {
+    let b = balance();
+    let c = content();
+    if !customize_unlocked(state) {
+        return Err("定制招募还没开放：本轮有街区连片，或完成一轮之后开放".into());
+    }
+    let d = state
+        .cycle
+        .districts
+        .get(district as usize)
+        .ok_or("没有这个街区")?;
+    let prof = c.profession(profession).ok_or("没有这个职业")?;
+    let calc = economy::calc(state);
+    let dc = calc
+        .districts
+        .iter()
+        .find(|x| x.id == district)
+        .ok_or("没有这个街区")?;
+    if dc.owned == 0 {
+        return Err("这个街区还没有地盘".into());
+    }
+    let workers = |p: &str| dc.workers.get(p).copied().unwrap_or(0);
+    if workers(profession) < b.customize_base {
+        return Err(format!(
+            "{}在岗不到 {} 人，带不出新人",
+            prof.name, b.customize_base
+        ));
+    }
+    let plain = prof.class.clone();
+    let class_id = match class {
+        None => plain.clone(),
+        Some(x) if x == plain => plain.clone(),
+        Some(x) => {
+            let m = c
+                .mixed
+                .iter()
+                .find(|m| m.class == x && (m.a == profession || m.b == profession))
+                .ok_or("这个职业带不出这种队员")?;
+            let other = if m.a == profession { &m.b } else { &m.a };
+            if workers(other) < 4 {
+                let on = c
+                    .profession(other)
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default();
+                return Err(format!("还要{}在岗满 4 人", on));
+            }
+            x.to_string()
+        }
+    };
+    if let Some(t) = lock {
+        let cl = &c.classes[&class_id];
+        if !cl.fixed_traits.is_empty() || !cl.trait_pool.iter().any(|x| x == t) {
+            return Err("这个职业的词条池里没有这条".into());
+        }
+    }
+    if rarity.is_some_and(|r| r > 3) {
+        return Err("没有这个稀有度".into());
+    }
+    let cost = customize_cost(class_id != plain, lock.is_some(), rarity);
+    if d.population < cost {
+        return Err(format!(
+            "街区居民不够：要 {} 人，现有 {} 人",
+            cost, d.population
+        ));
+    }
+    state.cycle.districts[district as usize].population -= cost;
+    economy::spawn_city_candidate_with(
+        state,
+        district,
+        profession,
+        &class_id,
+        lock,
+        rarity.unwrap_or(0),
+        " · 定制",
+    );
+    Ok(())
+}
+
 pub fn dismiss(state: &mut GameState, candidate: u32) -> ActResult {
     let pos = state
         .cycle

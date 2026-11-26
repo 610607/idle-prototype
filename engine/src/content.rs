@@ -828,6 +828,14 @@ pub struct Balance {
     pub pool_cap: usize,
     pub roster_cap: usize,
     pub housing_capacity: i32,
+    /// Residents born or drawn in per housing tile per hour, x10000, at trust 50 (scaled like
+    /// talent: 0.5x at trust 0, 1.5x at trust 100). Only into free housing. 0 = no growth.
+    #[serde(default)]
+    pub growth_bp: i32,
+    /// Share of residents with no home at all (not counting homes on alert tiles, whose people
+    /// shelter and come back) who leave each hour, x10000; at least one while any are left. 0 = stay.
+    #[serde(default)]
+    pub homeless_leave_bp: i32,
     pub natives_base: i32,
     pub natives_per_ring: i32,
     pub natives_rand: i32,
@@ -855,6 +863,20 @@ pub struct Balance {
     pub core_crystal: i64,
     pub core_attention_cut: i32,
     pub sealed_slots: usize,
+    /// Cycle score: one point per this many residents.
+    #[serde(default = "default_score_pop_div")]
+    pub score_pop_div: i32,
+    /// Customised recruits (docs/ideas.md): residents drawn from the district. The profession
+    /// needs at least `customize_base` workers there; choosing the mixed class, locking a trait
+    /// and a rarity floor (indexed N/R/SR/SSR) each cost more.
+    pub customize_base: i32,
+    pub customize_class: i32,
+    pub customize_lock: i32,
+    pub customize_rarity: [i32; 4],
+}
+
+fn default_score_pop_div() -> i32 {
+    20
 }
 
 /// Two different tags meeting on one enemy (prototype, see docs/gameplay-exploration.md).
@@ -986,7 +1008,16 @@ fn load() -> Content {
         include_str!("../content/professions.json"),
     );
     let world: WorldFile = parse("world.json", include_str!("../content/world.json"));
-    let balance: Balance = parse("balance.json", include_str!("../content/balance.json"));
+    let balance: Balance = {
+        let mut v: serde_json::Value =
+            parse("balance.json", include_str!("../content/balance.json"));
+        if let (Some(patch), Some(obj)) = (BALANCE_PATCH.get(), v.as_object_mut()) {
+            for (k, x) in patch {
+                obj.insert(k.clone(), x.clone());
+            }
+        }
+        serde_json::from_value(v).unwrap_or_else(|e| panic!("content/balance.json: {e}"))
+    };
     let reactions: Vec<ReactionDef> =
         parse("reactions.json", include_str!("../content/reactions.json"));
 
@@ -1018,6 +1049,20 @@ fn load() -> Content {
 }
 
 static CONTENT: OnceLock<Content> = OnceLock::new();
+static BALANCE_PATCH: OnceLock<serde_json::Map<String, serde_json::Value>> = OnceLock::new();
+
+/// Experiments only: override top-level balance fields (a JSON object) before content is first
+/// used, so a probe can compare balance variants without editing `balance.json`.
+pub fn patch_balance(json: &str) -> Result<(), String> {
+    let map: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(json).map_err(|e| e.to_string())?;
+    if CONTENT.get().is_some() {
+        return Err("content already loaded".into());
+    }
+    BALANCE_PATCH
+        .set(map)
+        .map_err(|_| "balance already patched".to_string())
+}
 
 pub fn content() -> &'static Content {
     CONTENT.get_or_init(load)

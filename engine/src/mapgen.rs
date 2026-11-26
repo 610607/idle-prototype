@@ -226,6 +226,7 @@ fn build_districts(rng: &mut Rng, tiles: &mut [Tile]) -> Vec<District> {
             tiles: tiles_sorted,
             trust: balance().trust_start,
             population: 0,
+            growth: 0,
             talent: Default::default(),
             instructors: Default::default(),
             priority: professions.clone(),

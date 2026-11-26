@@ -48,6 +48,17 @@ pub enum Command {
     Dismiss {
         candidate: u32,
     },
+    /// Raise a candidate on purpose from a district's residents (mid-cycle or after a cycle).
+    Customize {
+        district: u16,
+        profession: String,
+        #[serde(default)]
+        class: Option<String>,
+        #[serde(default)]
+        lock: Option<String>,
+        #[serde(default)]
+        rarity: Option<u8>,
+    },
     Retire {
         op: u32,
     },
@@ -106,6 +117,20 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         Command::SetDial { tile, dial } => actions::set_dial(state, *tile, *dial),
         Command::Hire { candidate } => actions::hire(state, *candidate),
         Command::Dismiss { candidate } => actions::dismiss(state, *candidate),
+        Command::Customize {
+            district,
+            profession,
+            class,
+            lock,
+            rarity,
+        } => actions::customize(
+            state,
+            *district,
+            profession,
+            class.as_deref(),
+            lock.as_deref(),
+            *rarity,
+        ),
         Command::Retire { op } => actions::retire(state, *op),
         Command::SetPolicy { district, policy } => {
             actions::set_policy(state, *district, policy.as_deref())

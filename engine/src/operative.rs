@@ -16,6 +16,10 @@ pub struct Origin<'a> {
     pub policy_trait: Option<&'a str>,
     /// Extra weight toward higher rarity (trust, training).
     pub rarity_bonus_bp: i32,
+    /// Customised recruits: rarity is at least this.
+    pub min_rarity: u8,
+    /// Customised recruits: this trait takes the first slot.
+    pub lock_trait: Option<&'a str>,
 }
 
 pub fn trait_slots(rarity: u8) -> usize {
@@ -38,6 +42,7 @@ pub fn generate(rng: &mut Rng, id: u32, class_id: &str, origin: &Origin) -> Oper
             100 + bonus / 6,
         ])
         .unwrap_or(0) as u8;
+    let rarity = rarity.max(origin.min_rarity.min(3));
     let mut stats = [0i32; 9];
     for s in Stat::ALL {
         let bias = class.bias.get(&s).copied().unwrap_or(0);
@@ -46,8 +51,13 @@ pub fn generate(rng: &mut Rng, id: u32, class_id: &str, origin: &Origin) -> Oper
     let mut traits: Vec<String> = class.fixed_traits.clone();
     if traits.is_empty() {
         let slots = trait_slots(rarity);
+        if let Some(t) = origin.lock_trait {
+            traits.push(t.to_string());
+        }
         if let Some(p) = origin.policy_trait {
-            traits.push(p.to_string());
+            if traits.len() < slots && !traits.iter().any(|t| t == p) {
+                traits.push(p.to_string());
+            }
         }
         if let Some(f) = origin.flavor_trait {
             if traits.len() < slots && !traits.iter().any(|t| t == f) {
@@ -244,6 +254,8 @@ mod tests {
             flavor_trait: Some("street_smart"),
             policy_trait: None,
             rarity_bonus_bp: 0,
+            min_rarity: 0,
+            lock_trait: None,
         }
     }
 

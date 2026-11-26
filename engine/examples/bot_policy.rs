@@ -44,6 +44,12 @@ fn route_for(e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
 }
 
 pub fn step(e: &mut Engine) {
+    step_with(e, true)
+}
+
+/// `staffing`: build where idle residents can staff the facility (accepting up to one tile of
+/// homeless), up to 5 of each kind, instead of only where everyone stays housed (3 of each).
+pub fn step_with(e: &mut Engine, staffing: bool) {
     let v = e.view();
     for i in v
         .tiles
@@ -160,7 +166,7 @@ pub fn step(e: &mut Engine) {
     ]);
     for f in wants {
         let have = v.tiles.iter().filter(|t| t.usage == f).count();
-        if have >= 3 {
+        if have >= if staffing { 5 } else { 3 } {
             continue;
         }
         let Some(opt) = v.facilities.iter().find(|x| x.id == f) else {
@@ -181,8 +187,14 @@ pub fn step(e: &mut Engine) {
                 if f == "outpost" && !border_districts.contains(&dv.id) {
                     return false;
                 }
-                dv.housing - cap >= dv.population
-                    && e.dry_run(&Command::Build {
+                let fits = if staffing {
+                    dv.population - dv.employed >= (opt.jobs + 1) / 2
+                        && dv.population - (dv.housing - cap) <= cap
+                } else {
+                    dv.housing - cap >= dv.population
+                };
+                fits && e
+                    .dry_run(&Command::Build {
                         tile: *i,
                         facility: Some(f.into()),
                     })

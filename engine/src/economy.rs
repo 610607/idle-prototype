@@ -29,6 +29,8 @@ pub struct DistrictCalc {
     pub id: u16,
     pub owned: usize,
     pub housing: i32,
+    /// Housing including homes on alert tiles.
+    pub shelter: i32,
     pub unhoused: i32,
     pub employed: i32,
     pub jobs: BTreeMap<String, i32>,
@@ -39,6 +41,8 @@ pub struct DistrictCalc {
     pub trust_factors: Vec<(String, i32)>,
     /// Talent gained per hour x100, per profession.
     pub talent_rate: BTreeMap<String, i32>,
+    /// Residents gained per hour x10000 (0 when housing is full).
+    pub growth_rate: i32,
     pub training_bp: i32,
 }
 
@@ -78,6 +82,9 @@ pub fn calc(state: &GameState) -> EconCalc {
                 continue;
             }
             dc.owned += 1;
+            if tile.usage == TileUse::Housing {
+                dc.shelter += b.housing_capacity;
+            }
             if tile.alert() {
                 continue;
             }
@@ -292,6 +299,10 @@ pub fn calc(state: &GameState) -> EconCalc {
             .sum();
         dc.training_bp = training;
         let trust_bp = 5_000 + d.trust * 100;
+        if d.population < dc.housing {
+            let homes = (dc.housing / b.housing_capacity.max(1)) as i64;
+            dc.growth_rate = (homes * b.growth_bp as i64 * trust_bp as i64 / 10_000) as i32;
+        }
         for (p, w) in &dc.workers {
             if *w <= 0 {
                 continue;
@@ -351,6 +362,25 @@ pub fn hourly(state: &mut GameState) {
                 spawn_city_candidate(state, did as u16, p, &class);
             }
         }
+    }
+
+    // Growth: free housing fills over time, faster where residents trust you. People with no
+    // home at all drift away.
+    for dc in &calc.districts {
+        let d = &mut state.cycle.districts[dc.id as usize];
+        let homeless = d.population - dc.shelter;
+        if b.homeless_leave_bp > 0 && homeless > 0 && dc.owned > 0 {
+            let leave = (homeless * b.homeless_leave_bp / 10_000).max(1);
+            d.population -= leave;
+        }
+        if dc.growth_rate <= 0 {
+            d.growth = 0;
+            continue;
+        }
+        d.growth += dc.growth_rate;
+        let born = (d.growth / 10_000).min(dc.housing - d.population);
+        d.growth %= 10_000;
+        d.population += born.max(0);
     }
 
     // Migration: one resident per hour from the least to the most trusted district with room.
@@ -439,6 +469,20 @@ fn mixed_or_plain(state: &mut GameState, dc: &DistrictCalc, p: &str) -> String {
 }
 
 pub fn spawn_city_candidate(state: &mut GameState, district: u16, prof: &str, class: &str) {
+    spawn_city_candidate_with(state, district, prof, class, None, 0, "");
+}
+
+/// A city candidate, optionally customised: `lock` takes the first trait slot, rarity is at
+/// least `min_rarity`, and `suffix` is appended to the source label.
+pub fn spawn_city_candidate_with(
+    state: &mut GameState,
+    district: u16,
+    prof: &str,
+    class: &str,
+    lock: Option<&str>,
+    min_rarity: u8,
+    suffix: &str,
+) {
     let c = content();
     let d = state.cycle.districts[district as usize].clone();
     let policy_trait = d
@@ -452,12 +496,14 @@ pub fn spawn_city_candidate(state: &mut GameState, district: u16, prof: &str, cl
         .unwrap_or_default();
     let id = state.alloc_id();
     let origin = Origin {
-        label: format!("{} · {}", d.name, prof_name),
+        label: format!("{} · {}{}", d.name, prof_name, suffix),
         district: Some(district),
         profession: Some(prof),
         flavor_trait: Some(&d.flavor),
         policy_trait: policy_trait.as_deref(),
         rarity_bonus_bp: (d.trust - 50).max(0) * 40,
+        min_rarity,
+        lock_trait: lock,
     };
     let op = operative::generate(&mut state.rng, id, class, &origin);
     push_candidate(state, op, origin.label.clone());
@@ -474,6 +520,8 @@ pub fn spawn_rift_candidate(state: &mut GameState, tile: u16, kind: &str) {
         flavor_trait: None,
         policy_trait: None,
         rarity_bonus_bp: 600,
+        min_rarity: 0,
+        lock_trait: None,
     };
     let op = operative::generate(&mut state.rng, id, &k.class, &origin);
     push_candidate(state, op, origin.label.clone());

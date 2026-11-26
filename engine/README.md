@@ -17,7 +17,7 @@ Rust 写的确定性规则引擎。客户端（网页、以后的 iOS）只做�
 | `mapgen` | 生成地图：天险、裂隙、特殊地点、街区、每格的敌人波次；轮初三选一预览 |
 | `combat` | 前后排、AP 主动（战术条件→技能→目标）、PP 反应；六种标签；因果链日志（每条带公式和全场快照） |
 | `operative` | 队员生成、九项属性、特质、经历词条成长 |
-| `economy` | 住房与岗位、电力、产出、信任因素、人才积累与候选、志愿民兵 |
+| `economy` | 住房与岗位、人口增长与无家可归者离开、电力、产出、信任因素、人才积累与候选、志愿民兵 |
 | `world`, `defense` | 边界、来潮来源、关注度；驻守与民兵、来潮结算、告急 |
 | `routes` | 路线校验、出发时预先打完整趟、回来时结算 |
 | `actions`, `commands` | 所有玩家操作；`Command` 是它们的 JSON 形式 |
@@ -30,7 +30,7 @@ Rust 写的确定性规则引擎。客户端（网页、以后的 iOS）只做�
 ## 命令
 
 ```bash
-cargo test                                   # 35 个测试
+cargo test                                   # 37 个测试
 cargo run --example battle                   # 打一场示例战斗，打印因果链
 cargo run --release --example bot 3 72       # 自动玩家跑 3 个种子各 72 小时，看节奏
 cargo run --release --example militia        # 各圈层：民兵 / 单人驻守 / 三人小队的胜率
@@ -41,9 +41,16 @@ cargo run --release --example doctrines      # 规则改写发给全队：单独
 cargo run --release --example fixtures       # 守城：驻守职业 × 设施固定物组合
 cargo run --release --example population     # 人口、岗位、闲置、人才和候选从哪来（docs/ideas.md）
 cargo run --release --example customize      # 定制新队员值多少：指定词条 / 稀有度保底（加 loop 开闭环）
+cargo run --release --example custcost       # 定制一单的代价：下单和不下单各跑 24 小时比较
 ```
 
-后五个是玩法探索用的：synergy、doctrines、fixtures 的结果和读法见 `docs/gameplay-exploration.md`，population、customize 见 `docs/ideas.md`。
+`population` 和 `custcost` 可以多给一个 JSON 参数临时改数值（`content::patch_balance`，只在内容第一次加载前有效），比如复现人口改稀缺之前的旧数值：
+
+```bash
+cargo run --release --example custcost 6 '{"housing_capacity":40,"growth_bp":0,"homeless_leave_bp":0,"natives_base":12,"natives_per_ring":4,"natives_rand":10,"volunteer_div":1000,"score_pop_div":20}'
+```
+
+后六个是玩法探索用的：synergy、doctrines、fixtures 的结果和读法见 `docs/gameplay-exploration.md`，population、customize、custcost 见 `docs/ideas.md`。
 
 ## 数值现状
 

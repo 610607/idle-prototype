@@ -141,6 +141,9 @@ pub struct District {
     pub tiles: Vec<u16>,
     pub trust: i32,
     pub population: i32,
+    /// Growth progress toward the next resident, x10000.
+    #[serde(default)]
+    pub growth: i32,
     /// Talent points x100 per profession.
     #[serde(default)]
     pub talent: BTreeMap<String, i32>,

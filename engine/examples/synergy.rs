@@ -118,6 +118,8 @@ pub fn member(
         flavor_trait: None,
         policy_trait: None,
         rarity_bonus_bp: 0,
+        min_rarity: 0,
+        lock_trait: None,
     };
     let mut op = operative::generate(&mut rng, slot, class, &origin);
     op.rarity = 1;

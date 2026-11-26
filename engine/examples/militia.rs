@@ -18,6 +18,8 @@ fn main() {
             flavor_trait: None,
             policy_trait: None,
             rarity_bonus_bp: 0,
+            min_rarity: 0,
+            lock_trait: None,
         };
         let starters = ["vanguard", "marksman", "medic"]
             .map(|c| operative::spec(&operative::generate(&mut rng, 1, c, &origin)));

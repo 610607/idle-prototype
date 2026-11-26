@@ -193,6 +193,8 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
             flavor_trait: None,
             policy_trait: None,
             rarity_bonus_bp: 0,
+            min_rarity: 0,
+            lock_trait: None,
         };
         let mut op = operative::generate(&mut state.rng, id, class, &origin);
         op.rarity = op.rarity.min(1);
@@ -264,7 +266,8 @@ pub fn cycle_results(state: &GameState) -> CycleResults {
         .filter(|d| world::district_owned(cy, d.id) > 0)
         .collect();
     let trust: i64 = owned_d.iter().map(|d| d.trust as i64 / 10).sum();
-    let pop: i64 = owned_d.iter().map(|d| d.population as i64).sum::<i64>() / 20;
+    let pop: i64 = owned_d.iter().map(|d| d.population as i64).sum::<i64>()
+        / balance().score_pop_div.max(1) as i64;
     lines.push(("街区信任".into(), trust));
     lines.push(("人口".into(), pop));
     lines.push(("连片街区".into(), s.contiguous_districts as i64 * 5));
@@ -616,6 +619,8 @@ fn check_specials(state: &mut GameState) {
             flavor_trait: None,
             policy_trait: None,
             rarity_bonus_bp: 0,
+            min_rarity: 0,
+            lock_trait: None,
         };
         let op = operative::generate(&mut state.rng, id, &s.class, &origin);
         let cid = state.alloc_id();
@@ -669,6 +674,69 @@ mod tests {
             .find(|n| s.cycle.tiles[*n as usize].claimable_kind())
             .unwrap();
         vec![n]
+    }
+
+    #[test]
+    fn customised_recruit_costs_district_residents() {
+        let mut s = started(7);
+        let city: Vec<u16> = s.cycle.districts[0]
+            .tiles
+            .iter()
+            .copied()
+            .filter(|t| s.cycle.tiles[*t as usize].terrain == Terrain::City)
+            .collect();
+        for t in &city {
+            let tt = &mut s.cycle.tiles[*t as usize];
+            tt.owned = true;
+            tt.warden = 100;
+            tt.usage = TileUse::Housing;
+        }
+        s.cycle.tiles[city[0] as usize].usage = TileUse::Facility {
+            id: "outpost".into(),
+        };
+        s.cycle.districts[0].population = 30;
+        let lock = content().classes["vanguard"].trait_pool[0].clone();
+        assert!(actions::customize(&mut s, 0, "militia", None, None, None).is_err());
+        s.cycle.stats.contiguous_districts = 1;
+        actions::customize(&mut s, 0, "militia", None, Some(&lock), Some(3)).unwrap();
+        let cost = actions::customize_cost(false, true, Some(3));
+        assert_eq!(s.cycle.districts[0].population, 30 - cost);
+        let cand = s.cycle.candidates.last().unwrap();
+        assert_eq!(cand.op.class, "vanguard");
+        assert_eq!(cand.op.rarity, 3);
+        assert_eq!(cand.op.traits[0], lock);
+        // The mixed class needs engineers at work too; a big order needs enough residents.
+        assert!(
+            actions::customize(&mut s, 0, "militia", Some("combat_sapper"), None, None).is_err()
+        );
+        s.cycle.districts[0].population = cost - 1;
+        assert!(actions::customize(&mut s, 0, "militia", None, Some(&lock), Some(3)).is_err());
+    }
+
+    #[test]
+    fn housing_fills_by_growth_and_the_homeless_leave() {
+        let mut s = started(9);
+        let city: Vec<u16> = s.cycle.districts[0]
+            .tiles
+            .iter()
+            .copied()
+            .filter(|t| s.cycle.tiles[*t as usize].terrain == Terrain::City)
+            .collect();
+        for t in &city {
+            let tt = &mut s.cycle.tiles[*t as usize];
+            tt.owned = true;
+            tt.warden = 100;
+            tt.usage = TileUse::Housing;
+        }
+        let homes = city.len() as i32 * balance().housing_capacity;
+        s.cycle.districts[0].population = 1;
+        for _ in 0..200 {
+            economy::hourly(&mut s);
+        }
+        assert_eq!(s.cycle.districts[0].population, homes);
+        s.cycle.districts[0].population = homes + 20;
+        economy::hourly(&mut s);
+        assert!(s.cycle.districts[0].population < homes + 20);
     }
 
     #[test]
