@@ -260,7 +260,7 @@ export function OpRow({ o, onClick, right }: { o: OpView; onClick?: () => void; 
 }
 
 export function RosterPanel() {
-  const { view, open } = useCtx();
+  const { view, open, run } = useCtx();
   return (
     <>
       <Section title="候选" icon="candidate" hint={view.queue ? `排队 ${view.queue}` : `${view.candidates.length} 人`}>
@@ -299,6 +299,9 @@ export function RosterPanel() {
                   <div className="small muted">{it.desc}</div>
                   <TagIO reads={it.reads} writes={it.writes} />
                 </div>
+                <button className="btn small ghost" title="封存的装备带进下一轮" onClick={() => run({ cmd: 'seal', item: it.id, on: true }, `已封存${it.name}`)}>
+                  <Icon id="seal" size={14} /> 封存
+                </button>
               </div>
             ))}
           </div>
@@ -404,7 +407,7 @@ export function HQPanel() {
       ) : null}
 
       <Section title="封存" icon="seal" hint={`${view.sealed.length}/${org.sealed_slots}`}>
-        {view.sealed.length === 0 ? <div className="empty">封存的装备会带进下一轮。在队员详情里封存。</div> : null}
+        {view.sealed.length === 0 ? <div className="empty">封存的装备会带进下一轮。在「队员 → 仓库」里封存。</div> : null}
         {view.sealed.map((it, k) => (
           <div key={k} className="row small">
             <Icon id={it.icon} size={16} />
