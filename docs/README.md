@@ -2,9 +2,10 @@
 
 这里的文件都是**草稿**，从讨论时写的 Claude 文档导出成 markdown，内容会随讨论继续变。原文档链接附在后面，以原文档为准。
 
-## 概念
+## 设计与概念
 
-- [concept-draft.md](concept-draft.md)：挂机游戏概念草案（世界、玩家身份、玩法结构、还开着的问题）。原文档：[挂机游戏概念草案](https://claude.ai/artifact/QbW6FXVhLp1hbj821vqK98)
+- [design-v0.md](design-v0.md)：原型设计定稿（v0）——基于概念草案与调研收敛出的第一版可实现设计基线（核心时间模型、双线软互锁、AP/PP 战斗骨架、大渗透轮回与技术基线）。
+- [concept-draft.md](concept-draft.md)：早期挂机游戏概念草案（世界、玩家身份、玩法结构、还开着的问题）。原文档：[挂机游戏概念草案](https://claude.ai/artifact/QbW6FXVhLp1hbj821vqK98)
 
 ## 调研
 

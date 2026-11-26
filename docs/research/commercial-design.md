@@ -28,9 +28,9 @@ Nov 26, 2026 · @biobot
 
 成本按指数涨、产出按线性或多项式涨，这是所有经营类挂机的骨架。Pecorella 在 [The Math of Idle Games Part I](https://gamedeveloper.com/design/the-math-of-idle-games-part-i) 里给出的公式，b 是基础价，r 是增长率，n 是已拥有数：
 
-```latex
+$$
 \text{cost}_n = b \cdot r^{n} \qquad \text{production} = p \cdot n \cdot \text{multipliers}
-```
+$$
 
 开局产出跑在成本前面，后来指数一定追上来，玩家就觉得“慢了”。这时一个倍率把收入拉回去，就是“跳”的那一刻。各家倍率的落点：
 

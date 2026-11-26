@@ -44,5 +44,6 @@ Nov 26, 2026 · @biobot
 
 ## 相关调研
 
-- [开源挂机游戏实现调研](https://claude.ai/artifact/MDLAUDcQATRL8DD9FdooW4)
-- [商业挂机游戏调研：设计与爽点](https://claude.ai/artifact/JfdF2fb3JqAx4s52vScEii)
+- [research/open-source-implementations.md](research/open-source-implementations.md)：开源挂机游戏实现调研（[原文档](https://claude.ai/artifact/MDLAUDcQATRL8DD9FdooW4)）
+- [research/commercial-design.md](research/commercial-design.md)：商业挂机游戏调研：设计与爽点（[原文档](https://claude.ai/artifact/JfdF2fb3JqAx4s52vScEii)）
+- [research/prestige-design.md](research/prestige-design.md)：轮回设计调研（[原文档](https://claude.ai/artifact/6HNysvA7QmhUMKHvZViEKU)）
