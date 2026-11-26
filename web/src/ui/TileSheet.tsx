@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '../icons';
 import type { Command, Dial, DryRun, GarrisonOption, TileView } from '../types';
-import { Cost, DIAL_NAMES, DryRunView, fmtIn, Section, SheetFrame, TagIO, useCtx } from './common';
+import { Cost, DIAL_NAMES, DryRunView, fmtIn, Page, Section, TagIO, useCtx } from './common';
 
 const TERRAIN_NAMES: Record<string, string> = {
   unknown: '迷雾',
@@ -24,20 +24,27 @@ export function TileSheet({ tile, onClose }: { tile: number; onClose: () => void
     </span>
   );
   const icon = t.terrain === 'hq' ? 'tile-hq' : t.terrain === 'rift' ? 'tile-rift' : t.terrain === 'barrier' ? 'tile-barrier' : t.revealed ? 'tile-city' : 'fog';
-  return (
-    <SheetFrame title={title} icon={icon} onClose={onClose}>
-      <Status t={t} />
-      {!t.revealed && t.terrain !== 'barrier' ? <p className="muted">还在迷雾里。小队走到旁边、或者瞭望点，会把它揭开。</p> : null}
-      {t.terrain === 'barrier' ? <p className="muted">天险：路线过不去。老邮差这类人物可以带队穿过。</p> : null}
-      {t.claimable ? <ClaimBlock t={t} /> : null}
-      {t.alert ? <AlertBlock t={t} /> : null}
+  const hasAside = t.border || (t.owned && t.terrain === 'city') || (t.owned && t.terrain === 'rift' && !!t.rift);
+  const aside = hasAside ? (
+    <>
       {t.border ? <DefenseBlock t={t} /> : null}
       {t.owned && t.terrain === 'city' ? <BuildBlock t={t} /> : null}
       {t.owned && t.terrain === 'rift' && t.rift ? <DialBlock t={t} /> : null}
+    </>
+  ) : undefined;
+  return (
+    <Page title={title} icon={icon} onClose={onClose} aside={aside}>
+      <Section title="概况" icon={icon}>
+        <Status t={t} />
+        {!t.revealed && t.terrain !== 'barrier' ? <p className="muted small">还在迷雾里。小队走到旁边、或者瞭望点，会把它揭开。</p> : null}
+        {t.terrain === 'barrier' ? <p className="muted small">天险：路线过不去。老邮差这类人物可以带队穿过。</p> : null}
+      </Section>
+      {t.claimable ? <ClaimBlock t={t} /> : null}
+      {t.alert ? <AlertBlock t={t} /> : null}
       {!t.owned && t.revealed && t.enemies.length ? <EnemyBlock t={t} /> : null}
       {district ? <DistrictLink id={district.id} /> : null}
       {t.owned && t.terrain !== 'hq' ? <AbandonBlock t={t} /> : null}
-    </SheetFrame>
+    </Page>
   );
 }
 
@@ -103,7 +110,7 @@ function ClaimBlock({ t }: { t: TileView }) {
   const { game } = useCtx();
   const dry = useMemo(() => game.dryRun({ cmd: 'claim', tile: t.i }), [game, t.i]);
   return (
-    <div className="card" style={{ borderColor: 'var(--good)' }}>
+    <div className="card striped good">
       <Section title={t.terrain === 'rift' ? '镇压这道裂隙' : '占领这一格'} icon="check" hint="改变地图形状，只由你决定">
         <DryRunView dry={dry} />
         <div className="row" style={{ marginTop: 8 }}>
@@ -115,9 +122,9 @@ function ClaimBlock({ t }: { t: TileView }) {
 }
 
 function ClaimButton({ tile, ok }: { tile: number; ok: boolean }) {
-  const { run, open } = useCtx();
+  const { run } = useCtx();
   return (
-    <button className="btn primary" disabled={!ok} onClick={() => run({ cmd: 'claim', tile }, '已占领') && open(null)}>
+    <button className="btn primary" disabled={!ok} onClick={() => run({ cmd: 'claim', tile }, '已占领')}>
       占领
     </button>
   );
@@ -127,7 +134,7 @@ function AlertBlock({ t }: { t: TileView }) {
   const { game, open } = useCtx();
   const report = useMemo(() => game.previewSurge(t.i, undefined), [game, t.i]);
   return (
-    <div className="card" style={{ borderColor: 'var(--bad)' }}>
+    <div className="card striped bad">
       <Section title="告急" icon="alert" hint="停产，但不会自己丢">
         <p className="small muted" style={{ margin: 0 }}>
           反击：用当前驻守打一场。赢了镇守度回到 50（街区有诊所回到 75）。也可以放弃这一格。
@@ -175,7 +182,7 @@ function DefenseBlock({ t }: { t: TileView }) {
         <div className="list">
           {opts.map((o) => (
             <div className="list-item" key={String(o.op)}>
-              <Icon id={o.icon} size={20} />
+              <span className="op-avatar"><Icon id={o.icon} size={32} /></span>
               <div className="grow">
                 <div className="row" style={{ gap: 6 }}>
                   <b>{o.name}</b>
@@ -241,7 +248,7 @@ function BuildBlock({ t }: { t: TileView }) {
         {options
           .filter((f) => f.id !== current)
           .map((f) => (
-            <button key={f.id} className="list-item" onClick={() => choose(f.id)} style={pick === f.id ? { background: 'var(--paper-2)' } : undefined}>
+            <button key={f.id} className={'list-item' + (pick === f.id ? ' selected' : '')} onClick={() => choose(f.id)}>
               <Icon id={f.icon} size={20} />
               <div className="grow">
                 <div className="row" style={{ gap: 6 }}>
@@ -390,7 +397,7 @@ function AbandonBlock({ t }: { t: TileView }) {
       </div>
     );
   return (
-    <div className="card flat" style={{ borderColor: 'var(--bad)' }}>
+    <div className="card flat bad">
       <Section title="放弃这一格" icon="warn">
         <Confirm cmd={{ cmd: 'abandon', tile: t.i }} label="确定放弃" danger okText="已放弃" />
       </Section>

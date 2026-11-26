@@ -3,23 +3,52 @@ import type { Game } from '../engine/client';
 import { Icon } from '../icons';
 import type { Command, View } from '../types';
 import { ReportSheet } from './BattleReport';
-import { Board } from './Board';
-import { fmtClock, fmtRate, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, SQUAD_HEX, useCtx, type Ctx, type RouteEdit, type Sheet } from './common';
-import { HQPanel, MapPanel, RosterPanel } from './Panels';
+import { Board, WASH } from './Board';
+import { ConfirmDialog, fmtClock, fmtRate, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, SQUAD_HEX, useCtx, type ConfirmAsk, type Ctx, type RouteEdit, type Sheet } from './common';
+import { CommandPanel, DistrictsPanel, HQPanel, PendingList, RosterPanel, TideStrip } from './Panels';
 import { CandidateSheet, DistrictSheet, OpSheet, SquadSheet, TideSheet } from './Sheets';
 import { TileSheet } from './TileSheet';
 
-type Tab = 'map' | 'roster' | 'hq';
+/** `map` only exists on phones, where the map and the workspace take turns. */
+type Tab = 'map' | 'command' | 'roster' | 'districts' | 'hq';
+const TABS: { id: Exclude<Tab, 'map'>; name: string; icon: string }[] = [
+  { id: 'command', name: '指挥', icon: 'squad' },
+  { id: 'roster', name: '队员', icon: 'roster' },
+  { id: 'districts', name: '街区', icon: 'trust' },
+  { id: 'hq', name: '总部', icon: 'org' },
+];
+
+function sameSheet(a: Sheet, b: Sheet): boolean {
+  if (a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case 'tile':
+      return a.tile === (b as typeof a).tile;
+    case 'op':
+      return a.op === (b as typeof a).op;
+    case 'candidate':
+      return a.candidate === (b as typeof a).candidate;
+    case 'district':
+      return a.district === (b as typeof a).district;
+    case 'squad':
+      return a.squad === (b as typeof a).squad;
+    case 'tide':
+      return true;
+    case 'report':
+      return a.title === (b as typeof a).title;
+  }
+}
 
 export function App({ game }: { game: Game }) {
   const [view, setView] = useState<View>(() => game.view());
   const [now, setNow] = useState(() => game.now());
-  const [tab, setTab] = useState<Tab>('map');
-  const [sheets, setSheets] = useState<Sheet[]>([]);
+  const [tab, setTab] = useState<Tab>(() => (window.matchMedia('(max-width: 900px)').matches ? 'map' : 'command'));
+  const [pages, setPages] = useState<Sheet[]>([]);
+  const [ask, setAsk] = useState<ConfirmAsk | null>(null);
   const [toastMsg, setToast] = useState<{ text: string; error: boolean } | null>(null);
   const [routeEdit, setRouteEdit] = useState<RouteEdit | null>(null);
   const [focusTile, setFocusTile] = useState<number | null>(null);
   const lastRefresh = useRef(0);
+  const workRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(() => {
     setView(game.view());
@@ -80,32 +109,81 @@ export function App({ game }: { game: Game }) {
     [game, refresh, toast],
   );
 
-  const open = useCallback((s: Sheet | null) => setSheets((st) => (s ? [...st, s] : [])), []);
-  const close = useCallback(() => {
-    setSheets((st) => st.slice(0, -1));
+  const open = useCallback((s: Sheet | null, reset?: boolean) => {
+    setPages((st) => {
+      if (!s) return [];
+      if (reset) return [s];
+      const top = st[st.length - 1];
+      return top && sameSheet(top, s) ? st : [...st, s];
+    });
+  }, []);
+  const popTo = useCallback(
+    (n: number) => {
+      setPages((st) => st.slice(0, n));
+      refresh();
+    },
+    [refresh],
+  );
+  const back = useCallback(() => {
+    setPages((st) => st.slice(0, -1));
     refresh();
   }, [refresh]);
+
+  // New page: start at its top.
+  useEffect(() => {
+    workRef.current?.scrollTo({ top: 0 });
+  }, [pages.length]);
 
   // Debug skip changes time; refresh after any toast-producing action in HQ.
   useEffect(() => {
     refresh();
   }, [toastMsg, refresh]);
 
+  const top = pages[pages.length - 1];
+  // What the open page points at on the map: the tile itself, or where an operative stands guard.
+  const selectedTile = useMemo(() => {
+    if (top?.kind === 'tile') return top.tile;
+    if (top?.kind === 'op') {
+      const a = view.operatives.find((o) => o.id === top.op)?.assignment;
+      if (a?.t === 'garrison') return a.tile;
+    }
+    return null;
+  }, [top, view.operatives]);
+  const workTab: Exclude<Tab, 'map'> = tab === 'map' ? 'command' : tab;
+  const tabName = tab === 'map' ? '地图' : TABS.find((t) => t.id === workTab)!.name;
+
   const ctx: Ctx = useMemo(
-    () => ({ game, view, now, open, run, toast, routeEdit, setRouteEdit, focusTile, setFocusTile }),
-    [game, view, now, open, run, toast, routeEdit, focusTile],
+    () => ({ game, view, now, open, pages, popTo, selectedTile, confirm: setAsk, run, toast, routeEdit, setRouteEdit, focusTile, setFocusTile, tabName }),
+    [game, view, now, open, pages, popTo, selectedTile, run, toast, routeEdit, focusTile, tabName],
   );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (sheets.length) close();
+      if (ask) setAsk(null);
+      else if (pages.length) back();
       else if (routeEdit) setRouteEdit(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [sheets.length, close, routeEdit]);
+  }, [ask, pages.length, back, routeEdit]);
+
   const alerts = view.pending.filter((p) => p.kind === 'alert' || p.kind === 'defend').length;
+  const badge = (t: Tab) => {
+    if (t === 'map' && view.pending.length) return <span className={'badge' + (alerts ? '' : ' ink')}>{view.pending.length}</span>;
+    if (t === 'roster' && view.candidates.length) return <span className="badge ink">{view.candidates.length}</span>;
+    if (t === 'districts') {
+      const n = view.districts.filter((d) => d.policy_unlocked && !d.policy).length;
+      return n ? <span className="badge ink">{n}</span> : null;
+    }
+    return null;
+  };
+  const pick = (t: Tab) => {
+    setTab(t);
+    setPages([]);
+  };
+  // Phones show one column at a time: the map while editing a route or on the map tab, otherwise the workspace.
+  const mobileView = routeEdit ? 'map' : pages.length ? 'work' : tab === 'map' ? 'map' : 'work';
 
   return (
     <GameCtx.Provider value={ctx}>
@@ -114,38 +192,49 @@ export function App({ game }: { game: Game }) {
         {view.phase === 'choosing_map' ? (
           <MapChoice />
         ) : (
-          <div className="main">
-            <div className="board-pane">
-              {routeEdit ? <RouteEditor /> : null}
+          <div className="main" data-mv={mobileView}>
+            <div className="map-col">
               <Board />
+              {routeEdit ? <RouteEditor /> : null}
+              <TideStrip />
+              <PendingList />
             </div>
-            <div className="side-pane">
-              <div className="tabs" role="tablist">
-                <button className="tab" role="tab" aria-selected={tab === 'map'} onClick={() => setTab('map')}>
-                  <Icon id="map" size={16} /> 地图
-                  {view.pending.length ? <span className={'badge' + (alerts ? '' : ' ink')}>{view.pending.length}</span> : null}
-                </button>
-                <button className="tab" role="tab" aria-selected={tab === 'roster'} onClick={() => setTab('roster')}>
-                  <Icon id="roster" size={16} /> 队员
-                  {view.candidates.length ? <span className="badge ink">{view.candidates.length}</span> : null}
-                </button>
-                <button className="tab" role="tab" aria-selected={tab === 'hq'} onClick={() => setTab('hq')}>
-                  <Icon id="org" size={16} /> 总部
-                </button>
+            <div className="work">
+              <div className="work-tabs" role="tablist">
+                {TABS.map((t) => (
+                  <button key={t.id} className="tab" role="tab" aria-selected={!pages.length && workTab === t.id} onClick={() => pick(t.id)}>
+                    <Icon id={t.icon} /> {t.name}
+                    {badge(t.id)}
+                  </button>
+                ))}
               </div>
-              <div className="pane-body">
-                {tab === 'map' ? <MapPanel /> : tab === 'roster' ? <RosterPanel /> : <HQPanel />}
+              <div className="work-body" ref={workRef}>
+                {pages.length === 0 ? (
+                  <div className="pane">
+                    {workTab === 'command' ? <CommandPanel /> : workTab === 'roster' ? <RosterPanel /> : workTab === 'districts' ? <DistrictsPanel /> : <HQPanel />}
+                  </div>
+                ) : null}
+                {pages.map((s, k) => (
+                  // Lower pages stay mounted (hidden) so going back keeps their state.
+                  <div key={k} style={{ display: k === pages.length - 1 ? 'contents' : 'none' }}>
+                    <SheetHost sheet={s} onClose={back} />
+                  </div>
+                ))}
               </div>
             </div>
+            <nav className="bottom-nav">
+              {([{ id: 'map', name: '地图', icon: 'map' }, ...TABS] as const).map((t) => (
+                <button key={t.id} aria-selected={mobileView === 'map' ? t.id === 'map' : !pages.length ? tab === t.id : false} onClick={() => pick(t.id)}>
+                  <Icon id={t.icon} />
+                  {t.name}
+                  {badge(t.id)}
+                </button>
+              ))}
+            </nav>
           </div>
         )}
       </div>
-      {sheets.map((s, k) => (
-        // Lower sheets stay mounted (hidden) so going back keeps their state.
-        <div key={k} style={{ display: k === sheets.length - 1 ? 'contents' : 'none' }}>
-          <SheetHost sheet={s} onClose={close} />
-        </div>
-      ))}
+      {ask ? <ConfirmDialog ask={ask} onDone={() => setAsk(null)} /> : null}
       {toastMsg ? <div className={'toast' + (toastMsg.error ? ' error' : '')}>{toastMsg.text}</div> : null}
     </GameCtx.Provider>
   );
@@ -175,20 +264,23 @@ function TopBar() {
   return (
     <header className="topbar">
       <span className="brand">
-        裂隙城 · 第 {view.cycle} 轮
-        {view.modifier ? <span className="small muted"> · {view.modifier[1]}</span> : null}
+        <span className="stamp">民防</span>
+        <h1>裂隙城</h1>
+        <span className="cycle">
+          第 {view.cycle} 轮{view.modifier ? ` · ${view.modifier[1]}` : ''}
+        </span>
       </span>
       {view.phase === 'active' ? (
         <div className="res">
           {RES_KEYS.map((k, i) => (
             <span key={k} className="res-item" title={RES_NAMES[k]}>
-              <Icon id={`res-${k}`} size={16} />
+              <Icon id={`res-${k}`} />
               <span className="num">{view.resources[k]}</span>
               {view.income[i] ? <span className="rate">{fmtRate(view.income[i]!)}/时</span> : null}
             </span>
           ))}
           <span className={'res-item ' + (view.power[0] < view.power[1] ? 'bad' : '')} title="电力 供/需">
-            <Icon id="power" size={16} />
+            <Icon id="power" />
             <span className="num">
               {view.power[0]}/{view.power[1]}
             </span>
@@ -200,10 +292,10 @@ function TopBar() {
           ) : null}
         </div>
       ) : null}
-      <span className="clock small muted">
-        <Icon id="clock" size={14} />
-        <span className="num">{fmtClock(now)}</span>
+      <span className="clock muted">
         {game.offset ? <span className="chip warn">快进 +{Math.round(game.offset / 3600)} 时</span> : null}
+        <Icon id="clock" />
+        <span className="num">{fmtClock(now)}</span>
       </span>
     </header>
   );
@@ -216,8 +308,8 @@ function RouteEditor() {
   const squad = view.squads[si]!;
   const preview = useMemo(() => (edit.route.length ? game.previewRoute(edit.squad, edit.route) : null), [game, edit]);
   return (
-    <div className="route-mode-banner" style={{ borderColor: SQUAD_HEX[si] }}>
-      <Icon id="route" size={18} />
+    <div className="route-mode-banner" style={{ ['--route-color' as string]: SQUAD_HEX[si] }}>
+      <Icon id="route" />
       <div className="grow">
         <div>
           <b style={{ color: SQUAD_HEX[si] }}>{squad.name}</b> 编路线：从领地边上出发，依次点相邻的格子（点最后一格撤回）。
@@ -274,27 +366,29 @@ function RouteEditor() {
 function MapChoice() {
   const { view, run } = useCtx();
   return (
-    <div className="pane-body" style={{ maxWidth: 1000, margin: '0 auto', width: '100%' }}>
-      <div>
-        <h2 style={{ fontSize: 22 }}>第 {view.cycle} 轮 · 选一张城市地图</h2>
-        <p className="muted">每张图的天险、裂隙和特殊地点都不同；本轮的异界气候决定来敌常带什么标签。</p>
-      </div>
-      <div className="mapchoice">
-        {view.previews.map((p) => (
-          <div key={p.index} className="card hatch stack">
-            <MiniMap barriers={p.barriers} />
-            <h3>{p.modifier_name}</h3>
-            <div className="small muted">{p.modifier_desc}</div>
-            <div className="small">
-              裂隙 {p.rifts} · 特殊地点 {p.specials} · 街区 {p.districts}
+    <div className="work-body">
+      <div className="pane" style={{ maxWidth: 1200, margin: '0 auto', width: '100%' }}>
+        <div>
+          <h2 style={{ fontSize: 26 }}>第 {view.cycle} 轮 · 选一张城市地图</h2>
+          <p className="muted">每张图的天险、裂隙和特殊地点都不同；本轮的异界气候决定来敌常带什么标签。</p>
+        </div>
+        <div className="mapchoice">
+          {view.previews.map((p) => (
+            <div key={p.index} className="card rivet stack">
+              <MiniMap barriers={p.barriers} />
+              <h3 style={{ fontSize: 18 }}>{p.modifier_name}</h3>
+              <div className="small muted">{p.modifier_desc}</div>
+              <div className="small">
+                裂隙 <span className="num">{p.rifts}</span> · 特殊地点 <span className="num">{p.specials}</span> · 街区 <span className="num">{p.districts}</span>
+              </div>
+              <button className="btn primary" onClick={() => run({ cmd: 'choose_map', index: p.index }, '出发')}>
+                选这张
+              </button>
             </div>
-            <button className="btn primary" onClick={() => run({ cmd: 'choose_map', index: p.index }, '出发')}>
-              选这张
-            </button>
-          </div>
-        ))}
+          ))}
+        </div>
+        <HQPanel />
       </div>
-      <HQPanel />
     </div>
   );
 }
@@ -303,15 +397,15 @@ function MiniMap({ barriers }: { barriers: number[] }) {
   const N = 15;
   const s = 8;
   return (
-    <svg viewBox={`0 0 ${N * s} ${N * s}`} style={{ width: '100%', maxWidth: 200, alignSelf: 'center' }}>
-      <rect width={N * s} height={N * s} fill="#efe8d8" stroke="#26241f" />
+    <svg viewBox={`0 0 ${N * s} ${N * s}`} style={{ width: '100%', maxWidth: 180, alignSelf: 'center' }} shapeRendering="crispEdges">
+      <rect width={N * s} height={N * s} fill="#1d201a" />
+      {Array.from({ length: N * N }, (_, i) => (
+        <rect key={i} x={(i % N) * s} y={Math.floor(i / N) * s} width={s - 1} height={s - 1} fill={WASH[(Math.floor((i % N) / 5) + Math.floor(i / N / 5) * 3) % WASH.length]} opacity={0.35} />
+      ))}
       {barriers.map((i) => (
-        <rect key={i} x={(i % N) * s} y={Math.floor(i / N) * s} width={s} height={s} fill="#4a4538" />
+        <rect key={'b' + i} x={(i % N) * s} y={Math.floor(i / N) * s} width={s - 1} height={s - 1} fill="#4a463d" />
       ))}
-      <rect x={7 * s} y={7 * s} width={s} height={s} fill="#d9472b" />
-      {[1, 2, 3].map((r) => (
-        <rect key={r} x={(7 - r) * s} y={(7 - r) * s} width={(2 * r + 1) * s} height={(2 * r + 1) * s} fill="none" stroke="#26241f" strokeOpacity={0.15} />
-      ))}
+      <rect x={7 * s} y={7 * s} width={s - 1} height={s - 1} fill="#e0b43c" />
     </svg>
   );
 }

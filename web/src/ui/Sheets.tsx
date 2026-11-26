@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '../icons';
-import type { Cond, DryRun, Gambit, OpView, Target } from '../types';
-import { Bar, DryRunView, fmtIn, OUTCOME_NAMES, Rarity, RES_KEYS, RES_NAMES, Section, SheetFrame, SQUAD_HEX, TagIO, useCtx } from './common';
+import type { Cond, DistrictView, DryRun, Gambit, OpView, Target } from '../types';
+import { Bar, DryRunView, fmtIn, OUTCOME_NAMES, Page, Rarity, RES_KEYS, RES_NAMES, Section, SQUAD_HEX, TagIO, useCtx } from './common';
 import { OpRow, TideRows } from './Panels';
 
 // ---------------------------------------------------------------------------
@@ -52,12 +52,12 @@ export function OpSheet({ op, onClose }: { op: number; onClose: () => void }) {
   const o = view.operatives.find((x) => x.id === op);
   if (!o)
     return (
-      <SheetFrame title="队员" onClose={onClose}>
+      <Page title="队员" onClose={onClose}>
         <p className="muted">这名队员已经不在队里了。</p>
-      </SheetFrame>
+      </Page>
     );
   return (
-    <SheetFrame
+    <Page
       title={
         <span className="row" style={{ gap: 8 }}>
           {o.name} <Rarity r={o.rarity} name={o.rarity_name} />
@@ -66,13 +66,17 @@ export function OpSheet({ op, onClose }: { op: number; onClose: () => void }) {
       }
       icon={o.icon}
       onClose={onClose}
+      aside={
+        <>
+          <AssignBlock o={o} />
+          <EquipBlock o={o} />
+          <GambitEditor o={o} />
+          <OpDanger o={o} onClose={onClose} />
+        </>
+      }
     >
       <OpDetail o={o} />
-      <AssignBlock o={o} />
-      <EquipBlock o={o} />
-      <GambitEditor o={o} />
-      <OpDanger o={o} onClose={onClose} />
-    </SheetFrame>
+    </Page>
   );
 }
 
@@ -85,13 +89,24 @@ export function OpDetail({ o }: { o: OpView }) {
         {o.origin} · {o.status}
         {o.special ? ' · 特别人物' : ''}
       </div>
-      <div className="statgrid">
-        <span>生命 <b className="num">{d.hp}</b></span>
-        <span>攻击 <b className="num">{d.atk}</b></span>
-        <span>防御 <b className="num">{d.def}</b></span>
-        <span>速度 <b className="num">{d.spd}</b></span>
-        <span>行动 AP <b className="num">{d.ap}</b></span>
-        <span>反应 PP <b className="num">{d.pp}</b></span>
+      <div className="stat-tiles">
+        {(
+          [
+            ['hp', '生命', d.hp],
+            ['atk', '攻击', d.atk],
+            ['def', '防御', d.def],
+            ['spd', '速度', d.spd],
+            ['ap', '行动', d.ap],
+            ['pp', '反应', d.pp],
+          ] as const
+        ).map(([id, k, v]) => (
+          <div key={id} className="stat-tile">
+            <span className="k">
+              <Icon id={id} /> {k}
+            </span>
+            <span className="num">{v}</span>
+          </div>
+        ))}
       </div>
       <details>
         <summary className="small muted" style={{ cursor: 'pointer' }}>
@@ -334,12 +349,12 @@ export function CandidateSheet({ candidate, onClose }: { candidate: number; onCl
   const dry = useMemo(() => (c ? game.dryRun({ cmd: 'hire', candidate }) : null), [c, game, candidate]);
   if (!c)
     return (
-      <SheetFrame title="候选" onClose={onClose}>
+      <Page title="候选" onClose={onClose}>
         <p className="muted">这名候选已经不在了。</p>
-      </SheetFrame>
+      </Page>
     );
   return (
-    <SheetFrame
+    <Page
       title={
         <span className="row" style={{ gap: 8 }}>
           {c.op.name} <Rarity r={c.op.rarity} name={c.op.rarity_name} />
@@ -348,33 +363,53 @@ export function CandidateSheet({ candidate, onClose }: { candidate: number; onCl
       }
       icon={c.op.icon}
       onClose={onClose}
+      aside={
+        <div className="card striped">
+          <Section title="招募" icon="hire" hint={c.source}>
+            <DryRunView dry={dry} />
+            <div className="row" style={{ marginTop: 10 }}>
+            <button className="btn primary" disabled={!dry?.ok} onClick={() => run({ cmd: 'hire', candidate }, `${c.op.name} 加入`) && onClose()}>
+              招募{c.cost ? `（${c.cost} 废材）` : '（免费）'}
+            </button>
+            <button className="btn ghost" onClick={() => run({ cmd: 'dismiss', candidate }, '已婉拒') && onClose()}>
+              婉拒
+            </button>
+            </div>
+          </Section>
+        </div>
+      }
     >
-      <div className="small">来源：{c.source}</div>
       <OpDetail o={c.op} />
-      <DryRunView dry={dry} />
-      <div className="row">
-        <button className="btn primary" disabled={!dry?.ok} onClick={() => run({ cmd: 'hire', candidate }, `${c.op.name} 加入`) && onClose()}>
-          招募{c.cost ? `（${c.cost} 废材）` : '（免费）'}
-        </button>
-        <button className="btn ghost" onClick={() => run({ cmd: 'dismiss', candidate }, '已婉拒') && onClose()}>
-          婉拒
-        </button>
-      </div>
-    </SheetFrame>
+    </Page>
   );
 }
 
 // ---------------------------------------------------------------------------
 
 export function DistrictSheet({ district, onClose }: { district: number; onClose: () => void }) {
-  const { view, game, run, open } = useCtx();
+  const { view, open } = useCtx();
   const d = view.districts.find((x) => x.id === district)!;
-  const [dry, setDry] = useState<{ id: string | null; r: DryRun } | null>(null);
-  const [prio, setPrio] = useState<string[]>(d.priority);
-  const profName = (id: string) => d.talent.find((t) => t.prof === id)?.name ?? id;
-  const prioDirty = JSON.stringify(prio) !== JSON.stringify(d.priority);
   return (
-    <SheetFrame title={d.name} icon="trust" onClose={onClose}>
+    <Page
+      title={d.name}
+      icon="trust"
+      onClose={onClose}
+      aside={
+        <>
+          <DistrictPriority d={d} />
+          <DistrictPolicy d={d} />
+          <Section title="格子" icon="map" hint={`${d.owned}/${d.total}`}>
+            <div className="row wrap" style={{ gap: 4 }}>
+              {d.tiles.map((i) => (
+                <button key={i} className={'btn small' + (view.tiles[i]!.owned ? '' : ' ghost')} onClick={() => open({ kind: 'tile', tile: i })}>
+                  {view.tiles[i]!.label}
+                </button>
+              ))}
+            </div>
+          </Section>
+        </>
+      }
+    >
       <div className="small muted">
         {d.owned}/{d.total} 格{d.contiguous ? ' · 连片（产出 +25%，信任 +10）' : ''} · 人口 {d.population} · 住房 {d.housing} · 在岗 {d.employed}
         {d.unhoused ? <b className="bad"> · 无处安置 {d.unhoused}</b> : null}
@@ -424,82 +459,92 @@ export function DistrictSheet({ district, onClose }: { district: number; onClose
         </div>
       </Section>
 
-      <Section title="岗位优先级" icon="priority" hint="人手不够时先填上面的">
-        <div className="stack" style={{ gap: 3 }}>
-          {prio.map((p, k) => (
-            <div key={p} className="row small">
-              <span className="num faint">{k + 1}</span>
-              <span className="grow">{profName(p)}</span>
-              <button
-                className="btn small ghost"
-                disabled={k === 0}
-                onClick={() => {
-                  const n = [...prio];
-                  [n[k - 1], n[k]] = [n[k]!, n[k - 1]!];
-                  setPrio(n);
-                }}
-              >
-                ↑
-              </button>
-            </div>
-          ))}
-        </div>
-        {prioDirty ? (
-          <button className="btn small primary" style={{ marginTop: 6 }} onClick={() => run({ cmd: 'set_priority', district: d.id, priority: prio }, '优先级已改')}>
-            保存
-          </button>
-        ) : null}
-      </Section>
+    </Page>
+  );
+}
 
-      <Section title="政策" icon="policy" hint={d.policy_unlocked ? (d.policy ? '已定' : '可以定一条') : '信任 60 解锁'}>
-        <div className="stack" style={{ gap: 6 }}>
-          {d.policy_options.map((p) => (
+function DistrictPriority({ d }: { d: DistrictView }) {
+  const { run } = useCtx();
+  const [prio, setPrio] = useState<string[]>(d.priority);
+  const profName = (id: string) => d.talent.find((t) => t.prof === id)?.name ?? id;
+  const prioDirty = JSON.stringify(prio) !== JSON.stringify(d.priority);
+  return (
+    <Section title="岗位优先级" icon="priority" hint="人手不够时先填上面的">
+      <div className="stack" style={{ gap: 3 }}>
+        {prio.map((p, k) => (
+          <div key={p} className="row small">
+            <span className="num faint">{k + 1}</span>
+            <span className="grow">{profName(p)}</span>
             <button
-              key={p.id}
-              className="list-item"
-              disabled={!p.available && d.policy !== p.id}
-              onClick={() => setDry({ id: d.policy === p.id ? null : p.id, r: game.dryRun({ cmd: 'set_policy', district: d.id, policy: d.policy === p.id ? null : p.id }) })}
-              style={d.policy === p.id ? { background: 'var(--paper-2)' } : undefined}
+              className="btn small ghost"
+              disabled={k === 0}
+              onClick={() => {
+                const n = [...prio];
+                [n[k - 1], n[k]] = [n[k]!, n[k - 1]!];
+                setPrio(n);
+              }}
             >
-              <div className="grow">
-                <b>{p.name}</b> {d.policy === p.id ? <span className="chip good">生效中</span> : null}
-                <div className="small muted">{p.desc}</div>
-                {!p.available && p.reason ? <div className="tiny faint">{p.reason}</div> : null}
-              </div>
-            </button>
-          ))}
-        </div>
-        {dry ? (
-          <div className="card flat" style={{ marginTop: 6 }}>
-            <DryRunView dry={dry.r} />
-            <button className="btn small primary" style={{ marginTop: 6 }} disabled={!dry.r.ok} onClick={() => run({ cmd: 'set_policy', district: d.id, policy: dry.id }, '政策已改') && setDry(null)}>
-              {dry.id ? '定下这条政策' : '取消政策'}
+              ↑
             </button>
           </div>
-        ) : null}
-      </Section>
-      <div className="row wrap small">
-        <span className="muted">格子：</span>
-        {d.tiles.map((i) => (
-          <button key={i} className="btn small ghost" onClick={() => open({ kind: 'tile', tile: i })}>
-            {view.tiles[i]!.label}
-            {view.tiles[i]!.owned ? '' : '·'}
+        ))}
+      </div>
+      {prioDirty ? (
+        <button className="btn small primary" style={{ marginTop: 6 }} onClick={() => run({ cmd: 'set_priority', district: d.id, priority: prio }, '优先级已改')}>
+          保存
+        </button>
+      ) : null}
+    </Section>
+  );
+}
+
+function DistrictPolicy({ d }: { d: DistrictView }) {
+  const { game, run } = useCtx();
+  const [dry, setDry] = useState<{ id: string | null; r: DryRun } | null>(null);
+  return (
+    <Section title="政策" icon="policy" hint={d.policy_unlocked ? (d.policy ? '已定' : '可以定一条') : '信任 60 解锁'}>
+      <div className="stack" style={{ gap: 6 }}>
+        {d.policy_options.map((p) => (
+          <button
+            key={p.id}
+            disabled={!p.available && d.policy !== p.id}
+            onClick={() => setDry({ id: d.policy === p.id ? null : p.id, r: game.dryRun({ cmd: 'set_policy', district: d.id, policy: d.policy === p.id ? null : p.id }) })}
+            className={'list-item' + (d.policy === p.id ? ' selected' : '')}
+          >
+            <div className="grow">
+              <b>{p.name}</b> {d.policy === p.id ? <span className="chip good">生效中</span> : null}
+              <div className="small muted">{p.desc}</div>
+              {!p.available && p.reason ? <div className="tiny faint">{p.reason}</div> : null}
+            </div>
           </button>
         ))}
       </div>
-    </SheetFrame>
+      {dry ? (
+        <div className="card flat" style={{ marginTop: 6 }}>
+          <DryRunView dry={dry.r} />
+          <button className="btn small primary" style={{ marginTop: 6 }} disabled={!dry.r.ok} onClick={() => run({ cmd: 'set_policy', district: d.id, policy: dry.id }, '政策已改') && setDry(null)}>
+            {dry.id ? '定下这条政策' : '取消政策'}
+          </button>
+        </div>
+      ) : null}
+    </Section>
   );
 }
 
 // ---------------------------------------------------------------------------
 
 export function SquadSheet({ squad, onClose }: { squad: number; onClose: () => void }) {
-  const { view, now, open, game, run, setRouteEdit } = useCtx();
+  const { view, open, run, setRouteEdit } = useCtx();
   const s = view.squads.find((x) => x.id === squad)!;
   const free = view.operatives.filter((o) => !s.members.includes(o.id));
   const trip = s.last ?? s.running;
   return (
-    <SheetFrame title={s.name} icon="squad" onClose={onClose}>
+    <Page
+      title={s.name}
+      icon="squad"
+      onClose={onClose}
+      aside={trip ? <TripBlock squad={squad} /> : undefined}
+    >
       <Section title="队员" icon="roster" hint={`${s.members.length}/3`}>
         <div className="list">
           {s.members.map((id) => {
@@ -537,51 +582,57 @@ export function SquadSheet({ squad, onClose }: { squad: number; onClose: () => v
       </Section>
       <Section title="路线" icon="route" hint={`走过 ${s.trips} 趟`}>
         <div className="small">{s.route.length ? s.route.map((i) => view.tiles[i]!.label).join(' → ') : '没有路线'}</div>
-        <button className="btn small" style={{ marginTop: 6 }} onClick={() => (setRouteEdit({ squad, route: s.route }), open(null))} disabled={!s.members.length}>
+        <button className="btn small" style={{ marginTop: 6 }} onClick={() => setRouteEdit({ squad, route: s.route })} disabled={!s.members.length}>
           在地图上改路线
         </button>
       </Section>
-      {trip ? (
-        <Section title={s.running ? '这一趟' : '上一趟'} icon="report" hint={s.running ? `${fmtIn(s.running.end - now)}后回来` : OUTCOME_NAMES[trip.outcome]}>
-          <div className="list">
-            {trip.results.map((r) => (
-              <div key={r.tile} className="list-item small">
-                <span className={r.outcome === 'victory' ? 'good' : 'bad'}>{r.label}</span>
-                <span className="grow">{OUTCOME_NAMES[r.outcome]}</span>
-                <button
-                  className="btn small ghost"
-                  onClick={() => open({ kind: 'report', title: `${s.name} · ${r.label}`, load: () => game.tripBattle(squad, r.tile) ?? (r.report !== null ? game.report(r.report) : null) })}
-                >
-                  回放
-                </button>
-              </div>
-            ))}
-            {trip.results.length === 0 ? <div className="empty">这趟只在领地里巡逻。</div> : null}
+    </Page>
+  );
+}
+
+function TripBlock({ squad }: { squad: number }) {
+  const { view, now, open, game } = useCtx();
+  const s = view.squads.find((x) => x.id === squad)!;
+  const trip = (s.last ?? s.running)!;
+  return (
+    <Section title={s.running ? '这一趟' : '上一趟'} icon="report" hint={s.running ? `${fmtIn(s.running.end - now)}后回来` : OUTCOME_NAMES[trip.outcome]}>
+      <div className="list">
+        {trip.results.map((r) => (
+          <div key={r.tile} className="list-item small">
+            <span className={r.outcome === 'victory' ? 'good' : 'bad'}>{r.label}</span>
+            <span className="grow">{OUTCOME_NAMES[r.outcome]}</span>
+            <button
+              className="btn small ghost"
+              onClick={() => open({ kind: 'report', title: `${s.name} · ${r.label}`, load: () => game.tripBattle(squad, r.tile) ?? (r.report !== null ? game.report(r.report) : null) })}
+            >
+              回放
+            </button>
           </div>
-          <div className="row wrap small" style={{ gap: 10, marginTop: 6 }}>
-            <span className="muted">带回：</span>
-            {RES_KEYS.filter((k) => trip.loot[k] > 0).map((k) => (
-              <span key={k} className="res-item">
-                <Icon id={`res-${k}`} size={14} />
-                {RES_NAMES[k]} <span className="num">{trip.loot[k]}</span>
-              </span>
-            ))}
-            {trip.drops.map((d, k) => (
-              <span key={k} className="chip">
-                {d}
-              </span>
-            ))}
-          </div>
-        </Section>
-      ) : null}
-    </SheetFrame>
+        ))}
+        {trip.results.length === 0 ? <div className="empty">这趟只在领地里巡逻。</div> : null}
+      </div>
+      <div className="row wrap small" style={{ gap: 10, marginTop: 6 }}>
+        <span className="muted">带回：</span>
+        {RES_KEYS.filter((k) => trip.loot[k] > 0).map((k) => (
+          <span key={k} className="res-item">
+            <Icon id={`res-${k}`} size={14} />
+            {RES_NAMES[k]} <span className="num">{trip.loot[k]}</span>
+          </span>
+        ))}
+        {trip.drops.map((d, k) => (
+          <span key={k} className="chip">
+            {d}
+          </span>
+        ))}
+      </div>
+    </Section>
   );
 }
 
 export function TideSheet({ onClose }: { onClose: () => void }) {
   const { view } = useCtx();
   return (
-    <SheetFrame title="潮汐表 · 未来 12 小时" icon="tide" onClose={onClose}>
+    <Page title="潮汐表 · 未来 12 小时" icon="tide" onClose={onClose}>
       <p className="small muted" style={{ margin: 0 }}>
         每个边界格每 4 小时来潮一次，时间固定、公开。表里的结果是引擎按现在的布置把每一场都提前打了一遍。
       </p>
@@ -591,6 +642,6 @@ export function TideSheet({ onClose }: { onClose: () => void }) {
           本轮：{view.modifier[1]}。{view.modifier[2]}
         </div>
       ) : null}
-    </SheetFrame>
+    </Page>
   );
 }

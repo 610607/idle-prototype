@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '../icons';
 import type { BattleReport as Report, LogEntry, SnapUnit, Tag } from '../types';
 import { TAGS } from '../types';
-import { OUTCOME_NAMES, SheetFrame, TagChip, useCtx } from './common';
+import { OUTCOME_NAMES, Page, TagChip, useCtx } from './common';
 
 export function ReportSheet({ title, load, onClose }: { title: string; load: () => Report | null; onClose: () => void }) {
   const report = useMemo(load, [load]);
   return (
-    <SheetFrame title={title} icon="report" onClose={onClose}>
+    <Page title={title} icon="report" onClose={onClose}>
       {report ? <BattleReport report={report} /> : <p className="muted">这场战斗的记录已经不在了（只保留最近的战斗，读档后也会清空）。</p>}
-    </SheetFrame>
+    </Page>
   );
 }
 
@@ -65,96 +65,99 @@ export function BattleReport({ report }: { report: Report }) {
   const outcomeTone = report.outcome === 'victory' || report.outcome === 'planned' ? 'good' : 'bad';
 
   return (
-    <div className="stack" style={{ gap: 12 }}>
-      <div className="row wrap" style={{ gap: 12 }}>
-        <b className={outcomeTone}>{OUTCOME_NAMES[report.outcome]}</b>
-        <span className="small muted">
-          波次 {report.waves_cleared}/{report.total_waves} · {report.rounds} 回合 · 收获 {Math.round(report.yield_bp / 100)}%
-        </span>
-        {report.warden_gain ? <span className="small good">接地网 镇守度 +{report.warden_gain}</span> : null}
-      </div>
-
-      {snap ? <Field snap={snap} actor={cur?.actor} target={cur?.target} /> : null}
-
-      <div className="row wrap">
-        <button className="btn small" onClick={() => setCursor(0)} aria-label="从头">
-          ⏮
-        </button>
-        <button className="btn small" onClick={() => setCursor((c) => Math.max(0, c - 1))} aria-label="上一步">
-          ◀
-        </button>
-        <button className="btn small primary" onClick={() => setPlaying((p) => !p)}>
-          <Icon id={playing ? 'pause' : 'play'} size={14} />
-          {playing ? '暂停' : '播放'}
-        </button>
-        <button className="btn small" onClick={() => setCursor((c) => Math.min(log.length - 1, c + 1))} aria-label="下一步">
-          ▶
-        </button>
-        <button
-          className="btn small"
-          onClick={() => {
-            setPlaying(false);
-            setCursor(log.length - 1);
-          }}
-        >
-          结果
-        </button>
-        <div className="seg">
-          {[1, 2, 4].map((s) => (
-            <button key={s} aria-pressed={speed === s} onClick={() => setSpeed(s)}>
-              {s}×
-            </button>
-          ))}
+    <div className="split">
+      <div className="col" style={{ gap: 12 }}>
+        <div className="row wrap" style={{ gap: 12 }}>
+          <h3 className={outcomeTone} style={{ fontSize: 20 }}>{OUTCOME_NAMES[report.outcome]}</h3>
+          <span className="small muted">
+            波次 {report.waves_cleared}/{report.total_waves} · {report.rounds} 回合 · 收获 {Math.round(report.yield_bp / 100)}%
+          </span>
+          {report.warden_gain ? <span className="small good">接地网 镇守度 +{report.warden_gain}</span> : null}
         </div>
-        <label className="switch small">
-          <input type="checkbox" checked={formulas} onChange={(e) => setFormulas(e.target.checked)} />
-          全部公式
-        </label>
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={Math.max(0, log.length - 1)}
-        value={cursor}
-        onChange={(e) => {
-          setPlaying(false);
-          setCursor(Number(e.target.value));
-        }}
-        aria-label="回放进度"
-      />
 
-      <div className="log" ref={listRef}>
-        {log.map((e, k) => (
-          <div
-            key={e.id}
-            data-k={k}
-            className={
-              'log-entry ' +
-              e.kind +
-              (k > cursor ? ' future' : '') +
-              (k === cursor ? ' current' : '') +
-              (chain.has(e.id) ? ' chain' : '')
-            }
-            style={{ paddingLeft: 6 + e.depth * 18 }}
+        {snap ? <Field snap={snap} actor={cur?.actor} target={cur?.target} /> : null}
+
+        <div className="player">
+          <button className="btn small" onClick={() => setCursor(0)} aria-label="从头">
+            ⏮
+          </button>
+          <button className="btn small" onClick={() => setCursor((c) => Math.max(0, c - 1))} aria-label="上一步">
+            ◀
+          </button>
+          <button className="btn small primary" onClick={() => setPlaying((p) => !p)}>
+            <Icon id={playing ? 'pause' : 'play'} />
+            {playing ? '暂停' : '播放'}
+          </button>
+          <button className="btn small" onClick={() => setCursor((c) => Math.min(log.length - 1, c + 1))} aria-label="下一步">
+            ▶
+          </button>
+          <button
+            className="btn small"
             onClick={() => {
               setPlaying(false);
-              setCursor(k);
+              setCursor(log.length - 1);
             }}
           >
-            {e.kind === 'round' ? `第 ${e.round} 回合` : e.text}
-            {e.tags && e.tags.length && e.kind !== 'wave' ? (
-              <span style={{ marginLeft: 6 }}>
-                {e.tags.map((t) => (
-                  <TagChip key={t} tag={t} />
-                ))}
-              </span>
-            ) : null}
-            {e.formula && (formulas || k === cursor) ? <div className="formula">{e.formula}</div> : null}
+            结果
+          </button>
+          <div className="seg">
+            {[1, 2, 4].map((s) => (
+              <button key={s} aria-pressed={speed === s} onClick={() => setSpeed(s)}>
+                {s}×
+              </button>
+            ))}
           </div>
-        ))}
+          <label className="switch small">
+            <input type="checkbox" checked={formulas} onChange={(e) => setFormulas(e.target.checked)} />
+            全部公式
+          </label>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={Math.max(0, log.length - 1)}
+          value={cursor}
+          onChange={(e) => {
+            setPlaying(false);
+            setCursor(Number(e.target.value));
+          }}
+          aria-label="回放进度"
+        />
+        <Summary report={report} />
       </div>
 
-      <Summary report={report} />
+      <div className="col">
+        <div className="log" ref={listRef}>
+          {log.map((e, k) => (
+            <div
+              key={e.id}
+              data-k={k}
+              className={
+                'log-entry ' +
+                e.kind +
+                (k > cursor ? ' future' : '') +
+                (k === cursor ? ' current' : '') +
+                (chain.has(e.id) ? ' chain' : '')
+              }
+              style={{ paddingLeft: 6 + e.depth * 18 }}
+              onClick={() => {
+                setPlaying(false);
+                setCursor(k);
+              }}
+            >
+              {e.kind === 'round' ? `第 ${e.round} 回合` : e.text}
+              {e.tags && e.tags.length && e.kind !== 'wave' ? (
+                <span style={{ marginLeft: 6 }}>
+                  {e.tags.map((t) => (
+                    <TagChip key={t} tag={t} />
+                  ))}
+                </span>
+              ) : null}
+              {e.formula && (formulas || k === cursor) ? <div className="formula">{e.formula}</div> : null}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -180,13 +183,13 @@ function Field({ snap, actor, target }: { snap: SnapUnit[]; actor?: string; targ
 }
 
 function UnitBox({ u, actor, target }: { u: SnapUnit; actor?: string; target?: string }) {
-  const cls = 'unit' + (u.alive ? '' : ' dead') + (actor === u.name ? ' actor' : '') + (target === u.name ? ' target' : '');
+  const cls = 'unit ' + u.side + (u.alive ? '' : ' dead') + (actor === u.name ? ' actor' : '') + (target === u.name ? ' target' : '');
   const pct = Math.max(0, Math.min(100, (u.hp / Math.max(1, u.max_hp)) * 100));
   const tone = pct < 30 ? 'bad' : pct < 60 ? 'warn' : 'good';
   return (
     <div className={cls}>
       <div className="row" style={{ gap: 4 }}>
-        <Icon id={u.icon} size={14} />
+        <Icon id={u.icon} />
         <span className="grow ellipsis">
           {u.name}
           <span className="faint tiny"> {u.front ? '前' : '后'}</span>
@@ -211,10 +214,8 @@ function Summary({ report }: { report: Report }) {
   const { game } = useCtx();
   const allies = report.units.filter((u) => u.side === 'ally');
   return (
-    <details>
-      <summary className="small muted" style={{ cursor: 'pointer' }}>
-        战后统计
-      </summary>
+    <details open>
+      <summary>战后统计</summary>
       <table className="tide" style={{ marginTop: 6 }}>
         <thead>
           <tr>

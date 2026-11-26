@@ -19,7 +19,16 @@ export interface Ctx {
   game: Game;
   view: View;
   now: number;
-  open: (s: Sheet | null) => void;
+  /** Push a page onto the workspace; `reset` starts a fresh trail; null goes back to the tab. */
+  open: (s: Sheet | null, reset?: boolean) => void;
+  /** The workspace trail, oldest first. */
+  pages: Sheet[];
+  /** Pop back to trail length n (0 = the tab itself). */
+  popTo: (n: number) => void;
+  /** Tile shown in the workspace, outlined on the board. */
+  selectedTile: number | null;
+  /** Ask before something hard to undo. */
+  confirm: (c: ConfirmAsk) => void;
   /** Run a command; shows the error as a toast. Returns success. */
   run: (cmd: Command, okText?: string) => boolean;
   toast: (text: string, error?: boolean) => void;
@@ -27,6 +36,16 @@ export interface Ctx {
   setRouteEdit: (r: RouteEdit | null) => void;
   focusTile: number | null;
   setFocusTile: (t: number | null) => void;
+  /** Name of the workspace tab the trail started from. */
+  tabName: string;
+}
+
+export interface ConfirmAsk {
+  title: string;
+  body: ReactNode;
+  ok: string;
+  danger?: boolean;
+  onOk: () => void;
 }
 
 export interface RouteEdit {
@@ -83,22 +102,41 @@ export const OUTCOME_NAMES: Record<string, string> = {
 
 export const DIAL_NAMES: Record<string, string> = { mine: '开采', balance: '平衡', seal: '封印' };
 
-export const SQUAD_COLORS = ['var(--squad-0)', 'var(--squad-1)'];
-export const SQUAD_HEX = ['#d9472b', '#1f8a7a'];
+export const SQUAD_HEX = ['#5ea3d6', '#e58cab'];
 
 export function squadColor(view: View, squadId: number): string {
   const i = view.squads.findIndex((s) => s.id === squadId);
-  return SQUAD_HEX[i % SQUAD_HEX.length] ?? '#444';
+  return SQUAD_HEX[i % SQUAD_HEX.length] ?? '#b6af98';
 }
 
 export const TAG_HEX: Record<Tag, string> = {
-  shock: '#2f6fb3',
-  mark: '#c0392b',
-  overload: '#d4801c',
-  erosion: '#6b7a2a',
-  shield: '#4a6b8a',
-  fortify: '#7a5a3a',
+  shock: '#4f8fd6',
+  mark: '#d0503c',
+  overload: '#e08a2c',
+  erosion: '#8aa040',
+  shield: '#7a9cc0',
+  fortify: '#a07a50',
 };
+
+/** Short name of a workspace page, for breadcrumbs. */
+export function pageLabel(view: View, s: Sheet): string {
+  switch (s.kind) {
+    case 'tile':
+      return view.tiles[s.tile]?.label ?? '格子';
+    case 'op':
+      return view.operatives.find((o) => o.id === s.op)?.name ?? '队员';
+    case 'candidate':
+      return view.candidates.find((c) => c.id === s.candidate)?.op.name ?? '候选';
+    case 'district':
+      return view.districts.find((d) => d.id === s.district)?.name ?? '街区';
+    case 'report':
+      return '战报';
+    case 'squad':
+      return view.squads.find((q) => q.id === s.squad)?.name ?? '小队';
+    case 'tide':
+      return '潮汐表';
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Small components
@@ -111,7 +149,7 @@ export function TagChip({ tag, n, mode }: { tag: Tag; n?: number; mode?: 'read' 
   const title = (def ? `${def.name}：${def.desc}` : tag) + (mode === 'read' ? '（读取）' : mode === 'write' ? '（施加）' : '');
   return (
     <span className={cls} style={style} title={title}>
-      <Icon id={`tag-${tag}`} size={12} />
+      <Icon id={`tag-${tag}`} size={16} />
       {def?.name ?? tag}
       {n !== undefined && n > 1 ? <span className="num">×{n}</span> : null}
     </span>
@@ -141,7 +179,7 @@ export function Cost({ cost, have }: { cost: Resources; have?: Resources }) {
     <span className="row" style={{ gap: 8 }}>
       {parts.map((k) => (
         <span key={k} className={'res-item ' + (have && have[k] < cost[k] ? 'bad' : '')}>
-          <Icon id={`res-${k}`} size={14} />
+          <Icon id={`res-${k}`} size={16} />
           <span className="num">{cost[k]}</span>
         </span>
       ))}
@@ -196,19 +234,80 @@ export function DryRunView({ dry }: { dry: DryRun | null }) {
   );
 }
 
-export function SheetFrame({ title, icon, onClose, children, extra }: { title: ReactNode; icon?: string; onClose: () => void; children: ReactNode; extra?: ReactNode }) {
+/** A page in the workspace. `aside` becomes a second column once the workspace is wide. */
+export function Page({
+  title,
+  icon,
+  onClose,
+  children,
+  aside,
+  extra,
+  wideRight,
+}: {
+  title: ReactNode;
+  icon?: string;
+  onClose: () => void;
+  children: ReactNode;
+  aside?: ReactNode;
+  extra?: ReactNode;
+  wideRight?: boolean;
+}) {
+  const { pages, popTo, view, tabName } = useCtx();
   return (
-    <div className="scrim" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="sheet-head">
-          {icon ? <Icon id={icon} size={22} /> : null}
-          <h2 className="grow ellipsis">{title}</h2>
-          {extra}
-          <button className="btn ghost small" onClick={onClose} aria-label="关闭">
-            <Icon id="close" size={18} />
+    <div className="page">
+      <div className="page-head">
+        <button className="btn ghost small" onClick={onClose} aria-label="返回" title="返回（Esc）">
+          <Icon id="chevron-right" className="flip" /> 返回
+        </button>
+        {icon ? <Icon id={icon} size={32} /> : null}
+        <div className="grow" style={{ minWidth: 0 }}>
+          <div className="crumbs ellipsis">
+            <button onClick={() => popTo(0)}>{tabName}</button>
+            {pages.slice(0, -1).map((p, k) => (
+              <span key={k}>
+                {' › '}
+                <button onClick={() => popTo(k + 1)}>{pageLabel(view, p)}</button>
+              </span>
+            ))}
+          </div>
+          <h2 className="ellipsis">{title}</h2>
+        </div>
+        {extra}
+      </div>
+      <div className="pane">
+        {aside ? (
+          <div className={'split' + (wideRight ? ' wide-right' : '')}>
+            <div className="col">{children}</div>
+            <div className="col">{aside}</div>
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function ConfirmDialog({ ask, onDone }: { ask: ConfirmAsk; onDone: () => void }) {
+  return (
+    <div className="scrim" onClick={onDone}>
+      <div className="dialog stack" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ fontSize: 20 }}>{ask.title}</h2>
+        <div className="small muted">{ask.body}</div>
+        <div className="row" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
+          <button className="btn ghost" onClick={onDone}>
+            算了
+          </button>
+          <button
+            className={'btn ' + (ask.danger ? 'danger' : 'primary')}
+            onClick={() => {
+              ask.onOk();
+              onDone();
+            }}
+          >
+            {ask.ok}
           </button>
         </div>
-        <div className="sheet-body">{children}</div>
       </div>
     </div>
   );
@@ -218,7 +317,7 @@ export function Section({ title, icon, hint, children }: { title: ReactNode; ico
   return (
     <section>
       <div className="section-title">
-        {icon ? <Icon id={icon} size={18} /> : null}
+        {icon ? <Icon id={icon} size={16} /> : null}
         <h3>{title}</h3>
         {hint ? <span className="hint">{hint}</span> : null}
       </div>
