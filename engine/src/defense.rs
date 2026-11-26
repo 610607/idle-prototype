@@ -66,12 +66,12 @@ fn simple_unit(
     }
 }
 
-/// The base defenders of a tile: HQ guard at HQ, otherwise the district militia folded into one unit.
-pub fn base_defender(state: &GameState, calc: &EconCalc, tile: u16) -> UnitSpec {
+/// The base defenders of a tile: HQ guard at HQ, otherwise the district militia.
+pub fn base_defenders(state: &GameState, calc: &EconCalc, tile: u16) -> Vec<UnitSpec> {
     let b = balance();
     let t = &state.cycle.tiles[tile as usize];
     if t.terrain == Terrain::Hq {
-        return simple_unit(
+        return vec![simple_unit(
             "hq_guard",
             "总部警卫",
             "class-vanguard",
@@ -81,9 +81,36 @@ pub fn base_defender(state: &GameState, calc: &EconCalc, tile: u16) -> UnitSpec 
             8,
             11,
             &["shield_bash", "guard_cover"],
-        );
+        )];
     }
-    let m = economy::militia_of(calc, t.district);
+    militia_units(economy::militia_of(calc, t.district))
+}
+
+/// District militia: one squad unit per `militia_per_unit` workers (at least one, at most three),
+/// the workers shared out between them.
+pub fn militia_units(m: i32) -> Vec<UnitSpec> {
+    let b = balance();
+    let n = (1 + m / b.militia_per_unit.max(1)).min(3);
+    (0..n)
+        .map(|k| {
+            let share = m / n + if k < m % n { 1 } else { 0 };
+            let mut u = militia_unit(share);
+            if n > 1 {
+                u.key = format!("militia{}", k + 1);
+                u.name = format!(
+                    "{}·{}",
+                    if m > 0 { "民兵" } else { "街坊" },
+                    ["甲", "乙", "丙"][k as usize]
+                );
+            }
+            u
+        })
+        .collect()
+}
+
+/// One militia unit backed by `m` militia workers.
+pub fn militia_unit(m: i32) -> UnitSpec {
+    let b = balance();
     let name = if m > 0 {
         format!("民兵（{} 人）", m)
     } else {
@@ -127,7 +154,7 @@ pub fn surge_setup(
         .and_then(|d| d.policy.as_deref())
         .and_then(|p| c.policy(p));
 
-    let mut mult: i64 = world::attention_bp(cy) as i64;
+    let mut mult: i64 = world::attention_bp(cy) as i64 * b.surge_strength_bp as i64 / 10_000;
     if let Some(r) = &src.rift {
         if src.owned {
             mult = mult * b.rift_surge_bp[r.dial.idx()] as i64 / 10_000;
@@ -153,7 +180,7 @@ pub fn surge_setup(
             allies.push(operative::spec(op));
         }
     }
-    allies.push(base_defender(state, calc, tile));
+    allies.extend(base_defenders(state, calc, tile));
 
     let mut ally_tags: Vec<(Tag, i32)> = c
         .modifier(&cy.modifier)

@@ -135,6 +135,23 @@ pub struct LogEntry {
     pub formula: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<Tag>,
+    /// Everyone on the field right after this entry, for step-by-step playback.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub snap: Vec<SnapUnit>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SnapUnit {
+    pub name: String,
+    pub icon: String,
+    pub side: Side,
+    pub front: bool,
+    pub hp: i32,
+    pub max_hp: i32,
+    pub shield: i32,
+    pub pp: i32,
+    pub tags: [i32; 6],
+    pub alive: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -416,6 +433,22 @@ impl<'a> Battle<'a> {
         if self.input.record {
             let actor = actor.map(|i| self.units[i].name.clone());
             let target = target.map(|i| self.units[i].name.clone());
+            let snap = self
+                .units
+                .iter()
+                .map(|u| SnapUnit {
+                    name: u.name.clone(),
+                    icon: u.icon.clone(),
+                    side: u.side,
+                    front: u.row == Row::Front,
+                    hp: u.hp.max(0),
+                    max_hp: u.max_hp,
+                    shield: u.shield,
+                    pp: u.pp,
+                    tags: u.tags,
+                    alive: u.alive,
+                })
+                .collect();
             self.log.push(LogEntry {
                 id,
                 cause,
@@ -430,6 +463,7 @@ impl<'a> Battle<'a> {
                 text,
                 formula,
                 tags,
+                snap,
             });
         }
         id
@@ -662,6 +696,42 @@ impl<'a> Battle<'a> {
             }
             waves_cleared += 1;
 
+            // Defence breather: the neighbourhood patches up the defenders between waves.
+            if input.defense && (wi as u8) + 1 < total_waves {
+                let bp = crate::content::balance().defense_wave_heal_bp;
+                let allies: Vec<usize> = self.living(Side::Ally).collect();
+                for a in allies {
+                    let amount = (self.units[a].max_hp as i64 * bp as i64 / 10_000) as i32;
+                    let before = self.units[a].hp;
+                    self.units[a].hp = (before + amount).min(self.units[a].max_hp);
+                    let healed = self.units[a].hp - before;
+                    if healed > 0 && self.rec() {
+                        let text = format!(
+                            "波次间隙，街坊给 {} 包扎，回复 {} 生命",
+                            self.units[a].name, healed
+                        );
+                        let formula = Some(format!(
+                            "最大生命 {} × {} = {}",
+                            self.units[a].max_hp,
+                            pct(bp as i64),
+                            amount
+                        ));
+                        self.push(
+                            LogKind::Facility,
+                            None,
+                            0,
+                            None,
+                            Some(a),
+                            Some("breather"),
+                            healed,
+                            text,
+                            formula,
+                            vec![],
+                        );
+                    }
+                }
+            }
+
             // Planned retreat is only possible between waves.
             if (wi as u8) + 1 < total_waves {
                 let allies: Vec<usize> = self.living(Side::Ally).collect();
@@ -795,6 +865,9 @@ impl<'a> Battle<'a> {
                 .unwrap_or(0);
             let dmg = (base as i64 * (10_000 - cut as i64) / 10_000).max(1) as i32;
             let taken = self.take_damage(i, dmg, None);
+            // Erosion wears off one stack per tick, so it pressures long fights without
+            // snowballing forever on a target that cannot cleanse.
+            self.units[i].tags[Tag::Erosion.idx()] = stacks - 1;
             let formula = if self.rec() {
                 let mut f = format!(
                     "最大生命 {} × 4% × {} 层 = {}",
@@ -808,7 +881,7 @@ impl<'a> Battle<'a> {
                 None
             };
             let text = format!(
-                "{} 受 {} 层 [侵蚀] 侵蚀，损失 {} 生命",
+                "{} 受 {} 层 [侵蚀] 侵蚀，损失 {} 生命（退去 1 层）",
                 self.units[i].name, stacks, taken
             );
             let id = self.push(

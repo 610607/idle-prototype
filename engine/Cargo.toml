@@ -22,3 +22,9 @@ opt-level = "s"
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[[example]]
+name = "bot_policy"
+path = "examples/bot_policy.rs"
+crate-type = ["lib"]
+test = false

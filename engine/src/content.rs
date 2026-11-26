@@ -754,6 +754,15 @@ struct WorldFile {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Balance {
+    /// Volunteers = housed residents x trust / volunteer_div, capped.
+    pub volunteer_div: i32,
+    pub volunteer_cap: i32,
+    /// Surges carry this share of the source tile's strength (before attention).
+    pub surge_strength_bp: i32,
+    /// Defence battles: living defenders heal this share of max HP between waves.
+    pub defense_wave_heal_bp: i32,
+    /// Militia workers per extra militia unit in a surge (max 3 units).
+    pub militia_per_unit: i32,
     pub surge_interval: i64,
     pub surge_slots: i64,
     pub warden_route_win: i32,

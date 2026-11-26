@@ -268,7 +268,13 @@ mod tests {
     #[test]
     fn experience_grows_traits() {
         let mut op = generate(&mut Rng::new(1), 1, "vanguard", &origin());
-        assert!(bump(&mut op, "surges_held", 4).is_empty());
+        let need = content()
+            .exp_traits
+            .iter()
+            .find(|x| x.counter == "surges_held")
+            .unwrap()
+            .need;
+        assert!(bump(&mut op, "surges_held", need - 1).is_empty());
         assert_eq!(
             bump(&mut op, "surges_held", 1),
             vec!["night_watch".to_string()]

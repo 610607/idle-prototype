@@ -34,6 +34,7 @@ pub struct DistrictCalc {
     pub jobs: BTreeMap<String, i32>,
     pub workers: BTreeMap<String, i32>,
     pub militia: i32,
+    pub volunteers: i32,
     pub trust_target: i32,
     pub trust_factors: Vec<(String, i32)>,
     /// Talent gained per hour x100, per profession.
@@ -111,7 +112,10 @@ pub fn calc(state: &GameState) -> EconCalc {
         }
         dc.employed = d.population - free;
         dc.unhoused = (d.population - dc.housing).max(0);
-        dc.militia = dc.workers.get("militia").copied().unwrap_or(0);
+        // Housed residents who trust you turn out as volunteers when the tide comes.
+        let housed = d.population.min(dc.housing);
+        dc.volunteers = (housed * d.trust / b.volunteer_div.max(1)).min(b.volunteer_cap);
+        dc.militia = dc.workers.get("militia").copied().unwrap_or(0) + dc.volunteers;
         out.districts.push(dc);
     }
 

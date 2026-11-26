@@ -1,10 +1,10 @@
 [
-  { "trait": "mist_pathfinder", "counter": "rift_garrison_hours", "need": 12, "hint": "在异界格驻扎累计 12 小时" },
-  { "trait": "night_watch", "counter": "surges_held", "need": 5, "hint": "作为守军守住 5 次来潮" },
-  { "trait": "road_veteran", "counter": "route_wins", "need": 20, "hint": "路线上赢 20 场" },
-  { "trait": "defuser", "counter": "tags_consumed", "need": 30, "hint": "亲手消耗 30 层标签" },
+  { "trait": "mist_pathfinder", "counter": "rift_garrison_hours", "need": 36, "hint": "在异界格驻扎累计 36 小时" },
+  { "trait": "night_watch", "counter": "surges_held", "need": 18, "hint": "作为守军守住 18 次来潮" },
+  { "trait": "road_veteran", "counter": "route_wins", "need": 120, "hint": "路线上赢 120 场" },
+  { "trait": "defuser", "counter": "tags_consumed", "need": 200, "hint": "亲手消耗 200 层标签" },
   { "trait": "fog_walker", "counter": "tiles_revealed", "need": 15, "hint": "跑路线揭开 15 格迷雾" },
-  { "trait": "scarred", "counter": "low_hp_survivals", "need": 5, "hint": "以不到 30% 生命打完 5 场" },
-  { "trait": "conductor", "counter": "shock_received", "need": 20, "hint": "累计挨 20 层 [震荡]" },
-  { "trait": "erosion_feeder", "counter": "erosion_received", "need": 30, "hint": "累计挨 30 层 [侵蚀]" }
+  { "trait": "scarred", "counter": "low_hp_survivals", "need": 15, "hint": "以不到 30% 生命打完 15 场" },
+  { "trait": "conductor", "counter": "shock_received", "need": 250, "hint": "累计挨 250 层 [震荡]" },
+  { "trait": "erosion_feeder", "counter": "erosion_received", "need": 250, "hint": "累计挨 250 层 [侵蚀]" }
 ]

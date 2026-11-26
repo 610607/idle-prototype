@@ -186,6 +186,7 @@ pub struct DistrictView {
     pub unhoused: i32,
     pub employed: i32,
     pub militia: i32,
+    pub volunteers: i32,
     pub talent: Vec<TalentView>,
     pub training_bp: i32,
     pub policy: Option<String>,
@@ -862,6 +863,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 unhoused: dc.unhoused,
                 employed: dc.employed,
                 militia: dc.militia,
+                volunteers: dc.volunteers,
                 talent,
                 training_bp: dc.training_bp,
                 policy: d.policy.clone(),
@@ -982,20 +984,51 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             });
         }
     }
+    let mut warned = std::collections::BTreeSet::new();
+    for e in tide.iter().filter(|e| !e.held && !e.skipped_alert) {
+        if !warned.insert(e.tile) {
+            continue;
+        }
+        let mins = (e.t - state.time).max(0) / 60;
+        let when = if mins < 60 {
+            format!("{} 分钟后", mins)
+        } else {
+            format!("约 {} 小时后", (mins + 30) / 60)
+        };
+        pending.push(PendingView {
+            kind: "defend",
+            text: format!(
+                "{} {}的来潮会在第 {}/{} 波失守：换驻守或加强防线",
+                geom::label(e.tile),
+                when,
+                e.lost_wave.unwrap_or(1),
+                e.total_waves
+            ),
+            tile: Some(e.tile),
+            op: None,
+            candidate: None,
+            district: None,
+        });
+    }
     for s in &cy.squads {
         if s.members.is_empty() {
             continue;
         }
-        if s.route.is_empty() {
-            pending.push(PendingView {
-                kind: "route",
-                text: format!("{}还没有路线", s.name),
-                tile: None,
-                op: None,
-                candidate: None,
-                district: None,
-            });
-        }
+        let text = if s.route.is_empty() {
+            format!("{}还没有路线", s.name)
+        } else if s.route.iter().all(|t| cy.tiles[*t as usize].owned) {
+            format!("{}的路线全在领地里，只在巡逻", s.name)
+        } else {
+            continue;
+        };
+        pending.push(PendingView {
+            kind: "route",
+            text,
+            tile: None,
+            op: None,
+            candidate: None,
+            district: None,
+        });
     }
 
     let income = calc.income.map(|v| v / 100);

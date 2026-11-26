@@ -472,8 +472,9 @@ pub fn self_sufficient(state: &GameState) -> bool {
     let patrol = patrol_rates(state);
     border.iter().all(|i| {
         let t = &state.cycle.tiles[*i as usize];
+        // Proven, not assumed: the last surge here was held, or patrols make up a loss.
         !t.alert()
-            && (t.last_surge != Some(false)
+            && (t.last_surge == Some(true)
                 || patrol.get(i).copied().unwrap_or(0) >= b.warden_surge_loss)
     })
 }
