@@ -5,7 +5,8 @@
 - 玩家看得到的文字只放在 `locales/<语言>/*.json`，代码里用 `t!("key", 参数 = 值)` 取；内容数据（`engine/content/*.json`）只放 id 和数字；图标只按 id 引用（`icons/pixel/<id>.txt`），图里不画字。
 - 存档不存渲染好的句子：要存的文字用 `txt!` 存 key 和参数，key 放 `events.json`；生成的名字存名字池下标。
 - 快速迭代期不写存档迁移：存档结构或 `events.json` 的 key 名变了，就把 `SAVE_VERSION` 加一，旧存档直接作废。
-- 挪文字前后各跑一次 `cargo run --release --example text_snapshot -- <文件>`，两次输出必须逐字一致。
+- 挪文字前后各跑一次 `cargo run --release --example text_snapshot -- <文件>`（网页是 `node scripts/text_dump.mjs <文件>`，在 `web/`），两次输出必须逐字一致。
+- 网页用 `web/src/i18n.ts` 的 `t('key', { 参数 })` / `tn()`，文字放 `locales/<语言>/web.json`。
 - 新代码不新增写死的文字。`cargo test` 里的 `i18n` 测试是棘轮：文件里的中文串变多会失败；挪走以后用 `I18N_BLESS=1 cargo test --test i18n` 记下新基线。
 
 ## 文字版（textui）跟着功能一起改
