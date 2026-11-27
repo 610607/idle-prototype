@@ -410,7 +410,12 @@ fn pct(bp: i64) -> String {
 }
 
 pub fn simulate(input: &BattleInput) -> BattleReport {
-    Battle::new(input).run()
+    if input.record {
+        Battle::new(input).run()
+    } else {
+        // Forecasts run these many times and keep no log, so skip building its text.
+        crate::i18n::quiet(|| Battle::new(input).run())
+    }
 }
 
 impl<'a> Battle<'a> {

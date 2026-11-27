@@ -8,7 +8,7 @@ use crate::operative::{self, Origin};
 use crate::state::{
     Assignment, Candidate, Dial, EventKind, GameState, SpecialKind, Terrain, TileUse,
 };
-use crate::{i18n, t, txt};
+use crate::{i18n, txt};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -39,7 +39,8 @@ pub struct DistrictCalc {
     pub militia: i32,
     pub volunteers: i32,
     pub trust_target: i32,
-    pub trust_factors: Vec<(String, i32)>,
+    /// Catalog key of each factor and its trust; the view renders the text.
+    pub trust_factors: Vec<(&'static str, i32)>,
     /// Talent gained per hour x100, per profession.
     pub talent_rate: BTreeMap<String, i32>,
     /// Residents gained per hour x10000 (0 when housing is full).
@@ -195,7 +196,7 @@ pub fn calc(state: &GameState) -> EconCalc {
             continue;
         }
         let policy = d.policy.as_deref().and_then(|p| c.policy(p));
-        let mut factors: Vec<(String, i32)> = vec![(t!("trust.base"), 50)];
+        let mut factors: Vec<(&'static str, i32)> = vec![("trust.base", 50)];
         let mut service = 0;
         let mut rift_adj = 0;
         let mut landmark = false;
@@ -235,19 +236,19 @@ pub fn calc(state: &GameState) -> EconCalc {
             }
         }
         if service != 0 {
-            factors.push((t!("trust.service"), service.clamp(-20, 20)));
+            factors.push(("trust.service", service.clamp(-20, 20)));
         }
         if rift_adj != 0 {
-            factors.push((t!("trust.rift"), rift_adj.clamp(-15, 10)));
+            factors.push(("trust.rift", rift_adj.clamp(-15, 10)));
         }
         if landmark {
-            factors.push((t!("trust.landmark"), 5));
+            factors.push(("trust.landmark", 5));
         }
         if d.contiguous {
-            factors.push((t!("trust.contiguous"), b.contiguity_trust));
+            factors.push(("trust.contiguous", b.contiguity_trust));
         }
         if dc.unhoused > 0 {
-            factors.push((t!("trust.unhoused"), -(dc.unhoused / 3).clamp(1, 20)));
+            factors.push(("trust.unhoused", -(dc.unhoused / 3).clamp(1, 20)));
         }
         let alerts = d
             .tiles
@@ -255,7 +256,7 @@ pub fn calc(state: &GameState) -> EconCalc {
             .filter(|t| cy.tiles[**t as usize].alert())
             .count() as i32;
         if alerts > 0 {
-            factors.push((t!("trust.alerts"), -15 * alerts));
+            factors.push(("trust.alerts", -15 * alerts));
         }
         let needs_power = d.tiles.iter().any(|t| {
             let tt = &cy.tiles[*t as usize];
@@ -267,7 +268,7 @@ pub fn calc(state: &GameState) -> EconCalc {
                     .is_some_and(|f| f.power > 0)
         });
         if out.power_bp < 10_000 && needs_power {
-            factors.push((t!("trust.blackout"), -10));
+            factors.push(("trust.blackout", -10));
         }
         let talker = cy.operatives.iter().any(|o| match o.assignment {
             Assignment::Garrison { tile } => {
@@ -277,7 +278,7 @@ pub fn calc(state: &GameState) -> EconCalc {
             _ => false,
         });
         if talker {
-            factors.push((t!("trust.garrison"), 3));
+            factors.push(("trust.garrison", 3));
         }
         dc.trust_target = factors.iter().map(|(_, v)| *v).sum::<i32>().clamp(0, 100);
         dc.trust_factors = factors;

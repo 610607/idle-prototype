@@ -1180,7 +1180,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 contiguous: d.contiguous,
                 trust: d.trust,
                 trust_target: dc.trust_target,
-                trust_factors: dc.trust_factors.clone(),
+                trust_factors: dc.trust_factors.iter().map(|(k, v)| (t!(k), *v)).collect(),
                 population: d.population,
                 housing: dc.housing,
                 unhoused: dc.unhoused,

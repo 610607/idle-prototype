@@ -5,13 +5,18 @@
 //! `{name}` in a string is replaced by the argument of that name. Lookups fall back to the
 //! default locale, then to the key itself, so a missing string shows up as its key.
 use serde::{Deserialize, Serialize};
+use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::{OnceLock, RwLock};
+use std::fmt::{Display, Write};
+use std::hash::{BuildHasherDefault, Hasher};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::OnceLock;
 
 pub const DEFAULT: &str = "zh-CN";
 
 /// Every bundled locale and its catalog files. Adding a language = adding a row here plus the
-/// files; the `catalogs_match` test checks it has the same keys as the default.
+/// files; the `catalogs_match` test checks it has the same keys as the default. The default
+/// comes first.
 const BUNDLED: &[(&str, &[&str])] = &[(
     "zh-CN",
     &[
@@ -30,17 +35,40 @@ pub enum Entry {
     Many(Vec<String>),
 }
 
-pub type Catalog = HashMap<String, Entry>;
+/// Lookups run inside forecasts, so keys use a cheap hash (FNV-1a) rather than SipHash; the keys
+/// are our own, not player input.
+#[derive(Default)]
+pub struct KeyHasher(u64);
 
-fn catalogs() -> &'static HashMap<&'static str, Catalog> {
-    static C: OnceLock<HashMap<&'static str, Catalog>> = OnceLock::new();
+impl Hasher for KeyHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        let mut h = if self.0 == 0 {
+            0xcbf2_9ce4_8422_2325
+        } else {
+            self.0
+        };
+        for b in bytes {
+            h = (h ^ *b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+        self.0 = h;
+    }
+}
+
+pub type Catalog = HashMap<String, Entry, BuildHasherDefault<KeyHasher>>;
+
+/// One catalog per row of `BUNDLED`, in the same order.
+fn catalogs() -> &'static [Catalog] {
+    static C: OnceLock<Vec<Catalog>> = OnceLock::new();
     C.get_or_init(|| {
         BUNDLED
             .iter()
             .map(|(lang, files)| {
-                let mut cat = Catalog::new();
+                let mut cat = Catalog::default();
                 for f in *files {
-                    let part: Catalog =
+                    let part: HashMap<String, Entry> =
                         serde_json::from_str(f).unwrap_or_else(|e| panic!("locales/{lang}: {e}"));
                     for (k, v) in part {
                         if cat.insert(k.clone(), v).is_some() {
@@ -48,47 +76,73 @@ fn catalogs() -> &'static HashMap<&'static str, Catalog> {
                         }
                     }
                 }
-                (*lang, cat)
+                cat
             })
             .collect()
     })
 }
 
-static ACTIVE: RwLock<&'static str> = RwLock::new(DEFAULT);
+/// Index into `BUNDLED`.
+static ACTIVE: AtomicUsize = AtomicUsize::new(0);
 
 pub fn locales() -> Vec<&'static str> {
     BUNDLED.iter().map(|(l, _)| *l).collect()
 }
 
 pub fn locale() -> &'static str {
-    *ACTIVE.read().unwrap()
+    BUNDLED[ACTIVE.load(Ordering::Relaxed)].0
 }
 
 /// Content names are filled in when content first loads, so pick the language before that.
 pub fn set_locale(lang: &str) -> Result<(), String> {
-    let Some((l, _)) = BUNDLED.iter().find(|(l, _)| *l == lang) else {
+    let Some(i) = BUNDLED.iter().position(|(l, _)| *l == lang) else {
         return Err(format!("unknown locale {lang}"));
     };
-    if crate::content::loaded() && *l != locale() {
+    if crate::content::loaded() && BUNDLED[i].0 != locale() {
         return Err("set the locale before the engine starts".into());
     }
-    *ACTIVE.write().unwrap() = l;
+    ACTIVE.store(i, Ordering::Relaxed);
     Ok(())
 }
 
 fn entry(key: &str) -> Option<&'static Entry> {
     let c = catalogs();
-    c.get(locale())
-        .and_then(|cat| cat.get(key))
-        .or_else(|| c.get(DEFAULT).and_then(|cat| cat.get(key)))
+    c[ACTIVE.load(Ordering::Relaxed)]
+        .get(key)
+        .or_else(|| c[0].get(key))
 }
 
 pub fn has(key: &str) -> bool {
     entry(key).is_some()
 }
 
+thread_local! {
+    static QUIET: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Runs `f` with every lookup returning an empty string. Battles that keep no log run many
+/// times inside each forecast and throw their text away; this skips building it. Nothing that
+/// runs inside may keep text or decide anything by it.
+pub fn quiet<R>(f: impl FnOnce() -> R) -> R {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            QUIET.with(|q| q.set(self.0));
+        }
+    }
+    let _restore = Restore(QUIET.with(|q| q.replace(true)));
+    f()
+}
+
+fn is_quiet() -> bool {
+    QUIET.with(|q| q.get())
+}
+
 /// The string for `key`, or the key itself when no catalog has it.
 pub fn tr(key: &str) -> String {
+    if is_quiet() {
+        return String::new();
+    }
     match entry(key) {
         Some(Entry::One(s)) => s.clone(),
         Some(Entry::Many(v)) => v.join(", "),
@@ -106,12 +160,19 @@ pub fn list(key: &str) -> Vec<String> {
 }
 
 /// `tr` with `{name}` placeholders filled from `args`.
-pub fn fmt(key: &str, args: &[(&str, String)]) -> String {
-    fill(&tr(key), args)
+pub fn fmt(key: &str, args: &[(&str, &dyn Display)]) -> String {
+    if is_quiet() {
+        return String::new();
+    }
+    match entry(key) {
+        Some(Entry::One(s)) => fill(s, args),
+        Some(Entry::Many(v)) => fill(&v.join(", "), args),
+        None => key.to_string(),
+    }
 }
 
 /// Only `{identifier}` is a placeholder, so JSON examples like `{"cmd":"claim"}` pass through.
-pub fn fill(template: &str, args: &[(&str, String)]) -> String {
+pub fn fill(template: &str, args: &[(&str, &dyn Display)]) -> String {
     let mut out = String::with_capacity(template.len() + 16);
     let mut rest = template;
     while let Some(open) = rest.find('{') {
@@ -123,7 +184,9 @@ pub fn fill(template: &str, args: &[(&str, String)]) -> String {
         match (close, ident) {
             (Some(c), true) => {
                 match args.iter().find(|(n, _)| *n == name) {
-                    Some((_, v)) => out.push_str(v),
+                    Some((_, v)) => {
+                        let _ = write!(out, "{v}");
+                    }
                     None => out.push_str(&rest[open..open + c + 2]),
                 }
                 rest = &after[c + 1..];
@@ -145,7 +208,7 @@ macro_rules! t {
         $crate::i18n::tr($key)
     };
     ($key:expr, $($name:ident = $val:expr),+ $(,)?) => {
-        $crate::i18n::fmt($key, &[$((stringify!($name), ($val).to_string())),+])
+        $crate::i18n::fmt($key, &[$((stringify!($name), &($val) as &dyn ::std::fmt::Display)),+])
     };
 }
 
@@ -183,10 +246,12 @@ impl Text {
     }
 
     pub fn render(&self) -> String {
-        let args: Vec<(&str, String)> = self
+        let rendered: Vec<String> = self.args.values().map(Arg::render).collect();
+        let args: Vec<(&str, &dyn Display)> = self
             .args
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.render()))
+            .keys()
+            .zip(&rendered)
+            .map(|(k, v)| (k.as_str(), v as &dyn Display))
             .collect();
         fmt(&self.key, &args)
     }
@@ -243,9 +308,10 @@ macro_rules! txt {
 
 /// Every key of a bundled locale, for tests and tools.
 pub fn keys(lang: &str) -> Vec<String> {
-    let mut k: Vec<String> = catalogs()
-        .get(lang)
-        .map(|c| c.keys().cloned().collect())
+    let mut k: Vec<String> = BUNDLED
+        .iter()
+        .position(|(l, _)| *l == lang)
+        .map(|i| catalogs()[i].keys().cloned().collect())
         .unwrap_or_default();
     k.sort();
     k
@@ -258,12 +324,12 @@ mod tests {
     #[test]
     fn fills_placeholders() {
         assert_eq!(
-            fill("{a} to {b}, {c}", &[("a", "1".into()), ("b", "2".into())]),
+            fill("{a} to {b}, {c}", &[("a", &1), ("b", &"2")]),
             "1 to 2, {c}"
         );
         assert_eq!(fill("no placeholders", &[]), "no placeholders");
         assert_eq!(
-            fill(r#"{"squad":{sq},"m":[1]}"#, &[("sq", "4".into())]),
+            fill(r#"{"squad":{sq},"m":[1]}"#, &[("sq", &4)]),
             r#"{"squad":4,"m":[1]}"#
         );
     }
@@ -278,10 +344,20 @@ mod tests {
             x.render(),
             fmt(
                 "event.research.done",
-                &[("name", tr("doctrine.react.name"))]
+                &[("name", &tr("doctrine.react.name"))]
             )
         );
         assert!(!x.render().contains('{'));
+    }
+
+    #[test]
+    fn quiet_skips_text() {
+        let key = "event.research.done";
+        assert_eq!(
+            quiet(|| (tr(key), crate::t!(key, name = 1))),
+            (String::new(), String::new())
+        );
+        assert!(!tr(key).is_empty(), "quiet ends with its closure");
     }
 
     #[test]
