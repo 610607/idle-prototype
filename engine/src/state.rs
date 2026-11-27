@@ -442,7 +442,7 @@ pub struct GameState {
 }
 
 /// One measured outcome (see `GameState::trace`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub enum Trace {
     Route {
         t: i64,
@@ -461,6 +461,13 @@ pub enum Trace {
         kind: EventKind,
         key: String,
         tile: Option<u16>,
+    },
+    /// An accepted command (`Engine::command`), from any client: a play session's journal
+    /// (docs/eval-interface.md), replayed to recompute metrics. The engine is deterministic and
+    /// how time is advanced does not change the result, so (time, command) pairs replay exactly.
+    Command {
+        t: i64,
+        cmd: crate::commands::Command,
     },
 }
 

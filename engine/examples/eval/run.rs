@@ -360,7 +360,7 @@ pub fn play_full(seed: u64, persona: Persona, hours: i64) -> (Metrics, Vec<crate
                             s_edge.add(held);
                         }
                     }
-                    Trace::Event { .. } => {}
+                    Trace::Event { .. } | Trace::Command { .. } => {}
                 }
             }
             deepest = deepest_owned(&e);

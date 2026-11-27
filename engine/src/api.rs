@@ -155,6 +155,13 @@ impl Engine {
         let r = commands::apply(&mut self.state, cmd);
         if r.is_ok() {
             self.tide = None;
+            let t = self.state.time;
+            if let Some(tr) = self.state.trace.as_mut() {
+                tr.push(crate::state::Trace::Command {
+                    t,
+                    cmd: cmd.clone(),
+                });
+            }
         }
         r
     }
