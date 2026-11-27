@@ -175,9 +175,13 @@ fn goal_section(out: &mut String, j: &Judgment, kind: &str) {
 pub fn markdown(j: &Judgment, goals_path: &str) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "# 评估报告\n");
+    let gate = match j.goals.first().map(|g| g.gate_personas.join("、")) {
+        Some(p) if !p.is_empty() => format!("门槛只由 {p} 判，其他人格超出区间记为观察。"),
+        _ => String::new(),
+    };
     let _ = writeln!(
         out,
-        "目标：`{}`（{} 条）。\n\n| 运行 | 种子 | 小时 | 补丁 | 版本 | 基线 |\n|---|---|---|---|---|---|",
+        "目标：`{}`（{} 条）。{gate}\n\n| 运行 | 种子 | 小时 | 补丁 | 版本 | 基线 |\n|---|---|---|---|---|---|",
         short(goals_path),
         j.goals.len()
     );

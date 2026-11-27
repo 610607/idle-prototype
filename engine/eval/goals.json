@@ -1,5 +1,6 @@
 {
-  "_doc": "设计目标（docs/balance-eval.md §评估者）。每条目标用一句话写体验，绑定几项指标的区间。kind：experience 是游戏该有的样子，selfcheck 是评估工具自己还可信。level：gate 不过就让 check / review 以退出码 1 结束；watch 只报告。checks 的格式同旧 bands.json：{指标 id: [{stat, min, max, personas, missing_fails, watch}]}；personas 为空表示所有人格，以 * 结尾表示前缀（如 llm:*）。全部是草案，区间要逐条确认。",
+  "_doc": "设计目标（docs/balance-eval.md §评估者）。每条目标用一句话写体验，绑定几项指标的区间。kind：experience 是游戏该有的样子，selfcheck 是评估工具自己还可信。level：gate 不过就让 check / review 以退出码 1 结束；watch 只报告。gate_personas：只有这些人格（参考玩家）的结果能让门槛不过，其他人格超出区间记为观察（打法读数）；为空表示所有人格。checks 的格式同旧 bands.json：{指标 id: [{stat, min, max, personas, missing_fails, watch}]}；personas 为空表示所有人格，以 * 结尾表示前缀（如 llm:*）。2026-11-27 和设计者逐条确认过：目标是设计意图，实测不达标就改游戏，不放宽区间。",
+  "gate_personas": ["greedy"],
   "goals": [
     {
       "id": "week_cycle",
@@ -126,10 +127,10 @@
       "id": "score_curve",
       "kind": "experience",
       "level": "watch",
-      "text": "成果速率的峰值落在一轮中段，开头不是最快的时候（区间按 72 小时一轮定，一周一轮要重定）",
+      "text": "成果速率的峰值落在一轮中段（约第 3–5 天，56–112 小时），开头不是最快的时候",
       "doc": "docs/balance-curves-research.md 目标表",
       "checks": {
-        "score_rate.peak_h": [{ "stat": "p50", "min": 48, "max": 96 }],
+        "score_rate.peak_h": [{ "stat": "p50", "min": 56, "max": 112 }],
         "score_rate.h24_vs_peak": [{ "stat": "p50", "max": 0.7 }]
       }
     },

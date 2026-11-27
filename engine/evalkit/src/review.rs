@@ -74,16 +74,26 @@ pub struct Goal {
     pub text: String,
     pub doc: String,
     pub checks: BTreeMap<String, Vec<Band>>,
+    /// Personas whose results can fail this gate (the file's `gate_personas`); empty = all.
+    /// Other personas' results outside a band read as watch: a strategy reading, not a verdict.
+    #[serde(skip)]
+    pub gate_personas: Vec<String>,
 }
 
 #[derive(Deserialize)]
 struct GoalFile {
+    /// Personas that judge the gates (the reference player); empty = every persona.
+    #[serde(default)]
+    gate_personas: Vec<String>,
     goals: Vec<Goal>,
 }
 
 pub fn load(path: &str) -> Vec<Goal> {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-    let f: GoalFile = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let mut f: GoalFile = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{path}: {e}"));
+    for g in &mut f.goals {
+        g.gate_personas = f.gate_personas.clone();
+    }
     let mut ids = BTreeSet::new();
     for g in &f.goals {
         assert!(ids.insert(&g.id), "{path}: duplicate goal {}", g.id);
@@ -154,7 +164,7 @@ pub fn evaluate<'a>(goals: &'a [Goal], f: &RunFile) -> Vec<Outcome<'a>> {
     for g in goals {
         for (id, bands) in &g.checks {
             for b in bands.iter().filter(|b| applies(&b.personas, &f.persona)) {
-                let watch = b.watch || g.level == "watch";
+                let watch = b.watch || g.level == "watch" || !applies(&g.gate_personas, &f.persona);
                 let Some(v) = f.metrics.get(id) else {
                     out.push(Outcome {
                         goal: g,
@@ -709,6 +719,35 @@ mod tests {
         );
         assert!(report.contains("不过的门槛：") && report.contains("defense"));
         assert!(report.contains("| `surge_lost.all` | greedy | 0.20 | 0.65 |"));
+    }
+
+    #[test]
+    fn only_the_reference_persona_fails_a_gate() {
+        let goals = load(&goals_path());
+        let run = |persona: &str| {
+            let mut f = RunFile {
+                persona: persona.into(),
+                hours: 24,
+                seeds: vec![0, 1, 2],
+                ..Default::default()
+            };
+            f.metrics
+                .insert("surge_lost.all".into(), vec![Some(0.9); 3]);
+            f
+        };
+        let status = |f: &RunFile| {
+            evaluate(&goals, f)
+                .into_iter()
+                .find(|o| o.metric == "surge_lost.all")
+                .unwrap()
+                .status
+        };
+        assert_eq!(status(&run("greedy")), Status::Fail);
+        assert_eq!(
+            status(&run("turtle")),
+            Status::Watch,
+            "another persona outside a gate band is a reading, not a verdict"
+        );
     }
 
     #[test]

@@ -19,7 +19,7 @@
 | 爽点节奏 | `payoff`（时间轴、新鲜度、回访命中、峰值） | `hook`、`every_visit`、`peaks_rise`、`novelty_paced` | 中：分级已被 LLM 试玩粗校准（`llm.delight_lift` 0.29～0.43） |
 | 防守 | `run`（来潮失守率） | `defense`（门槛） | 中：参考机器人会防守了（失守 0.67 → 0.47），但同一种子 Sonnet 打到 0.22、机器人 0.43，机器人只是下限 |
 | 经济流转 | `run`（库存、无事可花） | `economy_flow`（门槛） | 高 |
-| 三项成果 | `run` | `three_lines`（门槛）、`score_curve` | 中：`score_curve` 区间还按 72 小时一轮 |
+| 三项成果 | `run` | `three_lines`（门槛）、`score_curve` | 中 |
 | 玩家感受 | `session`（LLM 会话重放，`llm.*`） | `llm_feel` | 低：每种性格 1 局 |
 | 工具自身 | 注册表（含缺值读法）、事件归类、会话过期、模型比值、标尺封顶、指标消失 | `model_agrees`、`payoff_calibrated`、`interface_usable` 和自动发现 | 高：都有测试 |
 
@@ -46,7 +46,7 @@
    - Sonnet 只扮了精算规划，模型和性格分不开。
    - 感受文字靠分析员模板（`docs/prompts/analyst.md`）人工归纳。
    - 要补：每种性格至少 3 个种子；同一性格换模型跑一次作对照。
-5. **设计目标还是草案**。`goals.json` 是按文档起草的，没有逐条确认；`score_curve` 的区间按 72 小时一轮定，要重定。
+5. **设计目标确认了，门槛大多不过**。`goals.json` 已和设计者逐条确认（2026-11-27）：门槛只由参考玩家判，目标不达标就改游戏。现在 15 条里 5 条门槛不过（`week_cycle`、`combat_gate`、`defense`、`economy_flow`、`three_lines`），在改游戏之前 `review` 会一直以退出码 1 结束，看报告时要和基线比变化，而不是看过没过。
 6. **跑一局的时间**。
    - 补防守规则后，参考机器人一个种子一周约 2 分钟（种子 0 实测 137 秒）；种子按核分摊，8 个种子在 4 核上每核两个，约 5 分钟。
    - 更准的防守做法（每小时把建造也逐个推演）要慢三倍，没采用（`docs/balance-eval.md`“机器人人格”）。
@@ -87,7 +87,7 @@
 - [ ] 找打法和漏洞的搜索型人格（第二节 2）
 - [ ] 选择分叉评估（第二节 3）
 - [ ] 第二批 LLM 试玩：每种性格 3 个种子，加一组换模型对照（第二节 4）
-- [ ] 逐条确认 `goals.json`，重定 `score_curve`（第二节 5）
+- [x] 逐条确认 `goals.json`，重定 `score_curve`（第二节 5）：峰值 56～112 小时，门槛只由 `greedy` 判
 - [x] 跑数文件的浮点数逐位往返：`evalkit` 的 serde_json 开了 `float_roundtrip`，`review --bless` 写出的基线和原运行文件逐字节相同；六份基线已按原运行文件重写（只差最后一位的 289 处）。`cargo test` 里的 `baselines_round_trip_exactly` 会拦。引擎的状态和内容里没有浮点数，这个特性即使随工作区一起编进引擎也不影响规则。
 - [ ] 资源按来源记账：情报有档案馆、线索格、见习任务三个来源，现在只记总数，查不出后半周靠哪个（`docs/game-issues.md` 第 3 条）
 
