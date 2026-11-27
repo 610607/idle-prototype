@@ -6,6 +6,7 @@
 |---|---|---|---|
 | [player.md](player.md) | 试玩玩家：按会话协议玩一局，每次回访记感受，阶段末打分 | 要 LLM 试玩时（`docs/eval-interface.md`） | 会话目录，`eval session` 重放算分 |
 | [analyst.md](analyst.md) | 分析员：读评估报告，分清游戏问题和评估问题，写成可追加的条目 | 每次 `eval review` 之后 | 人审核后追加到 `docs/game-issues.md`，评估问题进待办 |
+| [personas.md](personas.md) | 试玩玩家的性格库：每段一种玩家的动机、玩法习惯和好恶 | 填 `player.md` 的 `{{PERSONA}}`，一批试玩分配不同性格 | 玩家提示词 |
 | [declare.md](declare.md) | 声明起草：新系统进来时，起草事件归类、指标、目标、机器人规则 | 加新系统、新事件、新命令时 | 人审核后改 `engine/eval/*.json` 和机器人 |
 
 ## 变量
@@ -24,3 +25,4 @@
 ## 改动记录
 
 - 2026-11-27：建立三个模板。
+- 2026-11-27：`player.md` 加 `{{PERSONA}}`，新建 `personas.md`（精算规划、扩张征服、收集探索、轻度休闲），同一局面按不同喜好比较感受；命令行方式改看纯文字观察（比 JSON 省约三成篇幅），允许查 `agent_cli info`。

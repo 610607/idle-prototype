@@ -65,7 +65,7 @@ manifest.json：
 
 - `protocol`：本协议的版本。观察、行动或目录结构有不兼容的改动时加一，harness 看到不认识的版本应当报错退出。
 - `build`：游戏版本指纹，即 `SAVE_VERSION` 和全部内容数据（含 `balance.json`）的哈希。只作参考：引擎代码改了它不一定变，真正的判据是重放后的存档指纹。
-- `player`：谁在玩，评估结果里的人格名是 `llm:<player>`（机器人写的会话用机器人人格名）。
+- `player`：谁在玩，评估结果里的人格名是 `llm:<player>`（机器人写的会话用机器人人格名）。玩家扮演某种性格时写成 `<模型>-<性格 id>`，如 `sonnet-planner`（性格见 `docs/prompts/personas.md`）。
 - `schedule`：回访日程（见“日程”）。机器人写的会话记为 `bot`：机器人按自己的人格节奏行动，没有回访，visits.jsonl 为空；save.json 是终局存档。这种目录只给 `eval session` 重放，不能用 `agent_cli session` 接着玩。
 
 visits.jsonl 的一行：
@@ -207,7 +207,8 @@ cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --session
 
 完整的玩家提示词模板见 `docs/prompts/player.md`，下面是要点。
 
-- 只许用 `agent_cli session` 这几条命令，不读仓库。
+- 只许用 `agent_cli session` 这几条命令（外加局面里提到的 `agent_cli info`），不读仓库。
+- 可以给玩家一种性格（`docs/prompts/personas.md`），一批试玩分配不同性格，比较同一局面的不同感受。
 - 每次：`obs` 看局面 → 决定 → `act`（带 `--feel` 和 `--why`）。`need` 为 `scores` 时先打分。
 - 不要一次挑太多菜单项；id 不在当前菜单里会被拒绝，看下一次观察的 `results`。
 - 同时最多 3 个子代理（`CLAUDE.md`）。
