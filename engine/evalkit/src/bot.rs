@@ -335,7 +335,7 @@ fn lost_in(tide: &[TideView]) -> usize {
 
 impl Bot {
     /// Defense pass, played off the forecast the way a careful player does once the free fix (an idle
-    /// operative guarding a threatened tile, earlier in `step_with`) is used up:
+    /// operative guarding a threatened tile, earlier in `Bot::step`) is used up:
     /// 1. Guard moves: while the forecast loses surges, dry-run garrisons of the threatened tiles by
     ///    operatives not in a squad (idle, or guarding elsewhere) whose preview holds, and take the
     ///    one that saves the most. A move is judged on the whole forecast (`dry_run`'s `tide_after`),
@@ -402,7 +402,7 @@ impl Bot {
     /// One defensive building for a tile the forecast still loses: an outpost in its district when
     /// the district has none (militia guard every tile of a district), else a barricade next to it
     /// (radius 1, fortify). Only where the district has idle residents to staff half of it and
-    /// housing to spare, like the staffing builds in `step_with`.
+    /// housing to spare, like the staffing builds in `Bot::step`.
     fn fortify(&mut self, e: &mut Engine) {
         let v = e.view();
         let cap = idle_engine::content::balance().housing_capacity;

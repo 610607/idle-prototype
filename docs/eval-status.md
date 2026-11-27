@@ -6,11 +6,11 @@
 
 - **一轮（一周）之内基本成体系**：节奏、战斗、经济、防守、爽点时间轴、玩家感受都有确定性的指标和设计目标，`eval review` 能一次给出结论、自检和覆盖情况，LLM 试玩能接进同一套指标。
 - **最大的缺口是轮回**：评估只跑第一轮，组织等级、跨轮保留、知识库这一层完全没测过，而它是设计里的长期成长线。其次是只有一种参考打法，测不出“别的打法行不行”“选择有没有意义”。
-- **代码能用，但建议在补轮回评估之前做一次中等规模的整理**（第三节）。不是重写：每一步都用“机器人指标逐位相同”验证行为没变。
+- **代码已整理**（第三节，2026-11-27）：评估工具成了独立的库，机器人、测量、评估者都拆开了，补轮回和更多人格时改动面小。每一步都用“整理前的全部输出逐字节相同”验证行为没变。
 
 ## 一、现在能评估什么
 
-| 维度 | 工具（`engine/examples/eval/`） | 设计目标（`eval/goals.json`） | 可信度 |
+| 维度 | 工具（`engine/evalkit/`） | 设计目标（`eval/goals.json`） | 可信度 |
 |---|---|---|---|
 | 一周节奏：进环时间 | `run`、`model`（节奏模型） | `week_cycle`（门槛） | 高：8 个种子，模型对得上 |
 | 战斗卡扩张 | `strength`（模型强度、模拟标尺、墙）、`calibrate`、`price` | `combat_gate`（门槛） | 中：模型只看攻防血，效果类词条靠模拟标尺 |
@@ -53,38 +53,40 @@
 
 ## 三、代码结构
 
-现状：
+2026-11-27 按盘点时的建议分五步整理完：工具变成库、机器人改成显式策略、测量拆成探针、评估者拆成判定和报告、整理脚本。整理前：评估工具是一个 example（`engine/examples/eval/`，12 个文件），机器人 `examples/bot_policy.rs` 被 8 个目标用 `#[path]` 各编一份；人格靠线程局部变量 `DEEP_FIRST`、`USED`；`run::measure` 一个函数约 180 行写下所有基础指标；`review::review` 一个函数约 320 行，判定和渲染混在一起。
 
-- `engine/examples/eval/` 12 个文件约 5300 行，作为一个 example 编译，另外按路径包含 `examples/synergy.rs` 和 `examples/bot_policy.rs`。
-- `examples/bot_policy.rs` 约 450 行，被 8 个目标用 `#[path]` 直接包含（eval、agent_cli、text_snapshot、web_fixtures、bot、custcost、midsave、population）。
-- 另有 12 个一次性的探索脚本（bot、battle、militia、opening、population、custcost、customize、doctrines、fixtures、synergy、midsave、dump_view）。
+现在：
 
-问题：
+- `engine/` 是工作区：规则引擎 `idle_engine` 和评估工具库 `evalkit`（`engine/evalkit/`）。数据仍在 `engine/eval/`（目标、基线、注册表、价格、爽点归类、会话）。
+- `evalkit/src/` 的分工：
 
-- **复用靠 `#[path]`**：example 之间不能互相依赖，机器人和 `synergy.rs` 只能按路径包含，每个包含它的目标各编一份。改机器人会悄悄改变所有探索脚本的输出，而它们没有测试。
-- **人格靠全局开关**：探索风格是线程局部变量 `DEEP_FIRST`，命令计数是线程局部 `USED`。参数不显式，人格一多就难管；同一线程连续跑两局时还要小心状态残留。
-- **测量循环是一整块**：`run::measure` 一个函数约 180 行，所有基础指标写在一起，新系统接指标要改这里。`payoff::Timeline` 和 `strength::Series` 已经是“每步喂一次、最后出指标”的形状，基础指标还不是。
-- **评估报告的判定和渲染混在一起**：`review::review` 一个函数约 320 行。
-- 引擎里 `textui.rs`（约 1300 行）、`view.rs`（约 1500 行）、`combat.rs`（约 2700 行）也大，但属于游戏本体，之后再说。
+| 模块 | 内容 |
+|---|---|
+| `bot.rs` | 机器人：`Policy`（先打最深、按闲置居民建造、研究三个开关）+ `Bot`（一局一个，自己记被接受的命令）。判断空闲按分派状态，不再比较界面文字 |
+| `run.rs` | 人格（`Persona::policy`）、开局、驾驶者（机器人或日志重放）、`measure`（约 40 行，只推进时间、让驾驶者行动）、多种子运行 |
+| `probes.rs` | 探针：`Pace`（占地、到环时间、检查点上的前线难度和最强小队）、`Fights`（路线战斗按深度、来潮按位置）、`Economy`（收入、库存、花钱节奏、研究时机、成果），加上 `strength::Series` 和 `payoff::Timeline` |
+| `game.rs` | 几处共用的局面读数（最深环、可打的格子、库存、小队战斗单位），原来在 `run.rs` 和 `strength.rs` 各写一份 |
+| `review.rs` | 目标、逐条检查、判定（`judge` 返回 `Judgment`：每条检查和基线读数、带类型的自动发现、覆盖、显著变化） |
+| `report.rs` | 只负责把判定写成 `eval review` 的 markdown 和 `eval check` 的逐行输出 |
+| 其余 | `registry`（指标注册表）、`stats`、`payoff`、`strength`、`model`、`calib`、`power`、`price`、`synergy`、`session` |
 
-建议的整理，按顺序做，每步都用“`greedy` 8 个种子的指标逐位相同”和现有测试验证：
+- 脚本：`evalkit/examples/` 放 `eval` 和用到机器人或 `synergy` 的脚本，`engine/examples/` 放文字版外壳 `agent_cli` 和不依赖机器人的脚本。`autoplay` 从 `agent_cli` 里拆出来成了独立脚本，文字版不再带机器人。
+- 探索脚本没有删：文档里的数字（`docs/play-guide.md`、`docs/gameplay-exploration.md`、`docs/ideas.md`）靠它们复现。现在它们依赖库而不是按路径包含，`cargo test` 会把它们编一遍；`engine/README.md` 把命令分成评估工具、文字版和试玩、开发小工具、探索脚本四组，写明探索脚本的输出不保证和文档一致。
+- 顺带的改动：网页的 `npm run wasm` 改成只编引擎（`cargo build -p idle_engine`），因为工作区默认成员包含 `evalkit`。
 
-1. **评估工具变成一个库**：在 `engine/` 下建一个工作区成员（比如 `engine/evalkit`，库加 `eval` 程序），机器人策略、会话重放、指标、评估者都放进库里；`agent_cli` 等通过依赖使用，不再 `#[path]`。
-2. **机器人改成显式的策略结构**：风格、节奏、防守开关等作为字段，人格就是一组字段值；去掉两个线程局部变量，命令计数随对局返回。
-3. **测量拆成探针**：每个系统一个探针（每步喂一次、每小时喂一次、最后出指标），`measure` 只负责推进时间和把行动交给驱动方。新系统接入 = 加一个探针 + 登记指标 + 声明事件。
-4. **评估者拆成判定和报告**两部分。
-5. **探索脚本**：仍被文档引用或被 eval 用到的（`synergy`、`doctrines`、`fixtures`）留下；被 `eval` 取代的（`bot`、`militia`、`opening`、`population`、`custcost`、`customize`）移到 `examples/probes/` 或删掉，`midsave`、`dump_view`、`battle` 留作开发小工具。
+验证：整理前录了一份参考输出（`eval` 的 run、session、review、check、compare、metrics、numbers、pace、payoff、timeline、model、price，文字快照，网页快照存档，`autoplay`），每一步之后重跑，全部逐字节相同；`cargo test` 全过。最后用整理后的代码跑 `greedy` 8 个种子 × 168 小时，和整理前那次运行的文件逐项相同，`eval review` 对提交的基线报告显著变化 0 项。
 
-必要性：现在不整理也不影响结果正确；但第二节的第 1、2 条（轮回、更多人格）都要大改 `run.rs` 和机器人，先整理再加，改动面小得多。
+还没动的：引擎里 `textui.rs`（约 1300 行）、`view.rs`（约 1500 行）、`combat.rs`（约 2700 行）属于游戏本体，之后再说；`payoff.rs`（约 760 行）、`session.rs`、`review.rs`（各约 600 行）还偏大，但职责单一，暂不拆。
 
 ## 四、待办
 
-- [ ] 代码整理（第三节 1～5）
+- [x] 代码整理（第三节）
 - [ ] 多轮运行和轮回指标、目标（第二节 1）
 - [ ] 更多人格和打法离散度（第二节 2）
 - [ ] 选择分叉评估（第二节 3）
 - [ ] 第二批 LLM 试玩：每种性格 3 个种子，加一组换模型对照（第二节 4）
 - [ ] 逐条确认 `goals.json`，重定 `score_curve`（第二节 5）
+- [ ] 跑数文件的浮点数读回来不是逐位精确的（serde_json 默认的解析），`review --bless` 把读回来的值再写一遍，基线里少数值和原运行差最后一位（如 0.9230769230769232 对 …231）。比较两边都经过同样的解析，目前不影响结论；要逐位一致就给 `evalkit` 的 serde_json 开 `float_roundtrip`，再重写一次基线。
 - [ ] 资源按来源记账：情报有档案馆、线索格、见习任务三个来源，现在只记总数，查不出后半周靠哪个（`docs/game-issues.md` 第 3 条）
 
 ## 五、最近修掉的工具问题
