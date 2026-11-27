@@ -378,7 +378,7 @@ export function Board() {
           return (
             <g key={'m' + s.id} pointerEvents="none">
               <rect x={x - 10} y={y - 10} width={20} height={20} fill={color} stroke={COL.sunk} strokeWidth={2} />
-              <BoardIcon id="squad" x={x} y={y} size={16} color={COL.sunk} accent={COL.sunk} />
+              <BoardIcon id="squad" x={x} y={y} size={16} solid={COL.sunk} />
             </g>
           );
         })}
