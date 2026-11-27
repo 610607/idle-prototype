@@ -13,16 +13,19 @@
 //!   ladder, as it does for today's squads. Flips, simulated, still see both. The ladder is
 //!   built with the process's balance, so a `--patch` that changes enemy numbers moves the
 //!   yardstick too: compare S across runs only under the same enemies.
-//! - Simulated ladder count L(state) (`ladder_won`): how many of the same 56 ladder encounters the
-//!   best squad wins in `combat::simulate`, doctrines applied as for S. It sees what the model
-//!   cannot (effect-only doctrines); it costs 56 battles per squad, so it is read only at the
-//!   checkpoints (and hour 1 and the last hour) and at research picks → `payoff.ladder.h<N>`,
-//!   `payoff.growth.ladder`.
+//! - Simulated ladder count L(state) (`ladder_won`): how many encounters of the full ladder, rungs
+//!   1..=13 (rings 1–7, then ring 7 at ×1.25 … ×3, `synergy::OVER`; 104 encounters), the best
+//!   squad wins in `combat::simulate`, doctrines applied as for S. It sees what the model cannot
+//!   (effect-only doctrines). The rungs past ring 7 keep it off the ceiling once the squad wins
+//!   rings 1–7 (around hour 72 today); `payoff.ladder.size` is the ladder's length, so a reading
+//!   at the size is a ceiling. It costs one battle per encounter and squad, so it is read only at
+//!   the checkpoints (and hour 1 and the last hour) and at research picks →
+//!   `payoff.ladder.h<N>`, `payoff.growth.ladder`. S stays on rungs 1..=7.
 //! - Research size: at each research pick, m = log2(S after ÷ S before), the net ladder wins it
 //!   adds (L after − L before, negative when a doctrine costs wins;
 //!   `payoff.ladder_gain.research.<k>`, `payoff.research.ladder_gain`) and the fightable tiles up
 //!   to two rings past the territory that the best squad turns from loss to win in a simulated
-//!   one-tile battle. L tops out at 56: once the squad wins the whole ladder, a pick reads 0.
+//!   one-tile battle.
 //! - Hourly series: S at the end of every hour → `payoff.power.h<N>`, `payoff.growth.power`,
 //!   `payoff.sawtooth.power` (share of the growth that came in felt hourly jumps).
 //! - Combat walls: the frontier (fightable ring M + 1 tiles next to the territory) is open when
@@ -61,23 +64,32 @@ pub struct Mag {
     pub ladder: Option<i32>,
 }
 
-/// The fixed yardstick: unit rates and the ladder encounters of rungs 1..=7. Measured once per
-/// process (`eval run` plays seeds on several threads; the first one to get here measures).
+/// The fixed yardstick: unit rates and the ladder encounters. Measured once per process (`eval
+/// run` plays seeds on several threads; the first one to get here measures).
 struct Yardstick {
     profile: Profile,
-    encs: Vec<synergy::Enc>,
+    /// Every rung, 1..=13 (rings 1–7, then ring 7 stronger), in order: the ladder for L.
+    ladder: Vec<synergy::Enc>,
+    /// How many of them are rungs 1..=7 (rings 1–7): the encounters for S.
+    rings: usize,
+}
+
+impl Yardstick {
+    /// Rungs 1..=7, for S.
+    fn encs(&self) -> &[synergy::Enc] {
+        &self.ladder[..self.rings]
+    }
 }
 
 fn yardstick() -> &'static Yardstick {
     static Y: OnceLock<Yardstick> = OnceLock::new();
-    Y.get_or_init(|| Yardstick {
-        profile: model::profile(),
-        encs: synergy::encounters()
-            .into_iter()
-            .skip(1)
-            .take(7)
-            .flatten()
-            .collect(),
+    Y.get_or_init(|| {
+        let rungs: Vec<Vec<synergy::Enc>> = synergy::encounters().into_iter().skip(1).collect();
+        Yardstick {
+            profile: model::profile(),
+            rings: rungs.iter().take(7).map(Vec::len).sum(),
+            ladder: rungs.into_iter().flatten().collect(),
+        }
     })
 }
 
@@ -140,7 +152,7 @@ fn yard(sq: &Squad, doctrines: &[String]) -> Option<f64> {
     let allies = armed(sq, doctrines);
     let cls = |u: &UnitSpec| sq.class(u);
     let (mut sum, mut n) = (0.0, 0.0);
-    for e in &y.encs {
+    for e in y.encs() {
         let s = model::margins(&y.profile, &model::battle(&allies, e), &cls).strength();
         if s.is_finite() && s > 0.0 {
             sum += s.ln();
@@ -158,12 +170,12 @@ fn best(sqs: &[Squad], doctrines: &[String]) -> Option<(usize, f64)> {
         .max_by(|a, b| a.1.total_cmp(&b.1))
 }
 
-/// Ladder encounters (rungs 1..=7) one squad wins in simulation with `doctrines` held, applied
-/// the same way as for `yard`.
+/// Encounters of the full ladder (rungs 1..=13) one squad wins in simulation with `doctrines`
+/// held, applied the same way as for `yard`.
 fn ladder_of(sq: &Squad, doctrines: &[String]) -> i32 {
     let allies = armed(sq, doctrines);
     yardstick()
-        .encs
+        .ladder
         .iter()
         .filter(|e| combat::simulate(&model::battle(&allies, e)).won())
         .count() as i32
@@ -174,11 +186,17 @@ fn ladder_best(sqs: &[Squad], doctrines: &[String]) -> Option<i32> {
     sqs.iter().map(|sq| ladder_of(sq, doctrines)).max()
 }
 
-/// L(state): how many of the 56 ladder encounters the best squad wins in simulation, the state's
-/// doctrines applied (`None` without a squad with members). 56 battles per squad.
+/// L(state): how many encounters of the full ladder (`ladder_size`) the best squad wins in
+/// simulation, the state's doctrines applied (`None` without a squad with members). One battle
+/// per encounter and squad.
 #[allow(dead_code)]
 pub fn ladder_won(st: &GameState) -> Option<i32> {
     ladder_best(&squads(st), &st.cycle.doctrines)
+}
+
+/// Encounters on the full ladder: the most L can read.
+pub fn ladder_size() -> usize {
+    yardstick().ladder.len()
 }
 
 /// S(state): the strongest squad's yardstick strength with the state's doctrines (`None` without
@@ -436,6 +454,7 @@ impl Series {
             end.zip(ladder_at(1).flatten())
                 .map(|(b, a)| f64::from(b - a)),
         );
+        m.insert("payoff.ladder.size".into(), Some(ladder_size() as f64));
         // Sawtooth: share of the hourly log growth that came in felt jumps.
         let steps: Vec<f64> = self
             .hours
