@@ -66,7 +66,7 @@ pub fn write_bot(
         schedule: BOT_SCHEDULE.into(),
         hours,
         lang: idle_engine::i18n::locale().into(),
-        research: std::env::var("BOT_NORESEARCH").is_err(),
+        research: persona.policy().research,
     };
     let save = g.e.save();
     let fin = Final {
@@ -424,8 +424,7 @@ mod tests {
         let (seed, hours) = (0, 12);
         let dir = tmp("bot");
         let persona = Persona::REFERENCE;
-        let mut g = run::play_bot(seed, persona, hours);
-        let used = crate::bot::USED.with(|u| u.borrow().clone());
+        let (mut g, used) = run::play_bot(seed, persona, hours);
         write_bot(&dir, seed, persona, hours, &mut g).unwrap();
         let bot = RunFile::collect(persona.name(), hours, vec![(seed, g.metrics, used)]);
 

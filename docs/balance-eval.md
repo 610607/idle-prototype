@@ -43,7 +43,7 @@ cargo run --release --example eval -- session /tmp/llm/s0 /tmp/llm/s1 --out /tmp
 
 ## 机器人人格
 
-人格是 `evalkit/src/bot.rs` 里同一套贪心策略的变体：
+人格是 `evalkit/src/bot.rs` 里同一套贪心策略的变体。策略写成显式的 `Policy`（先打最深 `deep_first`、按闲置居民建造 `staffing`、研究 `research` 三个开关），一局一个 `Bot`，自己记这局被接受的命令；人格只决定 `Policy` 和行动间隔（`Persona::policy`）。设了环境变量 `BOT_NORESEARCH` 时研究关掉，人格和脚本都照这个开关走，会话清单里的 `research` 也跟着记。
 
 - `greedy`：参考机器人，每小时行动一次，先打最近一环。
   - 招募到名册上限（队员没有维持费）。

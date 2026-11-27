@@ -81,11 +81,11 @@ pub fn field(persona: Persona, seeds: &[u64]) -> Vec<(i64, &'static str, Sample)
                 s.spawn(move || {
                     let mut out = Vec::new();
                     for seed in mine {
-                        let mut e = run::new_game(seed, persona);
+                        let (mut e, mut bot) = run::new_game(seed, persona);
                         let last = *FIELD_HOURS.last().unwrap();
                         for h in 1..=last {
                             if persona.every == 1 || (h - 1) % persona.every == 0 {
-                                crate::bot::step(&mut e);
+                                bot.step(&mut e);
                             }
                             e.advance(run::T0 + h * 3600);
                             if FIELD_HOURS.contains(&h) {
@@ -325,10 +325,10 @@ pub fn field_model(
                 s.spawn(move || {
                     let mut out = Vec::new();
                     for seed in mine {
-                        let mut e = run::new_game(seed, persona);
+                        let (mut e, mut bot) = run::new_game(seed, persona);
                         for h in 1..=*FIELD_HOURS.last().unwrap() {
                             if (h - 1) % persona.every == 0 {
-                                crate::bot::step(&mut e);
+                                bot.step(&mut e);
                             }
                             e.advance(run::T0 + h * 3600);
                             if FIELD_HOURS.contains(&h) {

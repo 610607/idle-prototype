@@ -1,16 +1,67 @@
-//! Greedy bot policy shared by the pacing examples.
+//! The greedy bot every pacing script and the eval personas play with.
+//!
+//! A [`Bot`] plays one game by a [`Policy`] and counts the commands the engine accepted (`eval`
+//! reports the ones no persona ever uses, its blind spots). Each [`Bot::step`] is one turn:
+//! claim, hire, garrison lost tiles, fill squads and send them on routes, build, research,
+//! counter, defend. Nothing is kept between games except what the caller holds.
 use idle_engine::api::Engine;
 use idle_engine::commands::Command;
 use idle_engine::geom;
 use idle_engine::state::Assignment;
-use idle_engine::view::TideView;
+use idle_engine::view::{OpView, TideView, View};
+use std::collections::BTreeMap;
 
-thread_local! {
-    /// Explorer style for `eval`: route to the deepest target first instead of the nearest.
-    pub static DEEP_FIRST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+/// The knobs a persona or a script turns; everything else is the same greedy play.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Policy {
+    /// Route to the deepest target first instead of the nearest (the explorer style).
+    pub deep_first: bool,
+    /// Build where idle residents can staff the facility (accepting up to one tile of homeless),
+    /// up to 5 of each kind, instead of only where everyone stays housed (3 of each).
+    pub staffing: bool,
+    /// Research whenever intel allows.
+    pub research: bool,
 }
 
-fn route_for(e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
+impl Policy {
+    /// The reference play (the `greedy` persona).
+    pub const GREEDY: Policy = Policy {
+        deep_first: false,
+        staffing: true,
+        research: true,
+    };
+
+    /// `GREEDY`, with research off when the environment sets `BOT_NORESEARCH` (the switch the
+    /// pacing scripts and `eval` have always honored).
+    pub fn from_env() -> Policy {
+        Policy {
+            research: std::env::var("BOT_NORESEARCH").is_err(),
+            ..Policy::GREEDY
+        }
+    }
+}
+
+/// One game's bot: its policy and the commands the engine accepted from it, by name.
+pub struct Bot {
+    pub policy: Policy,
+    used: BTreeMap<String, u32>,
+}
+
+/// One turn by `Policy::from_env`, for scripts that keep no count of commands.
+pub fn step(e: &mut Engine) {
+    Bot::new(Policy::from_env()).step(e)
+}
+
+/// Idle the way the view says it: unassigned, or in a squad that no longer exists.
+fn idle(v: &View, o: &OpView) -> bool {
+    match o.assignment {
+        Assignment::Idle => true,
+        Assignment::Squad { squad } => !v.squads.iter().any(|s| s.id == squad),
+        _ => false,
+    }
+}
+
+fn route_for(deep_first: bool, e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
     let v = e.view();
     // Nearest revealed unowned passable tile that is not yet claimable; try 1- and 2-step routes.
     // (Deepest first in the explorer style.)
@@ -27,7 +78,7 @@ fn route_for(e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
         .map(|t| (t.ring, t.i))
         .collect();
     targets.sort();
-    if DEEP_FIRST.with(|d| d.get()) {
+    if deep_first {
         targets.sort_by_key(|&(r, i)| (std::cmp::Reverse(r), i));
     }
     for (_, t) in targets.iter().take(12) {
@@ -54,220 +105,223 @@ fn route_for(e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
     targets.first().map(|(_, t)| vec![*t])
 }
 
-thread_local! {
-    /// Commands this policy issued that the engine accepted, by name: `eval` reads it to report
-    /// which systems no bot ever uses (its blind spots).
-    pub static USED: std::cell::RefCell<std::collections::BTreeMap<String, u32>> =
-        Default::default();
-}
+impl Bot {
+    pub fn new(policy: Policy) -> Bot {
+        Bot {
+            policy,
+            used: BTreeMap::new(),
+        }
+    }
 
-/// Issues a command and counts it in `USED` when accepted.
-pub fn act(e: &mut Engine, cmd: &Command) -> Result<(), String> {
-    let r = e.command(cmd);
-    if r.is_ok() {
-        USED.with(|u| {
-            *u.borrow_mut()
+    /// Commands the engine accepted from this bot, by name (`textui::cmd_name`).
+    pub fn used(&self) -> &BTreeMap<String, u32> {
+        &self.used
+    }
+
+    /// Issues a command and counts it when accepted.
+    pub fn act(&mut self, e: &mut Engine, cmd: &Command) -> Result<(), String> {
+        let r = e.command(cmd);
+        if r.is_ok() {
+            *self
+                .used
                 .entry(idle_engine::textui::cmd_name(cmd))
-                .or_insert(0) += 1
-        });
-    }
-    r
-}
-
-pub fn step(e: &mut Engine) {
-    step_with(e, true)
-}
-
-/// `staffing`: build where idle residents can staff the facility (accepting up to one tile of
-/// homeless), up to 5 of each kind, instead of only where everyone stays housed (3 of each).
-pub fn step_with(e: &mut Engine, staffing: bool) {
-    let v = e.view();
-    for i in v
-        .tiles
-        .iter()
-        .filter(|t| t.claimable)
-        .map(|t| t.i)
-        .collect::<Vec<_>>()
-    {
-        let _ = act(e, &Command::Claim { tile: i });
-    }
-    let v = e.view();
-    // Hire anything affordable up to the roster cap: operatives have no upkeep, and the ones not in
-    // a squad are the garrisons `defend` moves around.
-    let cap = idle_engine::content::balance().roster_cap as usize;
-    let mut roster = v.operatives.len();
-    for c in &v.candidates {
-        if roster < cap
-            && v.resources.scrap >= c.cost + 40
-            && act(e, &Command::Hire { candidate: c.id }).is_ok()
-        {
-            roster += 1;
+                .or_insert(0) += 1;
         }
+        r
     }
-    let v = e.view();
-    // Fill squads up to 3 from idle operatives, keep one idle for garrisons per lost tile.
-    let idle: Vec<u32> = v
-        .operatives
-        .iter()
-        .filter(|o| o.status == "空闲")
-        .map(|o| o.id)
-        .collect();
-    let lost: Vec<u16> = {
-        let mut l: Vec<u16> = v
-            .tide
+
+    /// One turn.
+    pub fn step(&mut self, e: &mut Engine) {
+        let staffing = self.policy.staffing;
+        let v = e.view();
+        for i in v
+            .tiles
             .iter()
-            .filter(|t| !t.held && !t.skipped)
-            .map(|t| t.tile)
-            .collect();
-        l.sort();
-        l.dedup();
-        l
-    };
-    let mut pool = idle.clone();
-    for tile in &lost {
-        if v.tiles[*tile as usize].garrison.is_some() {
-            continue;
-        }
-        let opts = e.garrison_options(*tile);
-        if let Some(o) = opts
-            .iter()
-            .find(|o| o.held && o.op.map(|id| pool.contains(&id)).unwrap_or(false))
+            .filter(|t| t.claimable)
+            .map(|t| t.i)
+            .collect::<Vec<_>>()
         {
-            let id = o.op.unwrap();
-            if act(
-                e,
-                &Command::Garrison {
-                    op: id,
-                    tile: Some(*tile),
-                },
-            )
-            .is_ok()
+            let _ = self.act(e, &Command::Claim { tile: i });
+        }
+        let v = e.view();
+        // Hire anything affordable up to the roster cap: operatives have no upkeep, and the ones not in
+        // a squad are the garrisons `defend` moves around.
+        let cap = idle_engine::content::balance().roster_cap as usize;
+        let mut roster = v.operatives.len();
+        for c in &v.candidates {
+            if roster < cap
+                && v.resources.scrap >= c.cost + 40
+                && self.act(e, &Command::Hire { candidate: c.id }).is_ok()
             {
-                pool.retain(|x| *x != id);
+                roster += 1;
             }
         }
-    }
-    let v = e.view();
-    for s in &v.squads {
-        let mut members = s.members.clone();
-        while members.len() < 3 {
-            match pool.pop() {
-                Some(id) => members.push(id),
-                None => break,
-            }
-        }
-        if members != s.members {
-            let _ = act(
-                e,
-                &Command::SetSquad {
-                    squad: s.id,
-                    members: members.clone(),
-                },
-            );
-        }
-        let v2 = e.view();
-        let sq = v2.squads.iter().find(|x| x.id == s.id).unwrap();
-        let stale = sq.route.is_empty()
-            || sq
-                .route
+        let v = e.view();
+        // Fill squads up to 3 from idle operatives, keep one idle for garrisons per lost tile.
+        let idle: Vec<u32> = v
+            .operatives
+            .iter()
+            .filter(|o| idle(&v, o))
+            .map(|o| o.id)
+            .collect();
+        let lost: Vec<u16> = {
+            let mut l: Vec<u16> = v
+                .tide
                 .iter()
-                .all(|t| v2.tiles[*t as usize].owned || v2.tiles[*t as usize].claimable);
-        if !sq.members.is_empty() && stale {
-            if let Some(r) = route_for(e, s.id) {
-                let _ = act(
+                .filter(|t| !t.held && !t.skipped)
+                .map(|t| t.tile)
+                .collect();
+            l.sort();
+            l.dedup();
+            l
+        };
+        let mut pool = idle.clone();
+        for tile in &lost {
+            if v.tiles[*tile as usize].garrison.is_some() {
+                continue;
+            }
+            let opts = e.garrison_options(*tile);
+            if let Some(o) = opts
+                .iter()
+                .find(|o| o.held && o.op.map(|id| pool.contains(&id)).unwrap_or(false))
+            {
+                let id = o.op.unwrap();
+                if self
+                    .act(
+                        e,
+                        &Command::Garrison {
+                            op: id,
+                            tile: Some(*tile),
+                        },
+                    )
+                    .is_ok()
+                {
+                    pool.retain(|x| *x != id);
+                }
+            }
+        }
+        let v = e.view();
+        for s in &v.squads {
+            let mut members = s.members.clone();
+            while members.len() < 3 {
+                match pool.pop() {
+                    Some(id) => members.push(id),
+                    None => break,
+                }
+            }
+            if members != s.members {
+                let _ = self.act(
                     e,
-                    &Command::SetRoute {
+                    &Command::SetSquad {
                         squad: s.id,
-                        route: r,
+                        members: members.clone(),
                     },
                 );
             }
+            let v2 = e.view();
+            let sq = v2.squads.iter().find(|x| x.id == s.id).unwrap();
+            let stale = sq.route.is_empty()
+                || sq
+                    .route
+                    .iter()
+                    .all(|t| v2.tiles[*t as usize].owned || v2.tiles[*t as usize].claimable);
+            if !sq.members.is_empty() && stale {
+                if let Some(r) = route_for(self.policy.deep_first, e, s.id) {
+                    let _ = self.act(
+                        e,
+                        &Command::SetRoute {
+                            squad: s.id,
+                            route: r,
+                        },
+                    );
+                }
+            }
         }
-    }
-    // Build: one facility per hour, only where the district keeps everyone housed.
-    let v = e.view();
-    let cap = idle_engine::content::balance().housing_capacity;
-    let border_districts: Vec<u16> = v
-        .tiles
-        .iter()
-        .filter(|t| t.border)
-        .filter_map(|t| t.district)
-        .collect();
-    let mut wants: Vec<&str> = Vec::new();
-    if v.districts
-        .iter()
-        .any(|d| border_districts.contains(&d.id) && d.militia < 8 && d.owned >= 2)
-    {
-        wants.push("outpost");
-    }
-    wants.extend([
-        "scrapyard",
-        "generator",
-        "workshop",
-        "clinic",
-        "archive",
-        "market",
-        "watchtower",
-        "outpost",
-    ]);
-    for f in wants {
-        let have = v.tiles.iter().filter(|t| t.usage == f).count();
-        if have >= if staffing { 5 } else { 3 } {
-            continue;
-        }
-        let Some(opt) = v.facilities.iter().find(|x| x.id == f) else {
-            continue;
-        };
-        if !opt.affordable {
-            continue;
-        }
-        let spot = v
+        // Build: one facility per hour, only where the district keeps everyone housed.
+        let v = e.view();
+        let cap = idle_engine::content::balance().housing_capacity;
+        let border_districts: Vec<u16> = v
             .tiles
             .iter()
-            .filter(|t| t.owned && t.terrain == "city" && t.usage == "housing")
-            .map(|t| (t.i, t.district))
-            .find(|(i, d)| {
-                let Some(dv) = d.and_then(|d| v.districts.iter().find(|x| x.id == d)) else {
-                    return false;
-                };
-                if f == "outpost" && !border_districts.contains(&dv.id) {
-                    return false;
-                }
-                let fits = if staffing {
-                    dv.population - dv.employed >= (opt.jobs + 1) / 2
-                        && dv.population - (dv.housing - cap) <= cap
-                } else {
-                    dv.housing - cap >= dv.population
-                };
-                fits && e
-                    .dry_run(&Command::Build {
-                        tile: *i,
+            .filter(|t| t.border)
+            .filter_map(|t| t.district)
+            .collect();
+        let mut wants: Vec<&str> = Vec::new();
+        if v.districts
+            .iter()
+            .any(|d| border_districts.contains(&d.id) && d.militia < 8 && d.owned >= 2)
+        {
+            wants.push("outpost");
+        }
+        wants.extend([
+            "scrapyard",
+            "generator",
+            "workshop",
+            "clinic",
+            "archive",
+            "market",
+            "watchtower",
+            "outpost",
+        ]);
+        for f in wants {
+            let have = v.tiles.iter().filter(|t| t.usage == f).count();
+            if have >= if staffing { 5 } else { 3 } {
+                continue;
+            }
+            let Some(opt) = v.facilities.iter().find(|x| x.id == f) else {
+                continue;
+            };
+            if !opt.affordable {
+                continue;
+            }
+            let spot = v
+                .tiles
+                .iter()
+                .filter(|t| t.owned && t.terrain == "city" && t.usage == "housing")
+                .map(|t| (t.i, t.district))
+                .find(|(i, d)| {
+                    let Some(dv) = d.and_then(|d| v.districts.iter().find(|x| x.id == d)) else {
+                        return false;
+                    };
+                    if f == "outpost" && !border_districts.contains(&dv.id) {
+                        return false;
+                    }
+                    let fits = if staffing {
+                        dv.population - dv.employed >= (opt.jobs + 1) / 2
+                            && dv.population - (dv.housing - cap) <= cap
+                    } else {
+                        dv.housing - cap >= dv.population
+                    };
+                    fits && e
+                        .dry_run(&Command::Build {
+                            tile: *i,
+                            facility: Some(f.into()),
+                        })
+                        .ok
+                });
+            if let Some((i, _)) = spot {
+                let _ = self.act(
+                    e,
+                    &Command::Build {
+                        tile: i,
                         facility: Some(f.into()),
-                    })
-                    .ok
-            });
-        if let Some((i, _)) = spot {
-            let _ = act(
-                e,
-                &Command::Build {
-                    tile: i,
-                    facility: Some(f.into()),
-                },
-            );
-            break;
+                    },
+                );
+                break;
+            }
         }
-    }
-    research(e);
-    // Counter only what the preview says wins, like the engine's auto_counter rule: a lost counter
-    // costs nothing but still counts its reactions, so blind retries farm the codex.
-    let v = e.view();
-    for t in v.tiles.iter().filter(|t| t.alert) {
-        let cmd = Command::Counter { tile: t.i };
-        if e.dry_run(&cmd).ok {
-            let _ = act(e, &cmd);
+        self.research(e);
+        // Counter only what the preview says wins, like the engine's auto_counter rule: a lost counter
+        // costs nothing but still counts its reactions, so blind retries farm the codex.
+        let v = e.view();
+        for t in v.tiles.iter().filter(|t| t.alert) {
+            let cmd = Command::Counter { tile: t.i };
+            if e.dry_run(&cmd).ok {
+                let _ = self.act(e, &cmd);
+            }
         }
+        self.defend(e);
     }
-    defend(e);
 }
 
 /// Guard moves the defense pass may make per call, and moves it may dry-run choosing each.
@@ -279,25 +333,79 @@ fn lost_in(tide: &[TideView]) -> usize {
     tide.iter().filter(|t| !t.held && !t.skipped).count()
 }
 
-/// Defense pass, played off the forecast the way a careful player does once the free fix (an idle
-/// operative guarding a threatened tile, earlier in `step_with`) is used up:
-/// 1. Guard moves: while the forecast loses surges, dry-run garrisons of the threatened tiles by
-///    operatives not in a squad (idle, or guarding elsewhere) whose preview holds, and take the
-///    one that saves the most. A move is judged on the whole forecast (`dry_run`'s `tide_after`),
-///    so the tile a guard leaves counts against it: losing one surge there to save three here is
-///    a good move.
-/// 2. One defensive building (`fortify`).
-///
-/// Buildings are chosen by rule, not dry run: a dry run plays the 12-hour forecast (about a tenth
-/// of a second), and trying every building in reach each hour made a week's game five times
-/// slower for a few points of `surge_lost.all` (docs/balance-eval.md “机器人人格”).
-fn defend(e: &mut Engine) {
-    for _ in 0..DEFENSE_MOVES {
-        let v = e.view();
-        let base = lost_in(&v.tide);
-        if base == 0 {
-            return;
+impl Bot {
+    /// Defense pass, played off the forecast the way a careful player does once the free fix (an idle
+    /// operative guarding a threatened tile, earlier in `step_with`) is used up:
+    /// 1. Guard moves: while the forecast loses surges, dry-run garrisons of the threatened tiles by
+    ///    operatives not in a squad (idle, or guarding elsewhere) whose preview holds, and take the
+    ///    one that saves the most. A move is judged on the whole forecast (`dry_run`'s `tide_after`),
+    ///    so the tile a guard leaves counts against it: losing one surge there to save three here is
+    ///    a good move.
+    /// 2. One defensive building (`fortify`).
+    ///
+    /// Buildings are chosen by rule, not dry run: a dry run plays the 12-hour forecast (about a tenth
+    /// of a second), and trying every building in reach each hour made a week's game five times
+    /// slower for a few points of `surge_lost.all` (docs/balance-eval.md “机器人人格”).
+    fn defend(&mut self, e: &mut Engine) {
+        for _ in 0..DEFENSE_MOVES {
+            let v = e.view();
+            let base = lost_in(&v.tide);
+            if base == 0 {
+                return;
+            }
+            let mut threatened: Vec<u16> = v
+                .tide
+                .iter()
+                .filter(|t| !t.held && !t.skipped)
+                .map(|t| t.tile)
+                .collect();
+            threatened.sort();
+            threatened.dedup();
+            let mut moves: Vec<(u32, u16)> = Vec::new();
+            for &tile in &threatened {
+                for o in e
+                    .garrison_options(tile)
+                    .iter()
+                    .filter(|o| o.held && !o.current)
+                {
+                    let Some(id) = o.op else { continue };
+                    let free = v
+                        .operatives
+                        .iter()
+                        .find(|x| x.id == id)
+                        .is_some_and(|x| !matches!(x.assignment, Assignment::Squad { .. }));
+                    if free {
+                        moves.push((id, tile));
+                    }
+                }
+            }
+            let mut best: Option<(usize, Command)> = None;
+            for (op, tile) in moves.into_iter().take(DEFENSE_TRIES) {
+                let mv = Command::Garrison {
+                    op,
+                    tile: Some(tile),
+                };
+                let r = e.dry_run(&mv);
+                let after = lost_in(&r.tide_after);
+                if r.ok && after < base && best.as_ref().is_none_or(|b| after < b.0) {
+                    best = Some((after, mv));
+                }
+            }
+            match best {
+                Some((_, mv)) if self.act(e, &mv).is_ok() => {}
+                _ => break,
+            }
         }
+        self.fortify(e);
+    }
+
+    /// One defensive building for a tile the forecast still loses: an outpost in its district when
+    /// the district has none (militia guard every tile of a district), else a barricade next to it
+    /// (radius 1, fortify). Only where the district has idle residents to staff half of it and
+    /// housing to spare, like the staffing builds in `step_with`.
+    fn fortify(&mut self, e: &mut Engine) {
+        let v = e.view();
+        let cap = idle_engine::content::balance().housing_capacity;
         let mut threatened: Vec<u16> = v
             .tide
             .iter()
@@ -306,145 +414,96 @@ fn defend(e: &mut Engine) {
             .collect();
         threatened.sort();
         threatened.dedup();
-        let mut moves: Vec<(u32, u16)> = Vec::new();
-        for &tile in &threatened {
-            for o in e
-                .garrison_options(tile)
-                .iter()
-                .filter(|o| o.held && !o.current)
-            {
-                let Some(id) = o.op else { continue };
-                let free = v
-                    .operatives
-                    .iter()
-                    .find(|x| x.id == id)
-                    .is_some_and(|x| !matches!(x.assignment, Assignment::Squad { .. }));
-                if free {
-                    moves.push((id, tile));
-                }
-            }
-        }
-        let mut best: Option<(usize, Command)> = None;
-        for (op, tile) in moves.into_iter().take(DEFENSE_TRIES) {
-            let mv = Command::Garrison {
-                op,
-                tile: Some(tile),
-            };
-            let r = e.dry_run(&mv);
-            let after = lost_in(&r.tide_after);
-            if r.ok && after < base && best.as_ref().is_none_or(|b| after < b.0) {
-                best = Some((after, mv));
-            }
-        }
-        match best {
-            Some((_, mv)) if act(e, &mv).is_ok() => {}
-            _ => break,
-        }
-    }
-    fortify(e);
-}
-
-/// One defensive building for a tile the forecast still loses: an outpost in its district when
-/// the district has none (militia guard every tile of a district), else a barricade next to it
-/// (radius 1, fortify). Only where the district has idle residents to staff half of it and
-/// housing to spare, like the staffing builds in `step_with`.
-fn fortify(e: &mut Engine) {
-    let v = e.view();
-    let cap = idle_engine::content::balance().housing_capacity;
-    let mut threatened: Vec<u16> = v
-        .tide
-        .iter()
-        .filter(|t| !t.held && !t.skipped)
-        .map(|t| t.tile)
-        .collect();
-    threatened.sort();
-    threatened.dedup();
-    for tile in threatened {
-        let Some(d) = v.tiles[tile as usize].district else {
-            continue;
-        };
-        let Some(dv) = v.districts.iter().find(|x| x.id == d) else {
-            continue;
-        };
-        let has_outpost = v
-            .tiles
-            .iter()
-            .any(|t| t.district == Some(d) && t.usage == "outpost");
-        for f in ["outpost", "barricade"] {
-            if f == "outpost" && has_outpost {
-                continue;
-            }
-            let Some(opt) = v.facilities.iter().find(|x| x.id == f && x.affordable) else {
+        for tile in threatened {
+            let Some(d) = v.tiles[tile as usize].district else {
                 continue;
             };
-            let staffed = dv.population - dv.employed >= (opt.jobs + 1) / 2
-                && dv.population - (dv.housing - cap) <= cap;
-            if !staffed {
+            let Some(dv) = v.districts.iter().find(|x| x.id == d) else {
                 continue;
-            }
-            let spots: Vec<u16> = v
+            };
+            let has_outpost = v
                 .tiles
                 .iter()
-                .filter(|t| {
-                    t.owned
-                        && t.terrain == "city"
-                        && t.usage == "housing"
-                        && t.district == Some(d)
-                        && (f == "outpost" || geom::manhattan(t.i, tile) <= 1)
-                })
-                .map(|t| t.i)
-                .collect();
-            for i in spots {
-                let cmd = Command::Build {
-                    tile: i,
-                    facility: Some(f.into()),
+                .any(|t| t.district == Some(d) && t.usage == "outpost");
+            for f in ["outpost", "barricade"] {
+                if f == "outpost" && has_outpost {
+                    continue;
+                }
+                let Some(opt) = v.facilities.iter().find(|x| x.id == f && x.affordable) else {
+                    continue;
                 };
-                if act(e, &cmd).is_ok() {
-                    return;
+                let staffed = dv.population - dv.employed >= (opt.jobs + 1) / 2
+                    && dv.population - (dv.housing - cap) <= cap;
+                if !staffed {
+                    continue;
+                }
+                let spots: Vec<u16> = v
+                    .tiles
+                    .iter()
+                    .filter(|t| {
+                        t.owned
+                            && t.terrain == "city"
+                            && t.usage == "housing"
+                            && t.district == Some(d)
+                            && (f == "outpost" || geom::manhattan(t.i, tile) <= 1)
+                    })
+                    .map(|t| t.i)
+                    .collect();
+                for i in spots {
+                    let cmd = Command::Build {
+                        tile: i,
+                        facility: Some(f.into()),
+                    };
+                    if self.act(e, &cmd).is_ok() {
+                        return;
+                    }
                 }
             }
         }
     }
-}
 
-/// Research whenever intel allows (unless BOT_NORESEARCH is set): keep the offer that wires into
-/// the most held doctrines, the hub first on ties.
-pub fn research(e: &mut Engine) {
-    let done: Vec<String> = e
-        .view()
-        .tasks
-        .open
-        .iter()
-        .filter(|t| t.done)
-        .map(|t| t.id.clone())
-        .collect();
-    for task in done {
-        let _ = act(e, &Command::ClaimTask { task });
-    }
-    if std::env::var("BOT_NORESEARCH").is_ok() {
-        return;
-    }
-    loop {
-        let v = e.view();
-        if v.research.offers.is_empty() {
-            if !v.research.affordable || v.research.left == 0 {
-                return;
-            }
-            if act(e, &Command::Research).is_err() {
-                return;
-            }
-            continue;
-        }
-        let best = v
-            .research
-            .offers
+    /// Claims finished tasks; then, when the policy researches, researches whenever intel allows and
+    /// keeps the offer that wires into the most held doctrines, the hub first on ties.
+    fn research(&mut self, e: &mut Engine) {
+        let done: Vec<String> = e
+            .view()
+            .tasks
+            .open
             .iter()
-            .max_by_key(|o| (o.links_held.len(), o.id == "react", -(o.rarity)))
-            .unwrap()
-            .id
-            .clone();
-        if act(e, &Command::PickDoctrine { doctrine: best }).is_err() {
+            .filter(|t| t.done)
+            .map(|t| t.id.clone())
+            .collect();
+        for task in done {
+            let _ = self.act(e, &Command::ClaimTask { task });
+        }
+        if !self.policy.research {
             return;
+        }
+        loop {
+            let v = e.view();
+            if v.research.offers.is_empty() {
+                if !v.research.affordable || v.research.left == 0 {
+                    return;
+                }
+                if self.act(e, &Command::Research).is_err() {
+                    return;
+                }
+                continue;
+            }
+            let best = v
+                .research
+                .offers
+                .iter()
+                .max_by_key(|o| (o.links_held.len(), o.id == "react", -(o.rarity)))
+                .unwrap()
+                .id
+                .clone();
+            if self
+                .act(e, &Command::PickDoctrine { doctrine: best })
+                .is_err()
+            {
+                return;
+            }
         }
     }
 }

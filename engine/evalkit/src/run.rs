@@ -13,7 +13,7 @@
 //! commands replayed at their moments (`eval session`, docs/eval-interface.md §评估会话). Both
 //! start from `Engine::new(seed, T0, textui::DEVICE)` and the `textui::setup` commands, so a bot
 //! game written as a session directory replays to the same game and the same metrics.
-use crate::bot;
+use crate::bot::{Bot, Policy};
 use crate::power::{self, Sample};
 use idle_engine::api::Engine;
 use idle_engine::combat::UnitSpec;
@@ -72,6 +72,13 @@ impl Persona {
     }
     fn acts(self, hour: i64) -> bool {
         hour % self.every == 0
+    }
+    /// The bot policy this persona plays by (`BOT_NORESEARCH` still switches research off).
+    pub fn policy(self) -> Policy {
+        Policy {
+            deep_first: self.explorer,
+            ..Policy::from_env()
+        }
     }
 }
 
@@ -191,15 +198,15 @@ pub fn setup_cmds() -> &'static [Command] {
 }
 
 /// A fresh game as every persona starts it: the text client's game (`Engine::new(seed, T0,
-/// textui::DEVICE)`; the device name only goes into the save) and the setup commands.
-pub fn new_game(seed: u64, persona: Persona) -> Engine {
-    bot::USED.with(|u| u.borrow_mut().clear());
-    bot::DEEP_FIRST.with(|d| d.set(persona.explorer));
+/// textui::DEVICE)`; the device name only goes into the save) and the setup commands, issued by
+/// the persona's bot (so its command count includes them, as a session journal does).
+pub fn new_game(seed: u64, persona: Persona) -> (Engine, Bot) {
+    let mut bot = Bot::new(persona.policy());
     let mut e = Engine::new(seed, T0, textui::DEVICE);
     for cmd in setup_cmds() {
-        bot::act(&mut e, cmd).unwrap();
+        bot.act(&mut e, cmd).unwrap();
     }
-    e
+    (e, bot)
 }
 
 /// Whether anything was spent since `before` (scrap, parts or intel went down, or a research draw
@@ -211,8 +218,8 @@ fn spent_since(e: &Engine, before: [i64; 3], research: u32) -> bool {
 
 /// Who plays a measured game.
 pub enum Driver<'a> {
-    /// A bot persona, acting at the start of the hours it acts in.
-    Bot(Persona),
+    /// A bot persona's bot, acting at the start of the hours the persona acts in.
+    Bot(Persona, Bot),
     /// A recorded journal (a play session's journal.jsonl).
     Replay(Replay<'a>),
 }
@@ -317,13 +324,13 @@ impl Driver<'_> {
     /// or the journal's commands due now. Returns the commands accepted, by name.
     fn open(&mut self, e: &mut Engine, h: i64) -> BTreeMap<String, u32> {
         match self {
-            Driver::Bot(persona) => {
-                let used_before = used();
+            Driver::Bot(persona, bot) => {
+                let used_before = bot.used().clone();
                 if persona.acts(h - 1) {
-                    bot::step(e);
+                    bot.step(e);
                 }
                 // Commands the bot issued this hour, by name.
-                let mut issued = used();
+                let mut issued = bot.used().clone();
                 for (k, n) in issued.iter_mut() {
                     *n -= used_before.get(k).copied().unwrap_or(0);
                 }
@@ -343,7 +350,7 @@ impl Driver<'_> {
     /// at its own moment (added to `issued`; the bot never has any). Returns whether any spent.
     fn within(&mut self, e: &mut Engine, to: i64, issued: &mut BTreeMap<String, u32>) -> bool {
         match self {
-            Driver::Bot(_) => false,
+            Driver::Bot(..) => false,
             Driver::Replay(r) => r.run_until(e, to, false, issued),
         }
     }
@@ -465,26 +472,27 @@ fn squad_power(e: &Engine, r: i32) -> (Option<f64>, Option<f64>) {
     (Some(s), med)
 }
 
-/// Accepted commands so far, by name.
-fn used() -> BTreeMap<String, u32> {
-    bot::USED.with(|u| u.borrow().clone())
-}
-
 /// `play`, also returning the payoff timeline (docs/balance-eval.md §爽点时间轴).
 pub fn play_full(seed: u64, persona: Persona, hours: i64) -> (Metrics, Vec<crate::payoff::Ev>) {
-    let g = play_bot(seed, persona, hours);
+    let (g, _) = play_bot(seed, persona, hours);
     (g.metrics, g.evs)
 }
 
-/// One bot game; its journal starts with the setup commands, like a play session's.
-pub fn play_bot(seed: u64, persona: Persona, hours: i64) -> Game {
-    let mut g = measure(new_game(seed, persona), &mut Driver::Bot(persona), hours);
+/// One bot game, and the commands the engine accepted from the bot by name (setup included); its
+/// journal starts with the setup commands, like a play session's.
+pub fn play_bot(seed: u64, persona: Persona, hours: i64) -> (Game, BTreeMap<String, u32>) {
+    let (e, bot) = new_game(seed, persona);
+    let mut driver = Driver::Bot(persona, bot);
+    let mut g = measure(e, &mut driver, hours);
+    let Driver::Bot(_, bot) = driver else {
+        unreachable!()
+    };
     let setup = setup_cmds().iter().map(|cmd| Entry {
         t: 0,
         cmd: cmd.clone(),
     });
     g.journal.splice(0..0, setup);
-    g
+    (g, bot.used().clone())
 }
 
 /// One measured game.
@@ -703,13 +711,12 @@ pub fn run(
                     chunk
                         .into_iter()
                         .map(|seed| {
-                            let mut g = play_bot(seed, persona, hours);
+                            let (mut g, used) = play_bot(seed, persona, hours);
                             if let Some(out) = sessions {
                                 let dir = out.join(format!("{}-s{seed}", persona.name()));
                                 crate::session::write_bot(&dir, seed, persona, hours, &mut g)
                                     .unwrap_or_else(|e| panic!("{e}"));
                             }
-                            let used = bot::USED.with(|u| u.borrow().clone());
                             (seed, g.metrics, used)
                         })
                         .collect::<Vec<_>>()
@@ -755,11 +762,11 @@ impl RunFile {
 /// deepest ring, squads with members, operatives, claimable tiles, unowned fightable tiles of the
 /// next ring with their wardenship.
 pub fn timeline(seed: u64, persona: Persona, hours: i64) {
-    let mut e = new_game(seed, persona);
+    let (mut e, mut bot) = new_game(seed, persona);
     println!("hour owned ring squads ops claimable next_ring_warden");
     for h in 1..=hours {
         if persona.acts(h - 1) {
-            bot::step(&mut e);
+            bot.step(&mut e);
         }
         e.advance(T0 + h * 3600);
         let cy = &e.state.cycle;

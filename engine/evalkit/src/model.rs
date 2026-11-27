@@ -516,7 +516,7 @@ pub fn pace(
         let mut rounds = Vec::new();
         let mut margin = Vec::new();
         for &seed in seeds {
-            let e = crate::run::new_game(seed, crate::run::Persona::REFERENCE);
+            let (e, _) = crate::run::new_game(seed, crate::run::Persona::REFERENCE);
             let cy = &e.state.cycle;
             let mut n = 0.0;
             for (i, tile) in cy.tiles.iter().enumerate() {
