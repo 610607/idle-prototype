@@ -347,6 +347,18 @@ fn op_line(o: &OpView) -> String {
         })
         .collect();
     let sep = t!("cli.sep.item");
+    let equip = o
+        .equipment
+        .as_ref()
+        .map(|it| {
+            t!(
+                "cli.op.equip_full",
+                name = it.name,
+                rw = rw(&it.reads, &it.writes),
+                desc = it.desc
+            )
+        })
+        .unwrap_or_default();
     t!(
         "cli.op.full",
         id = o.id,
@@ -360,7 +372,8 @@ fn op_line(o: &OpView) -> String {
         spd = d.spd,
         status = o.status,
         traits = none_or(&traits, &sep),
-        skills = none_or(&skills, &sep)
+        skills = none_or(&skills, &sep),
+        equip = equip
     )
 }
 
@@ -406,7 +419,16 @@ fn op_short(o: &OpView) -> String {
         status = o.status,
         writes = dash(&w),
         reads = dash(&r),
-        traits = none_or(&traits, &t!("cli.sep.list"))
+        traits = none_or(&traits, &t!("cli.sep.list")),
+        equip = o
+            .equipment
+            .as_ref()
+            .map(|it| t!(
+                "cli.op.equip_short",
+                name = it.name,
+                rw = rw(&it.reads, &it.writes)
+            ))
+            .unwrap_or_default()
     )
 }
 
@@ -524,7 +546,11 @@ fn hq(o: &mut String, v: &View) {
             ),
         );
     }
-    let sealed: Vec<String> = v.sealed.iter().map(|x| x.name.clone()).collect();
+    let sealed: Vec<String> = v
+        .sealed
+        .iter()
+        .map(|x| t!("cli.sealed_item", name = x.name, id = x.id))
+        .collect();
     line(
         o,
         t!(
@@ -864,6 +890,15 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     for op in &v.operatives {
         line(&mut o, op_short(op));
     }
+    let stash: Vec<String> = v.inventory.iter().map(|x| x.name.clone()).collect();
+    line(
+        &mut o,
+        if stash.is_empty() {
+            t!("cli.board.stash_empty")
+        } else {
+            t!("cli.board.stash", n = stash.len(), list = list(&stash))
+        },
+    );
     let r = &v.research;
     line(
         &mut o,
@@ -986,8 +1021,9 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     o
 }
 
-/// Full skill and trait text, candidates, facilities, policies, the 总部 page (organisation,
-/// rules, special operatives, sealed items, past cycles), the 知识库 and the command reference.
+/// Full skill and trait text (with equipment), candidates, the stash, facilities, policies, the
+/// 总部 page (organisation, rules, special operatives, sealed items, past cycles), the 知识库
+/// and the command reference.
 pub fn info(e: &mut Engine) -> String {
     let v = e.view();
     let mut o = String::new();
@@ -1000,6 +1036,22 @@ pub fn info(e: &mut Engine) -> String {
         for c in &v.candidates {
             line(&mut o, op_line(&c.op));
         }
+    }
+    line(&mut o, t!("cli.info.stash", n = v.inventory.len()));
+    if v.inventory.is_empty() {
+        line(&mut o, t!("cli.info.stash_empty"));
+    }
+    for it in &v.inventory {
+        line(
+            &mut o,
+            t!(
+                "cli.info.stash_item",
+                name = it.name,
+                id = it.id,
+                rw = rw(&it.reads, &it.writes),
+                desc = it.desc
+            ),
+        );
     }
     line(&mut o, t!("cli.info.facilities"));
     for f in v.facilities.iter().filter(|f| f.visible) {
@@ -1545,6 +1597,47 @@ mod tests {
         assert_eq!(v.phase, Phase::Active);
         assert_eq!(hour(&e, &v), 0);
         assert!(board(&mut e, now, &opts).contains(&v.modifier.as_ref().unwrap().1));
+    }
+
+    /// The stash shows on the board and with ids in info; equipping and sealing by those ids
+    /// works, and the item then shows on the operative or in the sealed list.
+    #[test]
+    fn stash_and_equipment_are_shown() {
+        let opts = Options::default();
+        let mut e = new_game(0);
+        let now = e.state.time;
+        assert!(board(&mut e, now, &opts).contains(&t!("cli.board.stash_empty")));
+        let items: Vec<String> = content()
+            .equipment
+            .iter()
+            .take(2)
+            .map(|x| x.id.clone())
+            .collect();
+        e.state.cycle.inventory.extend(items.iter().cloned());
+        let v = e.view();
+        let text = board(&mut e, now, &opts) + &info(&mut e);
+        assert!(!text.contains("cli."), "unresolved key in:\n{text}");
+        for it in &v.inventory {
+            assert!(text.contains(&it.name) && text.contains(&format!("（{}）", it.id)));
+        }
+        let op = v.operatives[0].id;
+        let equip = format!(r#"{{"cmd":"equip","op":{op},"item":"{}"}}"#, items[0]);
+        run(&mut e, &parse_json(&equip).unwrap(), &opts).unwrap();
+        let seal = format!(r#"{{"cmd":"seal","item":"{}","on":true}}"#, items[1]);
+        run(&mut e, &parse_json(&seal).unwrap(), &opts).unwrap();
+        let v = e.view();
+        assert!(v.inventory.is_empty());
+        let it = v.operatives[0].equipment.as_ref().unwrap();
+        let short = t!(
+            "cli.op.equip_short",
+            name = it.name,
+            rw = rw(&it.reads, &it.writes)
+        );
+        assert!(board(&mut e, now, &opts).contains(&short));
+        let text = info(&mut e);
+        assert!(text.contains(&it.desc));
+        let sealed = &v.sealed[0];
+        assert!(text.contains(&t!("cli.sealed_item", name = sealed.name, id = sealed.id)));
     }
 
     #[test]
