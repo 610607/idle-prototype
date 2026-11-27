@@ -91,3 +91,14 @@
 {"t":316800,"cmd":{"cmd":"set_route","squad":4,"route":[67]}}
 {"t":316800,"cmd":{"cmd":"garrison","op":218,"tile":142}}
 {"t":316800,"cmd":{"cmd":"garrison","op":240,"tile":140}}
+{"t":345600,"cmd":{"cmd":"hire","candidate":228}}
+{"t":345600,"cmd":{"cmd":"set_route","squad":4,"route":[68]}}
+{"t":374400,"cmd":{"cmd":"set_route","squad":4,"route":[69]}}
+{"t":374400,"cmd":{"cmd":"garrison","op":227,"tile":66}}
+{"t":403200,"cmd":{"cmd":"claim","tile":69}}
+{"t":403200,"cmd":{"cmd":"set_route","squad":4,"route":[85,70]}}
+{"t":432000,"cmd":{"cmd":"claim","tile":70}}
+{"t":432000,"cmd":{"cmd":"set_route","squad":4,"route":[79]}}
+{"t":432000,"cmd":{"cmd":"garrison","op":310,"tile":67}}
+{"t":460800,"cmd":{"cmd":"set_route","squad":4,"route":[94]}}
+{"t":489600,"cmd":{"cmd":"set_route","squad":4,"route":[100]}}
