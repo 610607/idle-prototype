@@ -2,8 +2,16 @@
 //!
 //! A [`Bot`] plays one game by a [`Policy`] and counts the commands the engine accepted (`eval`
 //! reports the ones no persona ever uses, its blind spots). Each [`Bot::step`] is one turn:
-//! claim, hire, garrison lost tiles, fill squads and send them on routes, build, research,
-//! counter, defend. Nothing is kept between games except what the caller holds.
+//! claim, district settings, hire, garrison lost tiles, fill squads and send them on routes,
+//! squad care, build, research, counter, defend. Nothing is kept between games except what the
+//! caller holds.
+//!
+//! The policy's focus changes what the bot builds first and how it runs its districts
+//! (`districts.rs`); `tactics` adds squad care (`tactics.rs`). Everything else is the same greedy
+//! play, so a persona's gap to `greedy` reads as the worth of what it does differently.
+mod districts;
+mod tactics;
+
 use idle_engine::api::Engine;
 use idle_engine::commands::Command;
 use idle_engine::geom;
@@ -21,6 +29,31 @@ pub struct Policy {
     pub staffing: bool,
     /// Research whenever intel allows.
     pub research: bool,
+    /// What the bot builds first and how it runs its districts.
+    pub focus: Focus,
+    /// Squad care (`tactics.rs`): the strongest lineup on the route squad, items equipped and
+    /// tactics tuned on previews of the frontier, the candidate queue kept moving, made-to-order
+    /// recruits.
+    pub tactics: bool,
+}
+
+/// What a persona puts first. Each focus other than `Expand` uses commands the reference play
+/// never issues (docs/balance-eval.md “机器人人格”).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Focus {
+    /// The reference play: production first, an outpost where a border district lacks militia.
+    Expand,
+    /// Production buildings first, production jobs filled before militia (`set_priority`),
+    /// market day wherever trust allows (`set_policy`).
+    Economy,
+    /// Defense buildings first, night watch on border districts (`set_policy`), owned rifts sealed
+    /// (`set_dial`), new tiles claimed only while the forecast loses nothing (waiting half a day
+    /// at most), and a tile on alert that a counter cannot retake given up, at most one a day
+    /// (`abandon`).
+    Defense,
+    /// Archives first, clerks first (`set_priority`), and a research draw that wires into fewer
+    /// than two held doctrines swapped once (`reroll`).
+    Research,
 }
 
 impl Policy {
@@ -29,6 +62,8 @@ impl Policy {
         deep_first: false,
         staffing: true,
         research: true,
+        focus: Focus::Expand,
+        tactics: false,
     };
 
     /// `GREEDY`, with research off when the environment sets `BOT_NORESEARCH` (the switch the
@@ -45,6 +80,12 @@ impl Policy {
 pub struct Bot {
     pub policy: Policy,
     used: BTreeMap<String, u32>,
+    /// Turns played (`step` calls), for the rules that act only every so many turns.
+    turn: u32,
+    /// The research count when the bot last swapped a draw (`reroll` once per draw).
+    rerolled: Option<u32>,
+    /// Turns in a row the cautious play has held its claims.
+    waited: u32,
 }
 
 /// One turn by `Policy::from_env`, for scripts that keep no count of commands.
@@ -110,7 +151,15 @@ impl Bot {
         Bot {
             policy,
             used: BTreeMap::new(),
+            turn: 0,
+            rerolled: None,
+            waited: 0,
         }
+    }
+
+    /// Whether this turn is one of every `n`th (the first turn counts).
+    fn every(&self, n: u32) -> bool {
+        (self.turn - 1) % n == 0
     }
 
     /// Commands the engine accepted from this bot, by name (`textui::cmd_name`).
@@ -132,16 +181,30 @@ impl Bot {
 
     /// One turn.
     pub fn step(&mut self, e: &mut Engine) {
+        self.turn += 1;
         let staffing = self.policy.staffing;
         let v = e.view();
-        for i in v
-            .tiles
-            .iter()
-            .filter(|t| t.claimable)
-            .map(|t| t.i)
-            .collect::<Vec<_>>()
-        {
-            let _ = self.act(e, &Command::Claim { tile: i });
+        // Cautious play claims (and so widens the border) only while the forecast holds
+        // everything, waiting at most `CLAIM_WAIT` turns in a row.
+        let wait =
+            self.policy.focus == Focus::Defense && lost_in(&v.tide) > 0 && self.waited < CLAIM_WAIT;
+        if wait {
+            self.waited += 1;
+        } else {
+            self.waited = 0;
+            for i in v
+                .tiles
+                .iter()
+                .filter(|t| t.claimable)
+                .map(|t| t.i)
+                .collect::<Vec<_>>()
+            {
+                let _ = self.act(e, &Command::Claim { tile: i });
+            }
+        }
+        self.districts(e);
+        if self.policy.tactics {
+            self.queue(e);
         }
         let v = e.view();
         // Hire anything affordable up to the roster cap: operatives have no upkeep, and the ones not in
@@ -150,7 +213,7 @@ impl Bot {
         let mut roster = v.operatives.len();
         for c in &v.candidates {
             if roster < cap
-                && v.resources.scrap >= c.cost + 40
+                && v.resources.scrap >= c.cost + HIRE_RESERVE
                 && self.act(e, &Command::Hire { candidate: c.id }).is_ok()
             {
                 roster += 1;
@@ -237,6 +300,9 @@ impl Bot {
                 }
             }
         }
+        if self.policy.tactics {
+            self.squad_care(e);
+        }
         // Build: one facility per hour, only where the district keeps everyone housed.
         let v = e.view();
         let cap = idle_engine::content::balance().housing_capacity;
@@ -247,22 +313,14 @@ impl Bot {
             .filter_map(|t| t.district)
             .collect();
         let mut wants: Vec<&str> = Vec::new();
-        if v.districts
+        let short_of_militia = v
+            .districts
             .iter()
-            .any(|d| border_districts.contains(&d.id) && d.militia < 8 && d.owned >= 2)
-        {
+            .any(|d| border_districts.contains(&d.id) && d.militia < 8 && d.owned >= 2);
+        if short_of_militia && self.policy.focus != Focus::Economy {
             wants.push("outpost");
         }
-        wants.extend([
-            "scrapyard",
-            "generator",
-            "workshop",
-            "clinic",
-            "archive",
-            "market",
-            "watchtower",
-            "outpost",
-        ]);
+        wants.extend(build_order(self.policy.focus));
         for f in wants {
             let have = v.tiles.iter().filter(|t| t.usage == f).count();
             if have >= if staffing { 5 } else { 3 } {
@@ -321,8 +379,69 @@ impl Bot {
             }
         }
         self.defend(e);
+        if self.policy.focus == Focus::Defense && self.every(24) {
+            self.give_up(e);
+        }
     }
 }
+
+/// What each focus builds, in order of preference (one building a turn).
+fn build_order(focus: Focus) -> [&'static str; 8] {
+    match focus {
+        Focus::Expand => [
+            "scrapyard",
+            "generator",
+            "workshop",
+            "clinic",
+            "archive",
+            "market",
+            "watchtower",
+            "outpost",
+        ],
+        Focus::Economy => [
+            "scrapyard",
+            "workshop",
+            "generator",
+            "archive",
+            "market",
+            "clinic",
+            "watchtower",
+            "outpost",
+        ],
+        Focus::Defense => [
+            "outpost",
+            "watchtower",
+            "clinic",
+            "scrapyard",
+            "generator",
+            "workshop",
+            "archive",
+            "market",
+        ],
+        Focus::Research => [
+            "archive",
+            "scrapyard",
+            "generator",
+            "workshop",
+            "clinic",
+            "market",
+            "watchtower",
+            "outpost",
+        ],
+    }
+}
+
+/// Turns in a row the defensive focus may hold its claims for a losing forecast.
+const CLAIM_WAIT: u32 = 12;
+
+/// Scrap the bot keeps after hiring.
+const HIRE_RESERVE: i64 = 40;
+
+/// The research focus swaps a draw whose best offer wires into fewer held doctrines than this.
+const REROLL_LINKS: usize = 2;
+
+/// Scrap the research focus keeps after paying for a reroll.
+const REROLL_RESERVE: i64 = 60;
 
 /// Guard moves the defense pass may make per call, and moves it may dry-run choosing each.
 const DEFENSE_MOVES: usize = 3;
@@ -495,9 +614,24 @@ impl Bot {
                 .offers
                 .iter()
                 .max_by_key(|o| (o.links_held.len(), o.id == "react", -(o.rarity)))
-                .unwrap()
-                .id
-                .clone();
+                .unwrap();
+            // A draw that wires into fewer than two held doctrines: the research focus swaps it
+            // once. (Every level-1 doctrine but two links to the hub, which the first draw always
+            // offers, so "wires into nothing" never happens.)
+            let draw = e.state.cycle.research_count;
+            if self.policy.focus == Focus::Research
+                && best.links_held.len() < REROLL_LINKS
+                && best.id != "react"
+                && self.rerolled != Some(draw)
+                && v.research.reroll_ok
+                && v.resources.scrap >= v.research.reroll_cost + REROLL_RESERVE
+            {
+                self.rerolled = Some(draw);
+                if self.act(e, &Command::Reroll).is_ok() {
+                    continue;
+                }
+            }
+            let best = best.id.clone();
             if self
                 .act(e, &Command::PickDoctrine { doctrine: best })
                 .is_err()

@@ -18,7 +18,8 @@
 //! ```
 //!
 //! Personas: `greedy` (the reference bot: nearest ring first), `explorer` (deepest winnable target
-//! first); `@N` acts only every N hours (`greedy@4`).
+//! first), `builder` (economy first), `turtle` (defense first), `scholar` (research first),
+//! `tactician` (greedy plus squad care); `@N` acts only every N hours (`greedy@4`).
 //! `--patch` overrides balance.json fields for this process (`content::patch_balance`).
 use evalkit::run::{self, Persona, RunFile};
 use evalkit::{

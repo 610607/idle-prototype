@@ -1,9 +1,9 @@
 //! Macro runs: play many seeds with one bot persona and record metrics by id.
 //!
-//! A persona is the greedy policy in `evalkit/src/bot.rs` in one of two styles (`greedy` clears the
-//! nearest ring first, `explorer` routes to the deepest target it can win), acting every hour or
-//! only every k hours (`greedy@4`: a player who checks in less often; the automation rules carry
-//! the rest).
+//! A persona is the greedy policy in `evalkit/src/bot/` in one of several styles (`Style`: the
+//! reference `greedy` clears the nearest ring first, `explorer` routes to the deepest target it can
+//! win, the others put one system first), acting every hour or only every k hours (`greedy@4`: a
+//! player who checks in less often; the automation rules carry the rest).
 //!
 //! The measurement loop (`measure`) moves time in 5-minute steps and lets a driver act: a bot
 //! persona, or a recorded journal of commands replayed at their moments (`eval session`,
@@ -12,7 +12,7 @@
 //! hours into metrics. Both drivers start from `Engine::new(seed, T0, textui::DEVICE)` and the
 //! `textui::setup` commands, so a bot game written as a session directory replays to the same
 //! game and the same metrics.
-use crate::bot::{Bot, Policy};
+use crate::bot::{Bot, Focus, Policy};
 use crate::game::{deepest_owned, fightable, spendable};
 use crate::probes::{Hour, Probes};
 use idle_engine::api::Engine;
@@ -33,34 +33,71 @@ pub const CHECKPOINTS: [i64; 7] = [6, 12, 24, 48, 72, 120, 168];
 /// Metric values of one seed by id (`None` = never happened).
 pub type Metrics = BTreeMap<String, Option<f64>>;
 
+/// How a persona plays (docs/balance-eval.md “机器人人格”). Each style but `Greedy` changes one
+/// thing in the reference play, so its gap to `greedy` reads as the worth of that thing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Style {
+    /// The reference: nearest ring first, production first.
+    Greedy,
+    /// Routes to the deepest target it can win.
+    Explorer,
+    /// Economy first: production buildings and jobs, market day.
+    Builder,
+    /// Defense first: defense buildings, night watch, sealed rifts, cautious routes, gives up
+    /// what it cannot hold.
+    Turtle,
+    /// Research first: archives and clerks, swaps draws that wire into nothing.
+    Scholar,
+    /// Greedy play plus squad care: lineup, items and tactics tuned on previews, the candidate
+    /// queue kept moving, recruits trained to order.
+    Tactician,
+}
+
+impl Style {
+    pub const ALL: [Style; 6] = [
+        Style::Greedy,
+        Style::Explorer,
+        Style::Builder,
+        Style::Turtle,
+        Style::Scholar,
+        Style::Tactician,
+    ];
+    pub fn name(self) -> &'static str {
+        match self {
+            Style::Greedy => "greedy",
+            Style::Explorer => "explorer",
+            Style::Builder => "builder",
+            Style::Turtle => "turtle",
+            Style::Scholar => "scholar",
+            Style::Tactician => "tactician",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Persona {
-    pub explorer: bool,
+    pub style: Style,
     /// Acts every `every` hours.
     pub every: i64,
 }
 
 impl Persona {
     pub const REFERENCE: Persona = Persona {
-        explorer: false,
+        style: Style::Greedy,
         every: 1,
     };
 
-    /// `greedy`, `explorer`, optionally `@n` for acting every n hours.
+    /// A style name (`Style::name`), optionally `@n` for acting every n hours.
     pub fn parse(s: &str) -> Option<Persona> {
         let (style, every) = match s.split_once('@') {
             Some((a, n)) => (a, n.parse().ok().filter(|n: &i64| *n >= 1)?),
             None => (s, 1),
         };
-        let explorer = match style {
-            "greedy" => false,
-            "explorer" => true,
-            _ => return None,
-        };
-        Some(Persona { explorer, every })
+        let style = Style::ALL.into_iter().find(|x| x.name() == style)?;
+        Some(Persona { style, every })
     }
     pub fn name(self) -> String {
-        let style = if self.explorer { "explorer" } else { "greedy" };
+        let style = self.style.name();
         if self.every == 1 {
             style.into()
         } else {
@@ -72,9 +109,29 @@ impl Persona {
     }
     /// The bot policy this persona plays by (`BOT_NORESEARCH` still switches research off).
     pub fn policy(self) -> Policy {
-        Policy {
-            deep_first: self.explorer,
-            ..Policy::from_env()
+        let base = Policy::from_env();
+        match self.style {
+            Style::Greedy => base,
+            Style::Explorer => Policy {
+                deep_first: true,
+                ..base
+            },
+            Style::Builder => Policy {
+                focus: Focus::Economy,
+                ..base
+            },
+            Style::Turtle => Policy {
+                focus: Focus::Defense,
+                ..base
+            },
+            Style::Scholar => Policy {
+                focus: Focus::Research,
+                ..base
+            },
+            Style::Tactician => Policy {
+                tactics: true,
+                ..base
+            },
         }
     }
 }

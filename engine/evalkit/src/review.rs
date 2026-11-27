@@ -30,6 +30,18 @@ pub fn baseline_dir() -> String {
 /// (`CLAUDE.md`: "模型和机器人对不上超过两成，要补模型或写明原因").
 const MODEL_TOLERANCE: f64 = 0.2;
 
+/// Headline outcomes the play-style spread compares across runs; `{N}` is the last checkpoint the
+/// runs reach.
+const SPREAD_METRICS: [&str; 7] = [
+    "score.h{N}",
+    "owned.h{N}",
+    "ring.h{N}",
+    "power.h{N}",
+    "payoff.ladder.h{N}",
+    "surge_lost.all",
+    "research.draws",
+];
+
 /// A pass band on one statistic of one metric across seeds.
 #[derive(Deserialize, Clone, Debug)]
 pub struct Band {
@@ -322,6 +334,31 @@ pub struct Move<'a> {
     pub goals: Vec<&'a str>,
 }
 
+/// One headline outcome across the runs (the play-style spread): each run's median, `None` where
+/// the run lacks the metric.
+pub struct Spread {
+    pub id: String,
+    pub p50: Vec<Option<f64>>,
+}
+
+impl Spread {
+    /// Highest ÷ lowest median over the runs that have a positive, finite one.
+    pub fn ratio(&self) -> Option<f64> {
+        let v: Vec<f64> = self
+            .p50
+            .iter()
+            .flatten()
+            .copied()
+            .filter(|x| x.is_finite() && *x > 0.0)
+            .collect();
+        let (lo, hi) = (
+            v.iter().copied().fold(f64::INFINITY, f64::min),
+            v.iter().copied().fold(0.0, f64::max),
+        );
+        (v.len() >= 2).then(|| hi / lo)
+    }
+}
+
 /// Everything `eval review` decides, before it is written up (`report::markdown`).
 pub struct Judgment<'a> {
     pub goals: &'a [Goal],
@@ -337,6 +374,8 @@ pub struct Judgment<'a> {
     pub unbound: Vec<String>,
     /// Moves against the baselines, largest relative change first.
     pub moves: Vec<Move<'a>>,
+    /// Headline outcomes side by side, when two or more runs have the same length.
+    pub spread: Vec<Spread>,
 }
 
 impl<'a> Judgment<'a> {
@@ -539,6 +578,7 @@ pub fn judge<'a>(files: &'a [RunFile], goals: &'a [Goal], base: Option<&str>) ->
         }
     }
     moves.sort_by(|a, b| b.rel.total_cmp(&a.rel));
+    let spread = spread(&runs);
 
     Judgment {
         goals,
@@ -549,7 +589,37 @@ pub fn judge<'a>(files: &'a [RunFile], goals: &'a [Goal], base: Option<&str>) ->
         idle_goals,
         unbound,
         moves,
+        spread,
     }
+}
+
+/// The play-style spread: the headline outcomes of every run, when all runs have the same length
+/// and there are two or more (a gap wider than a goal's band says players' choices, not the
+/// numbers, decide that outcome).
+fn spread(runs: &[Run]) -> Vec<Spread> {
+    let hours = runs[0].f.hours;
+    if runs.len() < 2 || runs.iter().any(|r| r.f.hours != hours) {
+        return Vec::new();
+    }
+    let Some(n) = crate::run::CHECKPOINTS
+        .into_iter()
+        .filter(|h| *h <= hours)
+        .max()
+    else {
+        return Vec::new();
+    };
+    SPREAD_METRICS
+        .iter()
+        .map(|m| m.replace("{N}", &n.to_string()))
+        .filter(|id| runs.iter().any(|r| r.f.metrics.contains_key(id)))
+        .map(|id| {
+            let p50 = runs
+                .iter()
+                .map(|r| r.f.metrics.get(&id).map(|v| registry::summary(&id, v).p50))
+                .collect();
+            Spread { id, p50 }
+        })
+        .collect()
 }
 
 /// `eval review`: the full report (markdown) and whether every gate check passed.

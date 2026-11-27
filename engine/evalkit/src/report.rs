@@ -318,5 +318,34 @@ pub fn markdown(j: &Judgment, goals_path: &str) -> String {
             );
         }
     }
+
+    if !j.spread.is_empty() {
+        let _ = writeln!(out, "\n## 五、打法离散度\n");
+        let _ = writeln!(
+            out,
+            "同样长度的几次运行，主要结果的中位数并排（`docs/balance-eval.md`“机器人人格”）。差距比目标区间还宽，说明这项主要由打法决定，数值管不住它；一个人格在成果上远超其余，就可能是统治打法。\n"
+        );
+        let head: Vec<&str> = j.runs.iter().map(|r| r.f.persona.as_str()).collect();
+        let _ = writeln!(
+            out,
+            "| 指标 | {} | 最高 ÷ 最低 |\n|---|{}---|",
+            head.join(" | "),
+            "---|".repeat(head.len())
+        );
+        for s in &j.spread {
+            let cells: Vec<String> = s
+                .p50
+                .iter()
+                .map(|v| v.map(fmt).unwrap_or("-".into()))
+                .collect();
+            let _ = writeln!(
+                out,
+                "| `{}` | {} | {} |",
+                s.id,
+                cells.join(" | "),
+                s.ratio().map(fmt).unwrap_or("-".into())
+            );
+        }
+    }
     out
 }
