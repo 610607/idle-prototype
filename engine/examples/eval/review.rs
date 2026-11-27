@@ -487,7 +487,11 @@ pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (Strin
                 r.f.metrics
                     .iter()
                     .filter(|(id, _)| id.starts_with("payoff.ladder.h"))
-                    .filter(|(_, v)| stats::summary(v).p50 >= size)
+                    .filter(|(_, v)| {
+                        // Missing reads (no squad with members) summarise as infinity.
+                        let p50 = stats::summary(v).p50;
+                        p50.is_finite() && p50 >= size
+                    })
                     .map(|(id, _)| id.as_str())
                     .collect::<Vec<_>>();
             if !top.is_empty() {
@@ -767,5 +771,26 @@ mod tests {
         );
         assert!(report.contains("不过的门槛：") && report.contains("defense"));
         assert!(report.contains("| `surge_lost.all` | greedy | 0.20 | 0.65 |"));
+    }
+
+    #[test]
+    fn ceiling_ignores_missing_ladder_reads() {
+        let mut f = RunFile {
+            persona: "llm:test".into(),
+            hours: 72,
+            seeds: vec![0],
+            ..Default::default()
+        };
+        f.metrics
+            .insert("payoff.ladder.size".into(), vec![Some(104.0)]);
+        f.metrics.insert("payoff.ladder.h48".into(), vec![None]);
+        f.metrics
+            .insert("payoff.ladder.h72".into(), vec![Some(104.0)]);
+        let (report, _) = review(&[f], None, GOALS);
+        assert!(report.contains("模拟标尺封顶") && report.contains("payoff.ladder.h72"));
+        assert!(
+            !report.contains("payoff.ladder.h48"),
+            "a missing read (no squad) is not a full ladder"
+        );
     }
 }

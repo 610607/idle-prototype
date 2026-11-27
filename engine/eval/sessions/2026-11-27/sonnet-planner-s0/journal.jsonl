@@ -104,3 +104,5 @@
 {"t":489600,"cmd":{"cmd":"set_route","squad":4,"route":[100]}}
 {"t":518400,"cmd":{"cmd":"set_route","squad":4,"route":[109]}}
 {"t":547200,"cmd":{"cmd":"set_route","squad":4,"route":[115]}}
+{"t":576000,"cmd":{"cmd":"claim","tile":115}}
+{"t":576000,"cmd":{"cmd":"set_route","squad":4,"route":[124]}}
