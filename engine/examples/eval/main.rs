@@ -2,7 +2,8 @@
 //! cleanly and reads the same for people and LLMs.
 //!
 //! ```text
-//! cargo run --release --example eval -- run [persona] [--seeds N] [--hours H] [--patch JSON] [--out FILE]
+//! cargo run --release --example eval -- run [persona] [--seeds N] [--hours H] [--patch JSON] [--out FILE] [--sessions OUTDIR]
+//! cargo run --release --example eval -- session DIR… [--out FILE]   # replay play sessions (docs/eval-interface.md)
 //! cargo run --release --example eval -- check FILE [GOALS]       # goal checks (eval/goals.json)
 //! cargo run --release --example eval -- review RUN… [--base FILE] [--out REPORT.md] [--bless]   # the evaluator
 //! cargo run --release --example eval -- compare A B              # paired by seed, 90% bootstrap CI
@@ -29,6 +30,7 @@ mod price;
 mod registry;
 mod review;
 mod run;
+mod session;
 mod stats;
 mod strength;
 #[path = "../synergy.rs"]
@@ -166,9 +168,48 @@ fn main() {
             }
             let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
             let seeds: Vec<u64> = (0..n).collect();
-            let mut f = run::run(persona, &seeds, hours, threads);
+            let sessions = arg(&args, "--sessions").map(std::path::PathBuf::from);
+            let mut f = run::run(persona, &seeds, hours, threads, sessions.as_deref());
             f.patch = patch;
             f.build = Some(idle_engine::content::fingerprint());
+            print_summary(&f);
+            if let Some(out) = arg(&args, "--out") {
+                std::fs::write(&out, serde_json::to_string_pretty(&f).unwrap()).unwrap();
+                println!("→ {out}");
+            }
+            if let Some(dir) = &sessions {
+                println!("→ sessions in {}", dir.display());
+            }
+        }
+        Some("session") => {
+            // Every argument but `--out FILE` is a session directory.
+            let mut dirs = Vec::new();
+            let mut rest = args.iter().skip(1);
+            while let Some(a) = rest.next() {
+                if a == "--out" {
+                    rest.next();
+                } else {
+                    dirs.push(std::path::PathBuf::from(a));
+                }
+            }
+            let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+            let (f, outcomes) = session::replay_dirs(&dirs, threads).unwrap_or_else(|e| {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            });
+            for o in &outcomes {
+                println!(
+                    "# session {} · seed {} · {} · save {}",
+                    o.dir.display(),
+                    o.seed,
+                    if o.stale.is_some() {
+                        "stale"
+                    } else {
+                        "replayed"
+                    },
+                    o.digest
+                );
+            }
             print_summary(&f);
             if let Some(out) = arg(&args, "--out") {
                 std::fs::write(&out, serde_json::to_string_pretty(&f).unwrap()).unwrap();
@@ -310,7 +351,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: eval run|check|compare|numbers|calibrate … (see the top of engine/examples/eval/main.rs)"
+                "usage: eval run|session|check|review|compare|numbers|calibrate … (see the top of engine/examples/eval/main.rs)"
             );
             std::process::exit(2);
         }

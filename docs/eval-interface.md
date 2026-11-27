@@ -66,6 +66,7 @@ manifest.json：
 - `protocol`：本协议的版本。观察、行动或目录结构有不兼容的改动时加一，harness 看到不认识的版本应当报错退出。
 - `build`：游戏版本指纹，即 `SAVE_VERSION` 和全部内容数据（含 `balance.json`）的哈希。只作参考：引擎代码改了它不一定变，真正的判据是重放后的存档指纹。
 - `player`：谁在玩，评估结果里的人格名是 `llm:<player>`（机器人写的会话用机器人人格名）。
+- `schedule`：回访日程（见“日程”）。机器人写的会话记为 `bot`：机器人按自己的人格节奏行动，没有回访，visits.jsonl 为空；save.json 是终局存档。这种目录只给 `eval session` 重放，不能用 `agent_cli session` 接着玩。
 
 visits.jsonl 的一行：
 
@@ -145,19 +146,36 @@ agent_cli session serve DIR
 
 ```bash
 cargo run --release --example eval -- session DIR… [--out RUN.json]
-cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --sessions OUTDIR   # 机器人也写会话目录
+cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --sessions OUTDIR   # 机器人也写会话目录：OUTDIR/<人格>-s<种子>/
 ```
 
-`eval session` 对每个会话目录：读 manifest 和命令日志，从同一个种子开局，按时刻重放命令，期间和 `eval run` 一样每 5 分钟记一次测量，算出同名的全部指标（`owned.h*`、`reach_h.*`、`payoff.*`……）；再从 visits.jsonl 算 `llm.*` 指标。结果是一个 RunFile，人格名 `llm:<player>`，可以直接 `eval check`、`eval compare`（和同种子的 `greedy` 比），也可以和机器人的结果一起交给 `eval review`。
+`eval session` 对每个会话目录：读 manifest 和命令日志，从同一个种子开局，按时刻重放命令，期间和 `eval run` 一样每 5 分钟记一次测量，算出同名的全部指标（`owned.h*`、`reach_h.*`、`payoff.*`……）；再从 visits.jsonl 算 `llm.*` 指标。结果是一个 RunFile，人格名 `llm:<player>`（`player` 本身是机器人人格名时就用人格名，如 `greedy`），可以直接 `eval check`、`eval compare`（和同种子的 `greedy` 比），也可以和机器人的结果一起交给 `eval review`。
+
+重放的细节（代码在 `engine/examples/eval/run.rs` 的 `measure` 和 `Replay`、`session.rs`）：
+
+- 机器人和重放走同一个测量循环，只是行动的一方不同。两者开局相同：`Engine::new(seed, T0, "agent")`，再加 `textui::setup` 的四条设定命令（选第 1 张地图、开三条规章）。日志开头是这四条时，重放先执行它们，不算玩家第 1 小时发出的命令（和机器人一样）。
+- 每 5 分钟一步。每条命令在自己的时刻执行：时刻落在一步中间，就先推进到那一刻、执行、再推进到这一步结束；同一秒的几条命令之间不推进时间（`sim::advance` 即使没有经过时间也会让空闲小队出发）。每小时交给爽点时间轴的“发出的命令”就是这一小时里日志中的命令，按名字计数。
+- 测量到 final.json 的 `t` 所在的整小时为止（`hours` = `t` ÷ 3600），之后把剩下的、时刻不晚于 `t` 的命令执行完（例如最后一次回访时自动领取的见习任务），推进到 `t`，再算存档指纹。
+- 机器人写出的会话重放后，存档指纹和指标都和 `eval run` 当场算的逐位相同（`cargo test` 检查）。
+- RunFile 的 `commands` 是日志里各命令的条数（含开局设定），和 `eval run` 的口径一样。
+
+一次只评估一个玩家的一组会话：
+
+- 没有 final.json 的目录（没玩完）跳过，打印警告。
+- 几个目录的 `player` 不同就报错，请按玩家分开跑；同一个玩家的同一个种子出现两次也报错。
+- 时长（final.json 的 `t`）不同也报错：检查点对不齐，指标没法放进同一个 RunFile。
+- manifest 的 `protocol` 不是本工具认识的版本（现在是 1），报错并写明会话的版本。
 
 `llm.*` 指标：
 
-- `llm.feel.<阶段>.<标签>`：该阶段回访里各种感受的占比。
-- `llm.score.<维度>.<阶段>`：阶段打分。
-- `llm.delight_given_felt`、`llm.delight_given_none`：回访窗口里有 / 没有可感爽点事件（爽点时间轴里 tier ≥ 1）时，玩家记“惊喜”的比例。两者差得越开，说明时间轴的分级越贴近玩家的感觉；这是校准幅度分级的依据。
-- `llm.invalid`：行动里失败项的占比（看得懂的反面信号，也能发现接口问题）。
+- `llm.feel.<阶段>.<标签>`：该阶段回访里各种感受的占比。阶段取 visits.jsonl 每行的 `stage`；没写感受的回访也算在分母里。只输出有回访的阶段，三种标签都输出（没出现的记 0）。
+- `llm.score.<维度>.<阶段>`：阶段打分，阶段取该行的 `score_stage`（缺这个字段时取上一次回访的阶段，即刚结束的那个）。同一阶段打了两次取平均。
+- `llm.delight_given_felt`、`llm.delight_given_none`：回访窗口里有 / 没有可感爽点事件（爽点时间轴里 tier ≥ 1）时，玩家记“惊喜”的比例。窗口是（上一次回访的时刻，这一次回访的时刻]，第一次回访的窗口从开局算起；没写感受的回访也算在分母里。注意这次回访自己的行动当场引起的事件（比如这一刻占领一格进入新环）也落在这次回访的窗口里。两者差得越开，说明时间轴的分级越贴近玩家的感觉；这是校准幅度分级的依据。
+- `llm.delight_lift`：`llm.delight_given_felt` − `llm.delight_given_none`，两者都有时才输出。越大说明爽点分级越贴近玩家的感觉。
+- `llm.invalid`：行动里失败项的占比（失败项 ÷ 全部行动项；看得懂的反面信号，也能发现接口问题）。
+- 没有回访记录（机器人写的会话）就不输出 `llm.*`。
 
-重放后的存档指纹和 final.json 不一致，说明游戏在会话之后改过：这个会话标为过期，只输出 `llm.feel.*`、`llm.score.*`，不输出对局指标，并打印警告。
+重放后的存档指纹和 final.json 不一致，或者日志里有命令被引擎拒绝（或者日志里有晚于 final.json `t` 的命令），说明游戏在会话之后改过：这个会话标为过期，只输出 `llm.feel.*`、`llm.score.*`，不输出对局指标和 `llm.delight_given_*`、`llm.delight_lift`、`llm.invalid`，并打印警告。每个重放的会话都写 `session.stale`：过期为 1，否则为 0（机器人写的会话也有），汇总多个会话时据此看出哪些过期。
 
 ## 接入其他模型
 
@@ -173,11 +191,15 @@ cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --session
 ## 版本和稳健性
 
 - **协议版本**：`protocol` 字段。只加可选字段不算不兼容；删字段、改含义、改目录结构要加一，并在这里写明变化。
-- **会话过期**：见上一节，按重放后的存档指纹判断。
+- **会话过期**：见上一节，按重放后的存档指纹判断（重放时有命令被拒绝也算过期）。
 - **菜单 id**：由命令内容算出，不随菜单顺序变化。
 - **测试**（`cargo test`）：
-  - 用一个固定策略的模拟玩家跑完一局短会话（`serve` 模式），再用 `eval session` 重放，存档指纹一致、指标齐全。
-  - 机器人写出的会话重放后，指标和 `eval run` 当场算的完全一致。
+  - 会话本身（`engine/tests/session.rs`）：模拟玩家通过库接口和 `serve` 各玩一局，命令日志重放得到同一个终局存档；被拒绝的行动不改目录。
+  - 评估会话（`engine/examples/eval/session.rs`）：
+    - 机器人（`greedy`，种子 0，12 小时）写出的会话重放后，存档指纹一致，指标逐位相同（重放多出的只有 `session.stale` = 0），命令计数相同，不判过期。
+    - 脚本玩家通过 `textui::session` 的库接口玩一局（`every:3`，24 小时；每次选第一个菜单项，感受轮流记惊喜、平淡、不写，被问时各维度打 3 分），重放后不判过期，`llm.feel.d1.*` 之和不超过 1，`llm.score.*.d1` 都是 3，`llm.invalid` 为 0，`owned.h12` 等对局指标齐全，所有 id 都在注册表里。
+    - 改掉 final.json 的 `save_sha`：判为过期，只剩 `llm.feel.*`、`llm.score.*` 和 `session.stale` = 1。
+    - `protocol` 为 2 的 manifest 报错；没有 final.json 的目录跳过；不同玩家、同一种子两次都报错。
   - 事件分类棘轮：`locales/zh-CN/events.json` 里每个事件 key 都要在 `engine/eval/payoff_classes.json` 里有归类（爽点类别和级别，或明确记为“不算”）。新事件不归类，测试就失败，这就是“新系统怎么接入”清单里的爽点声明。
   - 指标注册表：`engine/eval/metrics.json` 登记每个指标 id 的模式、类别（局面探针 / 结果量 / 自选样本）和一句说明。`eval run` 产出的 id、`goals.json` 里引用的 id 都必须能在注册表里找到；改名或拼错立刻失败。`eval metrics` 打印注册表，给人和模型读结果时查。
 

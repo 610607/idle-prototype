@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn a_short_run_writes_only_registered_ids() {
         let reg = load();
-        let m = crate::run::play(0, crate::run::Persona::REFERENCE, 6);
+        let m = crate::run::play_full(0, crate::run::Persona::REFERENCE, 6).0;
         let bad: Vec<&String> = m.keys().filter(|id| find(&reg, id).is_none()).collect();
         assert!(bad.is_empty(), "unregistered metric ids: {bad:?}");
     }
