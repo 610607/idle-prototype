@@ -172,6 +172,41 @@ fn content_holds_no_text() {
     }
 }
 
+/// Every string literal shaped like a catalog key (`cli.menu.build`, `outcome.victory`, …) whose
+/// first part is a catalog prefix must exist, so a typo does not show up as a bare key on screen.
+#[test]
+fn keys_in_code_exist() {
+    let keys = idle_engine::i18n::keys(idle_engine::i18n::DEFAULT);
+    let prefixes: std::collections::BTreeSet<&str> =
+        keys.iter().filter_map(|k| k.split('.').next()).collect();
+    let mut missing = vec![];
+    for p in sources()
+        .into_iter()
+        .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+    {
+        let src = fs::read_to_string(&p).unwrap();
+        for line in src.lines().filter(|l| !l.trim_start().starts_with("//")) {
+            for lit in line.split('"').skip(1).step_by(2) {
+                let parts: Vec<&str> = lit.split('.').collect();
+                let shaped = parts.len() >= 2
+                    && parts.iter().all(|s| {
+                        !s.is_empty()
+                            && s.chars()
+                                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                    });
+                if shaped && prefixes.contains(parts[0]) && !idle_engine::i18n::has(lit) {
+                    missing.push(format!("{}: {lit}", p.display()));
+                }
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "keys missing from locales/:\n{}",
+        missing.join("\n")
+    );
+}
+
 #[test]
 fn counter_skips_comments() {
     assert_eq!(

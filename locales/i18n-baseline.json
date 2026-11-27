@@ -1,5 +1,4 @@
 {
-  "engine/examples/agent_cli.rs": 236,
   "engine/src/actions.rs": 100,
   "engine/src/api.rs": 34,
   "engine/src/combat.rs": 145,

@@ -7,5 +7,18 @@
   "stat.int.name": "智力",
   "stat.pow.name": "意志",
   "stat.edu.name": "教育",
-  "stat.luk.name": "幸运"
+  "stat.luk.name": "幸运",
+  "outcome.victory": "胜",
+  "outcome.planned": "按计划收队",
+  "outcome.emergency": "紧急撤退",
+  "outcome.wipe": "全灭",
+  "outcome.none": "无战斗",
+  "terrain.city": "城区",
+  "terrain.rift": "裂隙",
+  "terrain.special": "特殊格",
+  "terrain.hq": "总部",
+  "terrain.barrier": "屏障",
+  "terrain.unknown": "未知",
+  "row.front": "前排",
+  "row.back": "后排"
 }

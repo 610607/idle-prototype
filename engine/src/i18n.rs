@@ -108,28 +108,27 @@ pub fn fmt(key: &str, args: &[(&str, String)]) -> String {
     fill(&tr(key), args)
 }
 
+/// Only `{identifier}` is a placeholder, so JSON examples like `{"cmd":"claim"}` pass through.
 pub fn fill(template: &str, args: &[(&str, String)]) -> String {
     let mut out = String::with_capacity(template.len() + 16);
     let mut rest = template;
     while let Some(open) = rest.find('{') {
         out.push_str(&rest[..open]);
         let after = &rest[open + 1..];
-        match after.find('}') {
-            Some(close) => {
-                let name = &after[..close];
+        let close = after.find('}');
+        let name = close.map(|c| &after[..c]).unwrap_or("");
+        let ident = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        match (close, ident) {
+            (Some(c), true) => {
                 match args.iter().find(|(n, _)| *n == name) {
                     Some((_, v)) => out.push_str(v),
-                    None => {
-                        out.push('{');
-                        out.push_str(name);
-                        out.push('}');
-                    }
+                    None => out.push_str(&rest[open..open + c + 2]),
                 }
-                rest = &after[close + 1..];
+                rest = &after[c + 1..];
             }
-            None => {
-                out.push_str(&rest[open..]);
-                rest = "";
+            _ => {
+                out.push('{');
+                rest = after;
             }
         }
     }
@@ -169,6 +168,10 @@ mod tests {
             "1 到 2，{c}"
         );
         assert_eq!(fill("没有占位", &[]), "没有占位");
+        assert_eq!(
+            fill(r#"{"squad":{sq},"m":[1]}"#, &[("sq", "4".into())]),
+            r#"{"squad":4,"m":[1]}"#
+        );
     }
 
     #[test]

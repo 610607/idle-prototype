@@ -5,9 +5,10 @@
 - 玩家看得到的文字只放在 `locales/<语言>/*.json`，代码里用 `t!("key", 参数 = 值)` 取；内容数据（`engine/content/*.json`）只放 id 和数字；图标只按 id 引用（`icons/pixel/<id>.txt`），图里不画字；存档不存渲染好的句子。
 - 新代码不新增写死的文字。`cargo test` 里的 `i18n` 测试是棘轮：文件里的中文串变多会失败；挪走以后用 `I18N_BLESS=1 cargo test --test i18n` 记下新基线。
 
-## 文字版（agent_cli）跟着功能一起改
+## 文字版（textui）跟着功能一起改
 
-- `engine/examples/agent_cli.rs` 是和网页并列的客户端，给 LLM 试玩用（docs/llm-playtest.md）。加了新命令、新的玩家可见信息或预演，同一个改动里也要让文字版看得到、做得到；网页上有、文字版没有的信息会让试玩结论失真。
+- 文字版是和网页并列的客户端，给 LLM 试玩用（docs/llm-playtest.md）：逻辑在 `engine/src/textui.rs`，文字在 `locales/<语言>/cli.json`，`engine/examples/agent_cli.rs` 只是命令行外壳。加了新命令、新的玩家可见信息或预演，同一个改动里也要让文字版看得到、做得到；网页上有、文字版没有的信息会让试玩结论失真。
+- 新命令不改文字版编译不过：`textui::reach` 没有兜底分支，要决定它进菜单、只走 `--json`、自动做还是轮回之间；`textui::samples` 和 `cli.cmd.<命令>` 的说明由测试检查有没有漏。
 - 改完跑一遍：`cargo run --release --example agent_cli -- new /tmp/t.json 0`，再 `do /tmp/t.json 1 --wait 4`，确认新东西出现在局面或菜单里。
 
 ## 检查

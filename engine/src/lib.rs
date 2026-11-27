@@ -23,6 +23,7 @@ pub mod save;
 pub mod sim;
 pub mod state;
 pub mod tasks;
+pub mod textui;
 pub mod view;
 pub mod world;
 
