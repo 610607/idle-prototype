@@ -23,6 +23,8 @@
   "cli.board.tide": "未来{h}小时来潮：{n} 次，预报会失守 {lost} 次{list}",
   "cli.board.score": "本轮成果（收束时换组织经验，越高越好）：{total}（管理{m} 防御{d} 探索{x}）",
   "cli.board.score_lines": "  成果明细：{lines}",
+  "cli.board.org": "组织：Lv.{level}，经验 {exp}/{next}（各级解锁什么见 agent_cli info <存档>）",
+  "cli.board.org_max": "组织：Lv.{level}，经验 {exp}，已到最高级",
   "cli.board.map": "\n[地图]",
   "cli.board.squads": "\n[小队]",
   "cli.board.trip": "上一趟：{outcome}（{results}）",
@@ -56,6 +58,11 @@
   "cli.board.events": "\n[这段时间发生的事] {n} 条",
   "cli.board.events_more": "\n[这段时间发生的事] {n} 条，只列最近 {shown} 条",
   "cli.board.pending": "[待你决定]",
+  "cli.between.title": "== 两轮之间（已收束 {n} 轮）==",
+  "cli.org.title": "[组织] Lv.{level}，经验 {exp}/{next}（✓ 已解锁，· 升到该级解锁）",
+  "cli.org.title_max": "[组织] Lv.{level}，经验 {exp}，已到最高级",
+  "cli.org.perk_on": "  ✓ Lv.{level} {text}",
+  "cli.org.perk_off": "  · Lv.{level} {text}",
   "cli.info.ops": "[队员详情]",
   "cli.info.candidates": "[候选详情]",
   "cli.info.facilities": "[设施]",
@@ -118,5 +125,5 @@
   "cli.run.time_up": "\n== 时间到。最终：{summary} ==",
   "cli.run.no_save": "读不到存档 {path}",
   "cli.run.bad_save": "存档损坏：{err}",
-  "cli.run.usage": "用法：\n  agent_cli new <存档> <种子>                     开一轮（地图 0，开着脚本玩家的三条规章）\n  agent_cli show <存档>                           局面 + 菜单\n  agent_cli do <存档> [编号 ...] [--json '<命令>'] [--route <小队> G7,H7] [--wait 小时] [--note '<理由>']\n                                                  按顺序执行菜单项，再等若干小时（最多 4）\n  agent_cli info <存档>                           队员和候选全文、设施、政策、命令参考\n  agent_cli summary <存档>                        一行结果\n  agent_cli autoplay <存档|-> <种子> <小时> <间隔>  脚本玩家按同样节奏玩（对照）\n环境变量：AGENT_HOURS（默认 72）、AGENT_NORESEARCH=1（对照组，不能研究）、AGENT_LANG（默认 zh-CN）"
+  "cli.run.usage": "用法：\n  agent_cli new <存档> <种子>                     开一轮（地图 0，开着脚本玩家的三条规章）\n  agent_cli show <存档>                           局面 + 菜单\n  agent_cli do <存档> [编号 ...] [--json '<命令>'] [--route <小队> G7,H7] [--wait 小时] [--note '<理由>']\n                                                  按顺序执行菜单项，再等若干小时（最多 4）\n  agent_cli info <存档>                           队员和候选全文、设施、政策、组织等级、命令参考\n  agent_cli summary <存档>                        一行结果\n  agent_cli autoplay <存档|-> <种子> <小时> <间隔>  脚本玩家按同样节奏玩（对照）\n环境变量：AGENT_HOURS（默认 72）、AGENT_NORESEARCH=1（对照组，不能研究）、AGENT_LANG（默认 zh-CN）"
 }

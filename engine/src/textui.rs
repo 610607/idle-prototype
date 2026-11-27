@@ -8,7 +8,7 @@ use crate::combat::Outcome;
 use crate::commands::Command;
 use crate::content::{content, Tag};
 use crate::geom;
-use crate::state::Dial;
+use crate::state::{Dial, Phase};
 use crate::t;
 use crate::view::{OpView, View};
 
@@ -451,8 +451,69 @@ fn line(o: &mut String, s: String) {
     o.push('\n');
 }
 
+/// Organisation level, experience and what each level unlocks (the web's 总部 → 组织 panel).
+fn org(o: &mut String, v: &View) {
+    let g = &v.org;
+    line(
+        o,
+        match g.next {
+            Some(next) => t!("cli.org.title", level = g.level, exp = g.exp, next = next),
+            None => t!("cli.org.title_max", level = g.level, exp = g.exp),
+        },
+    );
+    for p in &g.perks {
+        line(
+            o,
+            t!(
+                if p.unlocked {
+                    "cli.org.perk_on"
+                } else {
+                    "cli.org.perk_off"
+                },
+                level = p.level,
+                text = p.text
+            ),
+        );
+    }
+}
+
+/// Events after `since`, the latest few.
+fn events(o: &mut String, v: &View, since: i64) {
+    let ev: Vec<String> = v
+        .events
+        .iter()
+        .filter(|x| x.t > since)
+        .map(|x| x.text.clone())
+        .collect();
+    const SHOWN: usize = 12;
+    let n = ev.len();
+    line(
+        o,
+        if n > SHOWN {
+            t!("cli.board.events_more", n = n, shown = SHOWN)
+        } else {
+            t!("cli.board.events", n = n)
+        },
+    );
+    for x in ev.into_iter().skip(n.saturating_sub(SHOWN)) {
+        line(o, format!("  - {x}"));
+    }
+}
+
+/// Between cycles there is no map, only the organisation and what just happened (collapse).
+fn between(v: &View, since: i64) -> String {
+    let mut o = String::new();
+    line(&mut o, t!("cli.between.title", n = v.org.cycles));
+    org(&mut o, v);
+    events(&mut o, v, since);
+    o
+}
+
 pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     let v = e.view();
+    if v.phase != Phase::Active {
+        return between(&v, since);
+    }
     let mut o = String::new();
     let res = &v.resources;
     let rate = |x: i64| format!("{:.1}", x as f64 / 100.0);
@@ -577,6 +638,14 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             ),
         );
     }
+    let g = &v.org;
+    line(
+        &mut o,
+        match g.next {
+            Some(next) => t!("cli.board.org", level = g.level, exp = g.exp, next = next),
+            None => t!("cli.board.org_max", level = g.level, exp = g.exp),
+        },
+    );
     line(&mut o, t!("cli.board.map"));
     o += &map(&v);
     line(&mut o, t!("cli.board.squads"));
@@ -788,25 +857,7 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         &mut o,
         t!("cli.board.facilities", list = none_or(&names, " ")),
     );
-    let ev: Vec<String> = v
-        .events
-        .iter()
-        .filter(|x| x.t > since)
-        .map(|x| x.text.clone())
-        .collect();
-    const SHOWN: usize = 12;
-    let n = ev.len();
-    line(
-        &mut o,
-        if n > SHOWN {
-            t!("cli.board.events_more", n = n, shown = SHOWN)
-        } else {
-            t!("cli.board.events", n = n)
-        },
-    );
-    for x in ev.into_iter().skip(n.saturating_sub(SHOWN)) {
-        line(&mut o, format!("  - {x}"));
-    }
+    events(&mut o, &v, since);
     if !v.pending.is_empty() {
         line(&mut o, t!("cli.board.pending"));
         for p in v.pending.iter().take(8) {
@@ -816,7 +867,8 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     o
 }
 
-/// Full skill and trait text, candidates, facilities, policies and the command reference.
+/// Full skill and trait text, candidates, facilities, policies, the organisation's levels and
+/// the command reference.
 pub fn info(e: &mut Engine) -> String {
     let v = e.view();
     let mut o = String::new();
@@ -864,6 +916,7 @@ pub fn info(e: &mut Engine) -> String {
             );
         }
     }
+    org(&mut o, &v);
     line(&mut o, t!("cli.info.commands"));
     for c in samples() {
         if reach(&c) == Reach::BetweenCycles {
@@ -1198,6 +1251,10 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
 
 pub fn menu_text(e: &mut Engine, items: &[Item]) -> String {
     let v = e.view();
+    if v.phase != Phase::Active {
+        // Nothing to pick between cycles; the hints below are about the map.
+        return String::new();
+    }
     let sq = v.squads.first().map(|s| s.id).unwrap_or(1);
     let mut o = String::new();
     line(&mut o, t!("cli.menu.header"));
@@ -1303,6 +1360,38 @@ mod tests {
         for k in ["set_route", "claim", "build"] {
             assert!(kinds.contains(k), "menu never offered {k}: {kinds:?}");
         }
+    }
+
+    /// The organisation shows on the board in a cycle (one line), in `info` (every perk) and on
+    /// the board between cycles, which used to index an empty map.
+    #[test]
+    fn org_is_shown_in_and_between_cycles() {
+        let opts = Options::default();
+        let mut e = new_game(0);
+        let now = e.state.time;
+        e.advance(now + 24 * 3600);
+        let v = e.view();
+        let line = t!(
+            "cli.board.org",
+            level = v.org.level,
+            exp = v.org.exp,
+            next = v.org.next.unwrap()
+        );
+        assert!(board(&mut e, now, &opts).contains(&line));
+        let text = info(&mut e);
+        assert!(v.org.perks.iter().all(|p| text.contains(&p.text)));
+
+        e.command(&Command::Collapse).unwrap();
+        let v = e.view();
+        assert!(v.org.exp > 0);
+        let text = board(&mut e, now, &opts);
+        assert!(!text.contains("cli."), "unresolved key in:\n{text}");
+        assert!(text.contains(&t!("cli.between.title", n = v.org.cycles)));
+        assert!(v.org.perks.iter().all(|p| text.contains(&p.text)));
+        assert!(v.events.iter().any(|x| text.contains(&x.text)));
+        let items = menu(&mut e, &opts);
+        assert!(items.is_empty());
+        assert!(menu_text(&mut e, &items).is_empty());
     }
 
     #[test]
