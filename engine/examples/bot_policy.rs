@@ -2,6 +2,8 @@
 use idle_engine::api::Engine;
 use idle_engine::commands::Command;
 use idle_engine::geom;
+use idle_engine::state::Assignment;
+use idle_engine::view::TideView;
 
 thread_local! {
     /// Explorer style for `eval`: route to the deepest target first instead of the nearest.
@@ -90,10 +92,16 @@ pub fn step_with(e: &mut Engine, staffing: bool) {
         let _ = act(e, &Command::Claim { tile: i });
     }
     let v = e.view();
-    // Hire anything affordable up to 8.
+    // Hire anything affordable up to the roster cap: operatives have no upkeep, and the ones not in
+    // a squad are the garrisons `defend` moves around.
+    let cap = idle_engine::content::balance().roster_cap as usize;
+    let mut roster = v.operatives.len();
     for c in &v.candidates {
-        if v.operatives.len() < 8 && v.resources.scrap >= c.cost + 40 {
-            let _ = act(e, &Command::Hire { candidate: c.id });
+        if roster < cap
+            && v.resources.scrap >= c.cost + 40
+            && act(e, &Command::Hire { candidate: c.id }).is_ok()
+        {
+            roster += 1;
         }
     }
     let v = e.view();
@@ -257,6 +265,144 @@ pub fn step_with(e: &mut Engine, staffing: bool) {
         let cmd = Command::Counter { tile: t.i };
         if e.dry_run(&cmd).ok {
             let _ = act(e, &cmd);
+        }
+    }
+    defend(e);
+}
+
+/// Guard moves the defense pass may make per call, and moves it may dry-run choosing each.
+const DEFENSE_MOVES: usize = 3;
+const DEFENSE_TRIES: usize = 12;
+
+/// Surges a forecast says will be lost.
+fn lost_in(tide: &[TideView]) -> usize {
+    tide.iter().filter(|t| !t.held && !t.skipped).count()
+}
+
+/// Defense pass, played off the forecast the way a careful player does once the free fix (an idle
+/// operative guarding a threatened tile, earlier in `step_with`) is used up:
+/// 1. Guard moves: while the forecast loses surges, dry-run garrisons of the threatened tiles by
+///    operatives not in a squad (idle, or guarding elsewhere) whose preview holds, and take the
+///    one that saves the most. A move is judged on the whole forecast (`dry_run`'s `tide_after`),
+///    so the tile a guard leaves counts against it: losing one surge there to save three here is
+///    a good move.
+/// 2. One defensive building (`fortify`).
+///
+/// Buildings are chosen by rule, not dry run: a dry run plays the 12-hour forecast (about a tenth
+/// of a second), and trying every building in reach each hour made a week's game five times
+/// slower for a few points of `surge_lost.all` (docs/balance-eval.md “机器人人格”).
+fn defend(e: &mut Engine) {
+    for _ in 0..DEFENSE_MOVES {
+        let v = e.view();
+        let base = lost_in(&v.tide);
+        if base == 0 {
+            return;
+        }
+        let mut threatened: Vec<u16> = v
+            .tide
+            .iter()
+            .filter(|t| !t.held && !t.skipped)
+            .map(|t| t.tile)
+            .collect();
+        threatened.sort();
+        threatened.dedup();
+        let mut moves: Vec<(u32, u16)> = Vec::new();
+        for &tile in &threatened {
+            for o in e
+                .garrison_options(tile)
+                .iter()
+                .filter(|o| o.held && !o.current)
+            {
+                let Some(id) = o.op else { continue };
+                let free = v
+                    .operatives
+                    .iter()
+                    .find(|x| x.id == id)
+                    .is_some_and(|x| !matches!(x.assignment, Assignment::Squad { .. }));
+                if free {
+                    moves.push((id, tile));
+                }
+            }
+        }
+        let mut best: Option<(usize, Command)> = None;
+        for (op, tile) in moves.into_iter().take(DEFENSE_TRIES) {
+            let mv = Command::Garrison {
+                op,
+                tile: Some(tile),
+            };
+            let r = e.dry_run(&mv);
+            let after = lost_in(&r.tide_after);
+            if r.ok && after < base && best.as_ref().is_none_or(|b| after < b.0) {
+                best = Some((after, mv));
+            }
+        }
+        match best {
+            Some((_, mv)) if act(e, &mv).is_ok() => {}
+            _ => break,
+        }
+    }
+    fortify(e);
+}
+
+/// One defensive building for a tile the forecast still loses: an outpost in its district when
+/// the district has none (militia guard every tile of a district), else a barricade next to it
+/// (radius 1, fortify). Only where the district has idle residents to staff half of it and
+/// housing to spare, like the staffing builds in `step_with`.
+fn fortify(e: &mut Engine) {
+    let v = e.view();
+    let cap = idle_engine::content::balance().housing_capacity;
+    let mut threatened: Vec<u16> = v
+        .tide
+        .iter()
+        .filter(|t| !t.held && !t.skipped)
+        .map(|t| t.tile)
+        .collect();
+    threatened.sort();
+    threatened.dedup();
+    for tile in threatened {
+        let Some(d) = v.tiles[tile as usize].district else {
+            continue;
+        };
+        let Some(dv) = v.districts.iter().find(|x| x.id == d) else {
+            continue;
+        };
+        let has_outpost = v
+            .tiles
+            .iter()
+            .any(|t| t.district == Some(d) && t.usage == "outpost");
+        for f in ["outpost", "barricade"] {
+            if f == "outpost" && has_outpost {
+                continue;
+            }
+            let Some(opt) = v.facilities.iter().find(|x| x.id == f && x.affordable) else {
+                continue;
+            };
+            let staffed = dv.population - dv.employed >= (opt.jobs + 1) / 2
+                && dv.population - (dv.housing - cap) <= cap;
+            if !staffed {
+                continue;
+            }
+            let spots: Vec<u16> = v
+                .tiles
+                .iter()
+                .filter(|t| {
+                    t.owned
+                        && t.terrain == "city"
+                        && t.usage == "housing"
+                        && t.district == Some(d)
+                        && (f == "outpost" || geom::manhattan(t.i, tile) <= 1)
+                })
+                .map(|t| t.i)
+                .collect();
+            for i in spots {
+                let cmd = Command::Build {
+                    tile: i,
+                    facility: Some(f.into()),
+                };
+                if act(e, &cmd).is_ok() {
+                    return;
+                }
+            }
         }
     }
 }
