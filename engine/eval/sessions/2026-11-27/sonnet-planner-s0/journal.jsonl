@@ -87,3 +87,7 @@
 {"t":288000,"cmd":{"cmd":"hire","candidate":219}}
 {"t":288000,"cmd":{"cmd":"set_route","squad":4,"route":[66]}}
 {"t":288000,"cmd":{"cmd":"garrison","op":198,"tile":144}}
+{"t":316800,"cmd":{"cmd":"pick_doctrine","doctrine":"overflow"}}
+{"t":316800,"cmd":{"cmd":"set_route","squad":4,"route":[67]}}
+{"t":316800,"cmd":{"cmd":"garrison","op":218,"tile":142}}
+{"t":316800,"cmd":{"cmd":"garrison","op":240,"tile":140}}
