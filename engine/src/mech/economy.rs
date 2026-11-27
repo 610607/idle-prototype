@@ -2,13 +2,14 @@
 //! professions, accumulate talent, and grow candidates. Trust drives talent and migration.
 //! Everything settles once per game hour.
 
-use crate::content::{balance, content, FacilityKind};
-use crate::geom::{self, TILES};
-use crate::operative::{self, Origin};
-use crate::state::{
+use crate::data::hooks;
+use crate::data::{balance, content, FacilityKind};
+use crate::kernel::geom::{self, TILES};
+use crate::mech::operative::{self, Origin};
+use crate::mech::state::{
     Assignment, Candidate, Dial, EventKind, GameState, SpecialKind, Terrain, TileUse,
 };
-use crate::{i18n, txt};
+use crate::{l10n, txt};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -124,7 +125,7 @@ pub fn calc(state: &GameState) -> EconCalc {
         // Housed residents who trust you turn out as volunteers when the tide comes.
         let housed = d.population.min(dc.housing);
         dc.volunteers = (housed * d.trust / b.volunteer_div.max(1)).min(b.volunteer_cap);
-        dc.militia = dc.workers.get("militia").copied().unwrap_or(0) + dc.volunteers;
+        dc.militia = dc.workers.get(hooks::MILITIA).copied().unwrap_or(0) + dc.volunteers;
         out.districts.push(dc);
     }
 
@@ -273,7 +274,7 @@ pub fn calc(state: &GameState) -> EconCalc {
         let talker = cy.operatives.iter().any(|o| match o.assignment {
             Assignment::Garrison { tile } => {
                 cy.tiles[tile as usize].district == Some(d.id)
-                    && o.traits.iter().any(|t| t == "silver_tongue")
+                    && o.traits.iter().any(|t| t == hooks::SILVER_TONGUE)
             }
             _ => false,
         });
@@ -447,7 +448,7 @@ pub fn hourly(state: &mut GameState) {
         .map(|o| o.id)
         .collect();
     for id in rift_garrisons {
-        crate::sim::bump_counter(state, id, "rift_garrison_hours", 1);
+        crate::mech::sim::bump_counter(state, id, "rift_garrison_hours", 1);
     }
     let _ = c;
 }
@@ -457,7 +458,7 @@ fn mixed_or_plain(state: &mut GameState, dc: &DistrictCalc, p: &str) -> String {
     let plain = c
         .profession(p)
         .map(|x| x.class.clone())
-        .unwrap_or_else(|| "vanguard".into());
+        .unwrap_or_else(|| hooks::FALLBACK_CLASS.into());
     for m in &c.mixed {
         let other = if m.a == p {
             &m.b
@@ -505,7 +506,7 @@ pub fn spawn_city_candidate_with(
         label: txt!(
             key,
             district = d.name.clone(),
-            profession = i18n::name("profession", prof)
+            profession = l10n::name("profession", prof)
         ),
         district: Some(district),
         profession: Some(prof),
@@ -526,9 +527,9 @@ pub fn spawn_rift_candidate(state: &mut GameState, tile: u16, kind: &str) {
     let origin = Origin {
         label: txt!(
             "origin.rift",
-            rift = i18n::name("rift", kind),
+            rift = l10n::name("rift", kind),
             tile = geom::label(tile),
-            resident = i18n::Text::new(&format!("rift.{kind}.resident"))
+            resident = l10n::Text::new(&format!("rift.{kind}.resident"))
         ),
         district: None,
         profession: None,
@@ -542,10 +543,14 @@ pub fn spawn_rift_candidate(state: &mut GameState, tile: u16, kind: &str) {
     push_candidate(state, op, origin.label.clone());
 }
 
-pub fn push_candidate(state: &mut GameState, op: crate::state::Operative, source: i18n::Text) {
+pub fn push_candidate(
+    state: &mut GameState,
+    op: crate::mech::state::Operative,
+    source: l10n::Text,
+) {
     let cid = state.alloc_id();
     let name = op.name.clone();
-    let class = i18n::name("class", &op.class);
+    let class = l10n::name("class", &op.class);
     let rarity = operative::RARITY_NAMES[op.rarity as usize];
     state.cycle.candidates.push(Candidate {
         id: cid,

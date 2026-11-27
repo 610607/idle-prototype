@@ -14,8 +14,8 @@
 //! fitted on.
 use crate::power::{self, Sample};
 use crate::synergy;
-use idle_engine::combat::{self, BattleInput, BattleKind, Side, UnitSpec, MAX_ROUNDS};
-use idle_engine::operative;
+use idle_engine::mech::combat::{self, BattleInput, BattleKind, Side, UnitSpec, MAX_ROUNDS};
+use idle_engine::mech::operative;
 use std::collections::BTreeMap;
 
 /// Damage multiplier after defence (`combat`: × 1000 / (1000 + def × 22)).
@@ -121,12 +121,12 @@ pub fn profile() -> Profile {
         p.out.insert(c.clone(), n / den[c].max(1e-9));
         p.heal.insert(c.clone(), heal[c] / rounds[c].max(1.0));
     }
-    let c = idle_engine::content::content();
+    let c = idle_engine::data::content();
     let dummy = UnitSpec {
         key: "dummy".into(),
         name: String::new(),
         icon: String::new(),
-        row: idle_engine::content::Row::Front,
+        row: idle_engine::data::Row::Front,
         // A plain front-liner: effects that scale with max HP (erosion) stay realistic.
         max_hp: 150,
         atk: 0,
@@ -241,7 +241,7 @@ fn squad(p: &Profile, input: &BattleInput, classes: &dyn Fn(&UnitSpec) -> Option
     // The front unit with the most HP takes the hits (guard, front row).
     let tank_def = allies
         .iter()
-        .filter(|u| u.row == idle_engine::content::Row::Front)
+        .filter(|u| u.row == idle_engine::data::Row::Front)
         .max_by_key(|u| u.max_hp)
         .or(allies.iter().max_by_key(|u| u.max_hp))
         .map_or(0.0, |u| u.def as f64);
@@ -382,7 +382,7 @@ pub fn lab_rows(p: &Profile) -> Vec<(Margins, Sample)> {
 
 /// Intel all research draws up to the n-th cost together: C(n) = Σ_{k<n} (base + step·k).
 pub fn research_cum_cost(n: u32) -> f64 {
-    let b = idle_engine::content::balance();
+    let b = idle_engine::data::balance();
     (0..n)
         .map(|k| (b.research_base + b.research_step * k as i64) as f64)
         .sum()
@@ -481,7 +481,7 @@ pub fn pace(
     squads: f64,
     bot: Option<&crate::run::RunFile>,
 ) {
-    let b = idle_engine::content::balance();
+    let b = idle_engine::data::balance();
     let reference: Vec<UnitSpec> = [0usize, 1, 2]
         .iter()
         .enumerate()
@@ -521,18 +521,19 @@ pub fn pace(
             let mut n = 0.0;
             for (i, tile) in cy.tiles.iter().enumerate() {
                 let i = i as u16;
-                if idle_engine::geom::ring(i) != r
+                if idle_engine::kernel::geom::ring(i) != r
                     || tile.owned
                     || tile.waves.is_empty()
                     || matches!(
                         tile.terrain,
-                        idle_engine::state::Terrain::Barrier | idle_engine::state::Terrain::Hq
+                        idle_engine::mech::state::Terrain::Barrier
+                            | idle_engine::mech::state::Terrain::Hq
                     )
                 {
                     continue;
                 }
                 n += 1.0;
-                let input = idle_engine::routes::route_battle(&e.state, &reference, i, false);
+                let input = idle_engine::mech::routes::route_battle(&e.state, &reference, i, false);
                 let w = terms(p, &input, &cls);
                 rounds.push(Some(
                     w.iter().map(|x| x.kill.min(MAX_ROUNDS as f64)).sum::<f64>(),

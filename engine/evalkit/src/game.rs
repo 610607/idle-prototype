@@ -1,9 +1,9 @@
 //! Readings of the game state that several parts of the kit share (probes, calibration, the
 //! strength series).
-use idle_engine::combat::UnitSpec;
-use idle_engine::geom::ring;
-use idle_engine::operative;
-use idle_engine::state::{GameState, Terrain};
+use idle_engine::kernel::geom::ring;
+use idle_engine::mech::combat::UnitSpec;
+use idle_engine::mech::operative;
+use idle_engine::mech::state::{GameState, Terrain};
 
 /// Deepest ring with an owned tile (0: only the HQ).
 pub fn deepest_owned(st: &GameState) -> i32 {

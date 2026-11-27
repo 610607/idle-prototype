@@ -1,6 +1,6 @@
 //! Prints a sample view (after choosing a map and a few hours) for client development.
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
+use idle_engine::client::api::Engine;
+use idle_engine::mech::commands::Command;
 
 fn main() {
     let mut e = Engine::new(42, 1_700_000_000, "dump");

@@ -4,7 +4,7 @@
 
 ## 怎么跑
 
-文字版的逻辑在 `engine/src/textui.rs`，文字在 `locales/zh-CN/cli.json`，命令行是 `engine/examples/agent_cli.rs`：
+文字版的逻辑在 `engine/src/client/textui.rs`，文字在 `locales/zh-CN/cli.json`，命令行是 `engine/examples/agent_cli.rs`：
 
 ```bash
 cargo run --release --example agent_cli -- new <存档> <种子>
@@ -20,7 +20,7 @@ cargo run --release --example autoplay -- <存档> <种子> 72 4
 - Haiku 只许用这个工具，不读仓库。72 小时，约 18 个决策点。
 - 同时最多跑 3 局（3 个子代理，见 `CLAUDE.md`），多局分批跑。
 
-以后的试玩用**会话**（协议见 `docs/eval-interface.md`，逻辑在 `engine/src/textui/session.rs`）：回访时刻由日程定，玩家不能自己选等多久；菜单项用由命令内容算出的 id，旧 id 只会被拒绝；每次回访记一个感受，阶段结束后的第一次回访先打分；结果落成会话目录，给 `eval session` 重放算指标。
+以后的试玩用**会话**（协议见 `docs/eval-interface.md`，逻辑在 `engine/src/client/textui/session.rs`）：回访时刻由日程定，玩家不能自己选等多久；菜单项用由命令内容算出的 id，旧 id 只会被拒绝；每次回访记一个感受，阶段结束后的第一次回访先打分；结果落成会话目录，给 `eval session` 重放算指标。
 
 ```bash
 cargo run --release --example agent_cli -- session new <目录> --seed 0 [--schedule week-decay|every:N] [--hours 168] [--player haiku] [--no-research]

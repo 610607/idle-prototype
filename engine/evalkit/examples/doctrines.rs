@@ -8,9 +8,9 @@
 #[allow(dead_code)]
 use evalkit::synergy;
 
-use idle_engine::combat::UnitSpec;
-use idle_engine::content::{Tag, TagEvent, TraitEffect};
-use idle_engine::operative;
+use idle_engine::data::{Tag, TagEvent, TraitEffect};
+use idle_engine::mech::combat::UnitSpec;
+use idle_engine::mech::operative;
 use synergy::*;
 
 struct Doctrine {

@@ -8,11 +8,11 @@
 //! cargo run --release --example autoplay -- <save|-> <seed> [hours=72] [every=4]
 //! ```
 use evalkit::bot;
-use idle_engine::textui;
+use idle_engine::client::textui;
 
 fn main() {
     if let Ok(lang) = std::env::var("AGENT_LANG") {
-        idle_engine::i18n::set_locale(&lang).unwrap_or_else(|e| panic!("{e}"));
+        idle_engine::l10n::set_locale(&lang).unwrap_or_else(|e| panic!("{e}"));
     }
     let a: Vec<String> = std::env::args().collect();
     let path = a.get(1).cloned().unwrap_or_default();

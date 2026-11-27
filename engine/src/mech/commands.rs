@@ -1,10 +1,10 @@
 //! Commands in: every player intent is one serialisable command. The same JSON goes through
 //! `apply` for real and through `dry_run` on a copy for previews.
 
-use crate::actions;
-use crate::content::Gambit;
-use crate::sim;
-use crate::state::{Dial, GameState, Phase};
+use crate::data::Gambit;
+use crate::mech::actions;
+use crate::mech::sim;
+use crate::mech::state::{Dial, GameState, Phase};
 use crate::t;
 use serde::{Deserialize, Serialize};
 
@@ -165,7 +165,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
             actions::set_priority(state, *district, priority)
         }
         Command::SetRule { rule, on } => {
-            if crate::content::content().rule(rule).is_none() {
+            if crate::data::content().rule(rule).is_none() {
                 Err(t!("err.no_rule"))
             } else {
                 state.org.rules.insert(rule.clone(), *on);
@@ -176,11 +176,11 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         Command::Equip { op, item } => actions::equip(state, *op, item.as_deref()),
         Command::Seal { item, on } => actions::seal(state, item, *on),
         Command::Lock { op, locked } => actions::lock(state, *op, *locked),
-        Command::Research => crate::doctrine::research(state),
-        Command::Reroll => crate::doctrine::reroll(state),
-        Command::PickDoctrine { doctrine } => crate::doctrine::pick(state, doctrine),
-        Command::Archive { doctrine, on } => crate::doctrine::archive(state, doctrine, *on),
-        Command::ClaimTask { task } => crate::tasks::claim(state, task),
+        Command::Research => crate::mech::doctrine::research(state),
+        Command::Reroll => crate::mech::doctrine::reroll(state),
+        Command::PickDoctrine { doctrine } => crate::mech::doctrine::pick(state, doctrine),
+        Command::Archive { doctrine, on } => crate::mech::doctrine::archive(state, doctrine, *on),
+        Command::ClaimTask { task } => crate::mech::tasks::claim(state, task),
         Command::Collapse => sim::collapse(state),
     };
     if r.is_ok() {

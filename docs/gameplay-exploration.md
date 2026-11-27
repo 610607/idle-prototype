@@ -223,11 +223,11 @@
 
 全部默认关闭：不发规则、不配设施固定物时，现有游戏行为不变，35 个测试全部通过。
 
-**2026-11-27 更新**：5.1、5.2 和 5.4 的一部分已经进了正式游戏。反应表和规则改写做成「条令」（为了不和零件资源重名），情报研究、三选一、废材换一批；反应图鉴带传闻提示；知识库收录研究过的条令，每轮开局带几条；瞭望点、接地网作为固定物站在守军一边，诊所给附近守军回血。玩法见 [play-guide.md](play-guide.md)，代码在 `engine/src/doctrine.rs`、`engine/src/defense.rs`。5.3、5.5、5.6 的定期评比和设施配套还没做。
+**2026-11-27 更新**：5.1、5.2 和 5.4 的一部分已经进了正式游戏。反应表和规则改写做成「条令」（为了不和零件资源重名），情报研究、三选一、废材换一批；反应图鉴带传闻提示；知识库收录研究过的条令，每轮开局带几条；瞭望点、接地网作为固定物站在守军一边，诊所给附近守军回血。玩法见 [play-guide.md](play-guide.md)，代码在 `engine/src/mech/doctrine.rs`、`engine/src/mech/defense.rs`。5.3、5.5、5.6 的定期评比和设施配套还没做。
 
 | 改动 | 位置 |
 | --- | --- |
-| 新词条效果 `Transmute`（某标签被消耗 / 挂上 / 发作时转成另一种）、`ChainReactions`、`Overflow`、`ConsumeBurst`、`TagReactions`、`Regen` | `engine/src/content.rs`，`engine/src/combat.rs` |
+| 新词条效果 `Transmute`（某标签被消耗 / 挂上 / 发作时转成另一种）、`ChainReactions`、`Overflow`、`ConsumeBurst`、`TagReactions`、`Regen` | `engine/src/data/mod.rs`，`engine/src/mech/combat.rs` |
 | 规则类效果对整边生效：任何一个站着的队员（或固定物）持有，全队享受 | `combat.rs` 的 `side_effect`、`transmute` |
 | 标签反应表与结算，战报新增 `reactions`（各反应触发次数） | `engine/content/reactions.json`，`combat.rs` 的 `tag_reactions` |
 | 固定物：`UnitSpec.fixture`，不能被选中、没有回合、不算存活，只反应、只借规则 | `combat.rs` |

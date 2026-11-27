@@ -2,9 +2,9 @@
 //! giving up a tile the defense cannot hold. The reference play (`Focus::Expand`) leaves all of
 //! these at their defaults.
 use super::{Bot, Focus};
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
-use idle_engine::state::Dial;
+use idle_engine::client::api::Engine;
+use idle_engine::mech::commands::Command;
+use idle_engine::mech::state::Dial;
 
 /// Production jobs before militia.
 const ECONOMY_PRIORITY: [&str; 6] = [

@@ -1,11 +1,13 @@
 //! Combat lab shared by the synergy probe (`examples/synergy.rs`) and the eval tool: the ten
 //! classes, the fixed encounter ladder of real map encounters (rings 1..=7 plus over-rungs), team
 //! members with or without traits, battles, and least-squares fits of team scores.
-use idle_engine::combat::{self, enemy_spec, BattleInput, BattleKind, BattleReport, UnitSpec};
-use idle_engine::content::{content, Stat, Tag};
-use idle_engine::geom::ring;
-use idle_engine::state::{Operative, Terrain};
-use idle_engine::{mapgen, operative, rng::Rng};
+use idle_engine::data::{content, Stat, Tag};
+use idle_engine::kernel::geom::ring;
+use idle_engine::mech::combat::{
+    self, enemy_spec, BattleInput, BattleKind, BattleReport, UnitSpec,
+};
+use idle_engine::mech::state::{Operative, Terrain};
+use idle_engine::{kernel::rng::Rng, mech::mapgen, mech::operative};
 
 pub const CLASSES: [&str; 10] = [
     "vanguard",
@@ -164,14 +166,14 @@ pub fn ladder(team: &[Operative], pool: &[Vec<Enc>]) -> Score {
         for s in specs.iter_mut() {
             s.effects.push((
                 "regen".into(),
-                idle_engine::content::TraitEffect::Regen { bp: regen_bp() },
+                idle_engine::data::TraitEffect::Regen { bp: regen_bp() },
             ));
         }
     }
     // `loop` on the command line: the reaction table plus the two transmutes that close the
     // shock → mark → erosion loop (the strongest stack in the doctrine probe).
     if std::env::args().any(|a| a == "loop") {
-        use idle_engine::content::{Tag, TagEvent, TraitEffect};
+        use idle_engine::data::{Tag, TagEvent, TraitEffect};
         for s in specs.iter_mut() {
             for e in [
                 TraitEffect::TagReactions,
@@ -197,7 +199,7 @@ pub fn ladder(team: &[Operative], pool: &[Vec<Enc>]) -> Score {
         for s in specs.iter_mut() {
             s.effects.push((
                 "reactions".into(),
-                idle_engine::content::TraitEffect::TagReactions,
+                idle_engine::data::TraitEffect::TagReactions,
             ));
         }
     }
@@ -306,7 +308,7 @@ pub fn additive(t: &[usize; 3]) -> Vec<f64> {
 /// Additive plus role coverage: has a healer, has a front-liner, has two or more of one class.
 pub fn roles(t: &[usize; 3]) -> Vec<f64> {
     let mut x = additive(t);
-    let front = |c: usize| content().classes[CLASSES[c]].row == idle_engine::content::Row::Front;
+    let front = |c: usize| content().classes[CLASSES[c]].row == idle_engine::data::Row::Front;
     x.push(t.contains(&2) as i32 as f64);
     x.push(t.iter().any(|c| front(*c)) as i32 as f64);
     x.push((t[0] == t[1] || t[1] == t[2]) as i32 as f64);

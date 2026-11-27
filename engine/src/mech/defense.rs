@@ -2,16 +2,17 @@
 //! Holding keeps wardenship; losing costs 25. At 0 the tile is on alert: it stops producing but
 //! never drops further and is never lost without the player.
 
-use crate::combat::{self, enemy_spec, BattleInput, BattleKind, BattleReport, UnitSpec};
-use crate::content::{
+use crate::data::hooks;
+use crate::data::{
     balance, content, Act, Cond, FacilityDef, FixtureDef, Gambit, Row, Tag, Target, TraitEffect,
 };
-use crate::economy::{self, EconCalc};
-use crate::geom::{self, ring};
-use crate::operative;
-use crate::state::{EventKind, GameState, Terrain, TideEntry};
-use crate::world;
-use crate::{i18n, t, txt};
+use crate::kernel::geom::{self, ring};
+use crate::mech::combat::{self, enemy_spec, BattleInput, BattleKind, BattleReport, UnitSpec};
+use crate::mech::economy::{self, EconCalc};
+use crate::mech::operative;
+use crate::mech::state::{EventKind, GameState, Terrain, TideEntry};
+use crate::mech::world;
+use crate::{l10n, t, txt};
 
 pub fn slot_of(i: u16) -> i64 {
     let (x, y) = geom::xy(i);
@@ -39,7 +40,7 @@ fn simple_unit(
 ) -> UnitSpec {
     let gambits = skills
         .iter()
-        .filter(|s| content().skills[**s].kind == crate::content::SkillKind::Active)
+        .filter(|s| content().skills[**s].kind == crate::data::SkillKind::Active)
         .map(|s| Gambit {
             cond: Cond::Always,
             cond2: None,
@@ -110,7 +111,7 @@ pub fn base_defenders(state: &GameState, calc: &EconCalc, tile: u16) -> Vec<Unit
             b.hq_guard_atk,
             8,
             11,
-            &["shield_bash", "guard_cover"],
+            &hooks::HQ_GUARD_SKILLS,
         )];
     }
     militia_units(economy::militia_of(calc, t.district))
@@ -133,7 +134,7 @@ pub fn militia_units(m: i32) -> Vec<UnitSpec> {
                     } else {
                         "unit.neighbour_squad"
                     },
-                    n = i18n::list("names.unit_index")[k as usize]
+                    n = l10n::list("names.unit_index")[k as usize]
                 );
             }
             u
@@ -150,7 +151,7 @@ pub fn militia_unit(m: i32) -> UnitSpec {
         t!("unit.neighbours")
     };
     simple_unit(
-        "militia",
+        hooks::MILITIA,
         &name,
         "prof-militia",
         Row::Front,
@@ -158,7 +159,7 @@ pub fn militia_unit(m: i32) -> UnitSpec {
         b.militia_atk_base + b.militia_atk_per_2 * m / 2,
         4 + m / 3,
         10,
-        &["baton_strike"],
+        &hooks::MILITIA_SKILLS,
     )
 }
 
@@ -279,7 +280,7 @@ pub fn surge_setup(
         defense: true,
         record: false,
     };
-    crate::doctrine::apply(&cy.doctrines, &mut input);
+    crate::mech::doctrine::apply(&cy.doctrines, &mut input);
     Some(SurgeSetup {
         input,
         source,
@@ -324,7 +325,7 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
         return;
     };
     let report = combat::simulate(&setup.input);
-    crate::doctrine::note(state, &report);
+    crate::mech::doctrine::note(state, &report);
     let held = report.won();
     let gain = report.warden_gain;
     {
@@ -351,7 +352,7 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
     }
     state.cycle.tiles[tile as usize].last_surge = Some(held);
     if let Some(tr) = state.trace.as_mut() {
-        tr.push(crate::state::Trace::Surge {
+        tr.push(crate::mech::state::Trace::Surge {
             t: state.time,
             tile,
             held,
@@ -360,18 +361,18 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
 
     // Experience for the operative who stood here.
     if let Some(id) = setup.defender {
-        crate::sim::apply_battle_counters(state, id, &report, held, "surges_held");
+        crate::mech::sim::apply_battle_counters(state, id, &report, held, "surges_held");
     }
     let district = state.cycle.tiles[tile as usize].district;
     if held {
         state.cycle.stats.surges_held += 1;
         let residue = if state.cycle.tiles[tile as usize].terrain == Terrain::Rift {
-            crate::content::Resources {
+            crate::data::Resources {
                 crystal: b.rift_residue_crystal,
                 ..Default::default()
             }
         } else {
-            crate::content::Resources {
+            crate::data::Resources {
                 intel: b.surge_residue_intel,
                 ..Default::default()
             }
@@ -427,12 +428,12 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::TileUse;
+    use crate::mech::state::TileUse;
 
     #[test]
     fn staffed_facilities_stand_with_nearby_defenders() {
-        let mut s = crate::sim::new_game(2, 1_000_000_000 - 1_000_000_000 % 3600, "test");
-        crate::sim::choose_map(&mut s, 0).unwrap();
+        let mut s = crate::mech::sim::new_game(2, 1_000_000_000 - 1_000_000_000 % 3600, "test");
+        crate::mech::sim::choose_map(&mut s, 0).unwrap();
         // Two owned city tiles of one district next to each other: a watchtower and a target.
         let cy = &s.cycle;
         let (a, b) = cy

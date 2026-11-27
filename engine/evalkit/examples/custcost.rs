@@ -12,11 +12,11 @@
 //! `... custcost 6 '{"housing_capacity":40,"growth_bp":0,"homeless_leave_bp":0,"natives_base":12,
 //!   "natives_per_ring":4,"natives_rand":10,"volunteer_div":1000,"score_pop_div":20}'`
 use evalkit::bot;
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
-use idle_engine::content::{balance, content};
-use idle_engine::state::{Cycle, GameState};
-use idle_engine::{economy, world};
+use idle_engine::client::api::Engine;
+use idle_engine::data::{balance, content};
+use idle_engine::mech::commands::Command;
+use idle_engine::mech::state::{Cycle, GameState};
+use idle_engine::{mech::economy, mech::world};
 
 const T0: i64 = 1_700_000_000;
 const AFTER: i64 = 24;
@@ -87,7 +87,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let seeds: u64 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(6);
     if let Some(p) = args.get(2) {
-        idle_engine::content::patch_balance(p).expect("balance patch");
+        idle_engine::data::patch_balance(p).expect("balance patch");
     }
     let c = content();
     // (trust, regrow hours) for the 12-resident order, to see whether trust makes orders cheaper.

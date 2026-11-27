@@ -15,11 +15,11 @@
 use crate::bot::{Bot, Focus, Policy};
 use crate::game::{deepest_owned, fightable, spendable};
 use crate::probes::{Hour, Probes};
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
-use idle_engine::geom::ring;
-use idle_engine::state::Trace;
-use idle_engine::textui::{self, session::Entry};
+use idle_engine::client::api::Engine;
+use idle_engine::client::textui::{self, session::Entry};
+use idle_engine::kernel::geom::ring;
+use idle_engine::mech::commands::Command;
+use idle_engine::mech::state::Trace;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -146,7 +146,7 @@ pub struct RunFile {
     pub metrics: BTreeMap<String, Vec<Option<f64>>>,
     /// Accepted commands by name, summed over seeds.
     pub commands: BTreeMap<String, u32>,
-    /// Game build the run measured (`content::fingerprint`, includes the patch); absent in files
+    /// Game build the run measured (`data::fingerprint`, includes the patch); absent in files
     /// written before it was recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build: Option<String>,

@@ -1,12 +1,12 @@
 //! Opening check: does the HQ hold its first surges with and without a garrison?
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
-use idle_engine::geom::HQ;
+use idle_engine::client::api::Engine;
+use idle_engine::kernel::geom::HQ;
+use idle_engine::mech::commands::Command;
 
 fn main() {
     // Optional balance patch JSON, e.g. '{"hq_guard_hp":180}'.
     if let Some(p) = std::env::args().nth(1) {
-        idle_engine::content::patch_balance(&p).expect("balance patch");
+        idle_engine::data::patch_balance(&p).expect("balance patch");
     }
     let mut base = 0;
     let mut with_op = 0;

@@ -1,4 +1,4 @@
-// Mirrors engine/src/view.rs, api.rs and combat.rs. The client renders these; it never decides rules.
+// Mirrors engine/src/client/view.rs, api.rs and combat.rs. The client renders these; it never decides rules.
 
 export type Tag = 'shock' | 'mark' | 'overload' | 'erosion' | 'shield' | 'fortify';
 export const TAGS: Tag[] = ['shock', 'mark', 'overload', 'erosion', 'shield', 'fortify'];

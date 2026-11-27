@@ -8,10 +8,10 @@
 //!
 //! `cargo run --release --example synergy [bare|traits] [equip]`
 use evalkit::synergy::*;
-use idle_engine::combat::{LogKind, UnitSpec};
-use idle_engine::content::content;
-use idle_engine::operative;
-use idle_engine::state::Operative;
+use idle_engine::data::content;
+use idle_engine::mech::combat::{LogKind, UnitSpec};
+use idle_engine::mech::operative;
+use idle_engine::mech::state::Operative;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -163,7 +163,7 @@ fn main() {
     }
     println!(
         "  败局里拖满 {} 回合判负的占 {:.0}%",
-        idle_engine::combat::MAX_ROUNDS,
+        idle_engine::mech::combat::MAX_ROUNDS,
         100.0 * agg.timeouts / agg.losses.max(1.0)
     );
 

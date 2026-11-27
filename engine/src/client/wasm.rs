@@ -1,8 +1,8 @@
-//! wasm-bindgen surface for the web client. Thin: every method forwards to [`crate::api::Engine`]
+//! wasm-bindgen surface for the web client. Thin: every method forwards to [`crate::client::api::Engine`]
 //! and speaks JSON strings. Times cross the boundary as `f64` seconds (JS numbers), not BigInt.
 
-use crate::api::Engine;
-use crate::commands::Command;
+use crate::client::api::Engine;
+use crate::mech::commands::Command;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]

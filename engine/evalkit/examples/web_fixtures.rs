@@ -6,9 +6,9 @@
 //! cargo run --release --example web_fixtures -- <out-dir>
 //! ```
 use evalkit::bot;
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
-use idle_engine::textui;
+use idle_engine::client::api::Engine;
+use idle_engine::client::textui;
+use idle_engine::mech::commands::Command;
 
 fn main() {
     let dir = std::env::args().nth(1).expect("out dir");

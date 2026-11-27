@@ -1,17 +1,17 @@
 //! Operatives: 底子 (nine fixed attributes), 本事 (skills and traits), 装备 (one item).
 //! No levels or XP; experience grows new traits from what they actually do.
 
-use crate::combat::UnitSpec;
-use crate::content::{content, Stat, TraitEffect};
-use crate::i18n::{self, Text};
-use crate::rng::Rng;
-use crate::state::Operative;
+use crate::data::{content, Stat, TraitEffect};
+use crate::kernel::rng::Rng;
+use crate::l10n::{self, Text};
+use crate::mech::combat::UnitSpec;
+use crate::mech::state::Operative;
 use crate::txt;
 
 pub const RARITY_NAMES: [&str; 4] = ["N", "R", "SR", "SSR"];
 
 pub struct Origin<'a> {
-    pub label: crate::i18n::Text,
+    pub label: crate::l10n::Text,
     pub district: Option<u16>,
     pub profession: Option<&'a str>,
     pub flavor_trait: Option<&'a str>,
@@ -77,11 +77,11 @@ pub fn generate(rng: &mut Rng, id: u32, class_id: &str, origin: &Origin) -> Oper
             }
         }
     }
-    let mut pick = |pool: &str| Text::item(pool, rng.below(i18n::list_len(pool) as u32) as u16);
+    let mut pick = |pool: &str| Text::item(pool, rng.below(l10n::list_len(pool) as u32) as u16);
     let name = if class.side == "otherworld" {
         pick("names.otherworld")
     } else if class.side == "special" {
-        i18n::name("class", class_id)
+        l10n::name("class", class_id)
     } else {
         let family = pick("names.family");
         txt!("name.person", family = family, given = pick("names.given"))

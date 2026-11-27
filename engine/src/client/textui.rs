@@ -6,14 +6,14 @@
 //!
 //! `session` is the play-session protocol on top (docs/eval-interface.md): schedule, observation
 //! and action JSON, session directory. It reads and writes files, so it stays out of wasm.
-use crate::api::{Engine, RoutePreview};
-use crate::combat::Outcome;
-use crate::commands::Command;
-use crate::content::{content, Tag};
-use crate::geom;
-use crate::state::Dial;
+use crate::client::api::{Engine, RoutePreview};
+use crate::client::view::{OpView, View};
+use crate::data::{content, Tag};
+use crate::kernel::geom;
+use crate::mech::combat::Outcome;
+use crate::mech::commands::Command;
+use crate::mech::state::Dial;
 use crate::t;
-use crate::view::{OpView, View};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod session;
@@ -550,7 +550,7 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         &mut o,
         t!(
             "cli.board.tide",
-            h = crate::content::balance().tide_horizon / 3600,
+            h = crate::data::balance().tide_horizon / 3600,
             n = v.tide.len(),
             lost = lost.len(),
             list = if lost.is_empty() {
@@ -892,7 +892,7 @@ pub fn info(e: &mut Engine) -> String {
                 json = serde_json::to_string(&c).unwrap(),
                 desc = t!(
                     &format!("cli.cmd.{name}"),
-                    squad_size = crate::content::balance().squad_size
+                    squad_size = crate::data::balance().squad_size
                 )
             ),
         );
@@ -1224,7 +1224,7 @@ pub fn menu_text(e: &mut Engine, items: &[Item]) -> String {
         t!(
             "cli.menu.other",
             sq = sq,
-            squad_size = crate::content::balance().squad_size
+            squad_size = crate::data::balance().squad_size
         ),
     );
     o
@@ -1281,7 +1281,7 @@ mod tests {
         for c in samples() {
             let key = format!("cli.cmd.{}", cmd_name(&c));
             if reach(&c) != Reach::BetweenCycles {
-                assert!(crate::i18n::has(&key), "missing {key}");
+                assert!(crate::l10n::has(&key), "missing {key}");
             }
         }
     }

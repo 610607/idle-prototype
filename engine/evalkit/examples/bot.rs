@@ -2,9 +2,9 @@
 //! `cargo run --release --example bot [seeds] [hours]`
 use bot::step;
 use evalkit::bot;
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
-use idle_engine::geom;
+use idle_engine::client::api::Engine;
+use idle_engine::kernel::geom;
+use idle_engine::mech::commands::Command;
 
 const T0: i64 = 1_700_000_000;
 

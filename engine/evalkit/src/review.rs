@@ -258,9 +258,9 @@ pub fn baseline_path(persona: &str) -> String {
 
 /// Commands no run used: nothing measured what they do.
 fn never_used(runs: &[&RunFile]) -> Vec<String> {
-    idle_engine::textui::samples()
+    idle_engine::client::textui::samples()
         .iter()
-        .map(idle_engine::textui::cmd_name)
+        .map(idle_engine::client::textui::cmd_name)
         .filter(|c| runs.iter().all(|f| !f.commands.contains_key(c)))
         .collect::<BTreeSet<_>>()
         .into_iter()

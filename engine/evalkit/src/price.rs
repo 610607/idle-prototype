@@ -11,9 +11,9 @@
 //! `eval/prices.json` keeps the last blessed card; `cargo test` (tests/eval_prices.rs) fails when
 //! content has a 词条 the card does not list, so a new one cannot land unpriced.
 use crate::synergy;
-use idle_engine::combat::{self, BattleInput, BattleKind, UnitSpec};
-use idle_engine::content::content;
-use idle_engine::operative;
+use idle_engine::data::content;
+use idle_engine::mech::combat::{self, BattleInput, BattleKind, UnitSpec};
+use idle_engine::mech::operative;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -80,7 +80,7 @@ fn score(specs: &[UnitSpec], doctrine: Option<&str>, pool: &[Vec<synergy::Enc>])
                 record: false,
             };
             if let Some(d) = doctrine {
-                idle_engine::doctrine::apply(&[d.to_string()], &mut input);
+                idle_engine::mech::doctrine::apply(&[d.to_string()], &mut input);
             }
             if combat::simulate(&input).won() {
                 wins += 1;

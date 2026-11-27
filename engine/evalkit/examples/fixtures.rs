@@ -15,12 +15,12 @@
 #[allow(dead_code)]
 use evalkit::synergy;
 
-use idle_engine::combat::{self, enemy_spec, BattleInput, BattleKind, UnitSpec};
-use idle_engine::content::{balance, Row, Tag, TraitEffect};
-use idle_engine::defense::militia_units;
-use idle_engine::geom::ring;
-use idle_engine::state::Terrain;
-use idle_engine::{mapgen, operative};
+use idle_engine::data::{balance, Row, Tag, TraitEffect};
+use idle_engine::kernel::geom::ring;
+use idle_engine::mech::combat::{self, enemy_spec, BattleInput, BattleKind, UnitSpec};
+use idle_engine::mech::defense::militia_units;
+use idle_engine::mech::state::Terrain;
+use idle_engine::{mech::mapgen, mech::operative};
 use synergy::{member, Traits};
 
 const FAC: [&str; 5] = ["瞭望塔", "接地网", "路障", "诊所", "研究所"];

@@ -9,7 +9,7 @@
 | `{{SYSTEM}}` | 新系统是什么、玩家怎么用、设计意图 | 设计文档或改动说明 | 是 |
 | `{{DIFF}}` | 代码改动 | `git diff` 或改动文件列表加关键片段 | 是 |
 | `{{EVENTS}}` | 新增或改名的事件 key 及其中文文字 | `locales/zh-CN/events.json` 的改动 | 选填 |
-| `{{COMMANDS}}` | 新增的引擎命令 | `engine/src/commands.rs` 的改动 | 选填 |
+| `{{COMMANDS}}` | 新增的引擎命令 | `engine/src/mech/commands.rs` 的改动 | 选填 |
 | `{{CLASSES}}` | 现有事件归类 | `engine/eval/payoff_classes.json` | 是 |
 | `{{METRICS}}` | 现有指标注册表 | `engine/eval/metrics.json` | 是 |
 | `{{GOALS}}` | 现有设计目标 | `engine/eval/goals.json` | 是 |

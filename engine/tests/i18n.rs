@@ -176,7 +176,7 @@ fn content_holds_no_text() {
 /// first part is a catalog prefix must exist, so a typo does not show up as a bare key on screen.
 #[test]
 fn keys_in_code_exist() {
-    let keys = idle_engine::i18n::keys(idle_engine::i18n::DEFAULT);
+    let keys = idle_engine::l10n::keys(idle_engine::l10n::DEFAULT);
     let prefixes: std::collections::BTreeSet<&str> =
         keys.iter().filter_map(|k| k.split('.').next()).collect();
     let mut missing = vec![];
@@ -194,7 +194,7 @@ fn keys_in_code_exist() {
                             && s.chars()
                                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
                     });
-                if shaped && prefixes.contains(parts[0]) && !idle_engine::i18n::has(lit) {
+                if shaped && prefixes.contains(parts[0]) && !idle_engine::l10n::has(lit) {
                     missing.push(format!("{}: {lit}", p.display()));
                 }
             }
@@ -225,13 +225,13 @@ fn web_keys_are_their_own() {
         serde_json::from_str(&fs::read_to_string(&p).unwrap())
             .unwrap_or_else(|e| panic!("{}: {e}", p.display()))
     };
-    let base = read(idle_engine::i18n::DEFAULT);
-    let clash: Vec<&String> = base.keys().filter(|k| idle_engine::i18n::has(k)).collect();
+    let base = read(idle_engine::l10n::DEFAULT);
+    let clash: Vec<&String> = base.keys().filter(|k| idle_engine::l10n::has(k)).collect();
     assert!(
         clash.is_empty(),
         "web.json keys also in the engine catalogs: {clash:?}"
     );
-    for lang in idle_engine::i18n::locales() {
+    for lang in idle_engine::l10n::locales() {
         let other = read(lang);
         assert!(
             other.keys().eq(base.keys()),
@@ -273,7 +273,7 @@ fn runtime_text_quotes_no_numbers() {
         out + rest
     };
     let mut bad = Vec::new();
-    for lang in idle_engine::i18n::locales() {
+    for lang in idle_engine::l10n::locales() {
         for file in ["engine", "events", "battle", "cli", "web"] {
             let p = root().join(format!("locales/{lang}/{file}.json"));
             let map: BTreeMap<String, serde_json::Value> =

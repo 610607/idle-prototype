@@ -1,8 +1,8 @@
 //! Play the bot for a while and print a save that ends at `end` (unix seconds), for loading a
 //! mid-game state into the web client. `cargo run --release --example midsave <seed> <hours> <end>`
 use evalkit::bot;
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
+use idle_engine::client::api::Engine;
+use idle_engine::mech::commands::Command;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

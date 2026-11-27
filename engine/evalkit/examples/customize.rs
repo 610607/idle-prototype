@@ -9,9 +9,9 @@
 #[allow(dead_code)]
 use evalkit::synergy;
 
-use idle_engine::content::{content, Stat};
-use idle_engine::rng::Rng;
-use idle_engine::state::Operative;
+use idle_engine::data::{content, Stat};
+use idle_engine::kernel::rng::Rng;
+use idle_engine::mech::state::Operative;
 use synergy::*;
 
 const DRAWS: u64 = 4;

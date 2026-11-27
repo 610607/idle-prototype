@@ -1,5 +1,12 @@
 # 项目约定
 
+## 分层（docs/architecture.md）
+
+- 引擎源码分五层：本地化 `l10n` → 引擎 `kernel` → 数据 `data` → 机制 `mech` → 客户端 `client`，每层只用前面的层，`tests/layers.rs` 会拦。
+- 新词条只改数据层：`content/*.json` + `locales/`，用现有效果种类表达；表达不了才加效果种类（数据层枚举 + 机制层读它）。
+- 机制层不写死内容 id：代码要按名字认的内容登记在 `data/hooks.rs`，测试会拦。
+- 引擎层（时钟、存档信封、随机、几何）尽量不动；新的定时机制接 `mech/sim.rs` 的 `Timeline` 实现。
+
 ## 文字和图像资源（docs/i18n.md）
 
 - 玩家看得到的文字只放在 `locales/<语言>/*.json`，代码里用 `t!("key", 参数 = 值)` 取；内容数据（`engine/content/*.json`）只放 id 和数字；图标只按 id 引用（`icons/pixel/<id>.txt`），图里不画字。
@@ -12,7 +19,7 @@
 
 ## 文字版（textui）跟着功能一起改
 
-- 文字版是和网页并列的客户端，给 LLM 试玩用（docs/llm-playtest.md）：逻辑在 `engine/src/textui.rs`，文字在 `locales/<语言>/cli.json`，`engine/examples/agent_cli.rs` 只是命令行外壳。加了新命令、新的玩家可见信息或预演，同一个改动里也要让文字版看得到、做得到；网页上有、文字版没有的信息会让试玩结论失真。
+- 文字版是和网页并列的客户端，给 LLM 试玩用（docs/llm-playtest.md）：逻辑在 `engine/src/client/textui.rs`，文字在 `locales/<语言>/cli.json`，`engine/examples/agent_cli.rs` 只是命令行外壳。加了新命令、新的玩家可见信息或预演，同一个改动里也要让文字版看得到、做得到；网页上有、文字版没有的信息会让试玩结论失真。
 - 新命令不改文字版编译不过：`textui::reach` 没有兜底分支，要决定它进菜单、只走 `--json`、自动做还是轮回之间；`textui::samples` 和 `cli.cmd.<命令>` 的说明由测试检查有没有漏。
 - 改完跑一遍：`cargo run --release --example agent_cli -- new /tmp/t.json 0`，再 `do /tmp/t.json 1 --wait 4`，确认新东西出现在局面或菜单里。
 

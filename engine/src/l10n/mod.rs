@@ -9,7 +9,7 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Write};
 use std::hash::{BuildHasherDefault, Hasher};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
 pub const DEFAULT: &str = "zh-CN";
@@ -20,11 +20,11 @@ pub const DEFAULT: &str = "zh-CN";
 const BUNDLED: &[(&str, &[&str])] = &[(
     "zh-CN",
     &[
-        include_str!("../../locales/zh-CN/content.json"),
-        include_str!("../../locales/zh-CN/engine.json"),
-        include_str!("../../locales/zh-CN/events.json"),
-        include_str!("../../locales/zh-CN/battle.json"),
-        include_str!("../../locales/zh-CN/cli.json"),
+        include_str!("../../../locales/zh-CN/content.json"),
+        include_str!("../../../locales/zh-CN/engine.json"),
+        include_str!("../../../locales/zh-CN/events.json"),
+        include_str!("../../../locales/zh-CN/battle.json"),
+        include_str!("../../../locales/zh-CN/cli.json"),
     ],
 )];
 
@@ -98,11 +98,19 @@ pub fn set_locale(lang: &str) -> Result<(), String> {
     let Some(i) = BUNDLED.iter().position(|(l, _)| *l == lang) else {
         return Err(format!("unknown locale {lang}"));
     };
-    if crate::content::loaded() && BUNDLED[i].0 != locale() {
+    if FROZEN.load(Ordering::Relaxed) && BUNDLED[i].0 != locale() {
         return Err("set the locale before the engine starts".into());
     }
     ACTIVE.store(i, Ordering::Relaxed);
     Ok(())
+}
+
+/// Set once content has loaded (the data layer calls it): content names are filled in from the
+/// active language, so it cannot change afterwards.
+static FROZEN: AtomicBool = AtomicBool::new(false);
+
+pub fn freeze() {
+    FROZEN.store(true, Ordering::Relaxed);
 }
 
 fn entry(key: &str) -> Option<&'static Entry> {
@@ -227,10 +235,10 @@ pub fn fill(template: &str, args: &[(&str, &dyn Display)]) -> String {
 #[macro_export]
 macro_rules! t {
     ($key:expr) => {
-        $crate::i18n::tr($key)
+        $crate::l10n::tr($key)
     };
     ($key:expr, $($name:ident = $val:expr),+ $(,)?) => {
-        $crate::i18n::fmt($key, &[$((stringify!($name), &($val) as &dyn ::std::fmt::Display)),+])
+        $crate::l10n::fmt($key, &[$((stringify!($name), &($val) as &dyn ::std::fmt::Display)),+])
     };
 }
 
@@ -337,10 +345,10 @@ pub fn name(kind: &str, id: &str) -> Text {
 #[macro_export]
 macro_rules! txt {
     ($key:expr) => {
-        $crate::i18n::Text::new($key)
+        $crate::l10n::Text::new($key)
     };
     ($key:expr, $($name:ident = $val:expr),+ $(,)?) => {
-        $crate::i18n::Text::new($key)$(.arg(stringify!($name), $val))+
+        $crate::l10n::Text::new($key)$(.arg(stringify!($name), $val))+
     };
 }
 

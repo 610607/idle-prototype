@@ -13,7 +13,7 @@
 //! Every replayed session also gets `session.stale` (1 stale, 0 replayed).
 use crate::payoff::Ev;
 use crate::run::{self, Driver, Game, Metrics, Persona, Replay, RunFile, SeedResult, T0};
-use idle_engine::textui::session::{self as proto, Entry, Final, Manifest, VisitLog};
+use idle_engine::client::textui::session::{self as proto, Entry, Final, Manifest, VisitLog};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -60,12 +60,12 @@ pub fn write_bot(
     fs::create_dir_all(dir).map_err(|e| io(dir, e))?;
     let m = Manifest {
         protocol: proto::PROTOCOL,
-        build: idle_engine::content::fingerprint(),
+        build: idle_engine::mech::fingerprint(),
         seed,
         player: persona.name(),
         schedule: BOT_SCHEDULE.into(),
         hours,
-        lang: idle_engine::i18n::locale().into(),
+        lang: idle_engine::l10n::locale().into(),
         research: persona.policy().research,
     };
     let save = g.e.save();
@@ -184,7 +184,7 @@ pub fn replay(s: &Session) -> Replayed {
     let mut commands = BTreeMap::new();
     for x in &s.journal {
         *commands
-            .entry(idle_engine::textui::cmd_name(&x.cmd))
+            .entry(idle_engine::client::textui::cmd_name(&x.cmd))
             .or_insert(0) += 1;
     }
     Replayed {
@@ -388,14 +388,14 @@ pub fn replay_dirs(dirs: &[PathBuf], threads: usize) -> Result<(RunFile, Vec<Out
     }
     let mut f = RunFile::collect(persona_of(&player), end / 3600, results);
     // The build the replays ran on (a stale session was played on another one).
-    f.build = Some(idle_engine::content::fingerprint());
+    f.build = Some(idle_engine::mech::fingerprint());
     Ok((f, outcomes))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idle_engine::textui::session::{Action, Feel, Observation, Schedule, Score, Setup};
+    use idle_engine::client::textui::session::{Action, Feel, Observation, Schedule, Score, Setup};
 
     fn tmp(name: &str) -> PathBuf {
         let d =
@@ -433,7 +433,7 @@ mod tests {
         assert_eq!(out[0].digest, proto::save_digest(&g.e.save()));
         assert_eq!(f.persona, "greedy");
         assert_eq!(f.hours, hours);
-        assert_eq!(f.build, Some(idle_engine::content::fingerprint()));
+        assert_eq!(f.build, Some(idle_engine::mech::fingerprint()));
         assert!(f.metrics.contains_key("owned.h12"));
         assert!(!f.metrics.keys().any(|k| k.starts_with("llm.")));
         // The one id a replay adds.
@@ -569,7 +569,7 @@ mod tests {
             player: player.into(),
             schedule: "every:3".into(),
             hours: 6,
-            lang: idle_engine::i18n::DEFAULT.into(),
+            lang: idle_engine::l10n::DEFAULT.into(),
             research: true,
         })
         .unwrap();
@@ -577,7 +577,7 @@ mod tests {
         fs::write(dir.join(proto::MANIFEST), m.to_string()).unwrap();
         fs::write(dir.join(proto::JOURNAL), "").unwrap();
         if finished {
-            let mut e = idle_engine::textui::new_game(seed);
+            let mut e = idle_engine::client::textui::new_game(seed);
             let fin = Final {
                 t: 6 * 3600,
                 summary: proto::summarize(&mut e),

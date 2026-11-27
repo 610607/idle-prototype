@@ -7,27 +7,32 @@ Rust 写的确定性规则引擎。客户端（网页、以后的 iOS）只做�
 - **整数**：百分比一律用万分比（bp），没有浮点。
 - **确定性**：随机数只来自存档里的 SplitMix64 种子；只用 `BTreeMap`/`Vec`，不依赖哈希顺序。战斗本身不掷骰子，同样的输入一定打出同样的结果，所以战报可以随时重放。
 - **内容编进二进制**：`content/*.json` 在编译时用 `include_str!` 嵌入，启动时校验一次（引用、标签原则）。
-- **离线 = 在线**：`sim::advance` 是离散事件循环（整点经济、来潮、小队往返、规章），离线多久都走同一条路径；测试保证在线逐秒推进和离线一次跳过的结果逐字节相同。
+- **离线 = 在线**：`kernel::clock::advance` 是离散事件循环（机制层在 `mech::sim` 接入）（整点经济、来潮、小队往返、规章），离线多久都走同一条路径；测试保证在线逐秒推进和离线一次跳过的结果逐字节相同。
 
-## 模块
+## 分层和模块
 
-| 模块 | 内容 |
-| --- | --- |
-| `geom`, `rng`, `content` | 15×15 棋盘几何、种子随机、内容定义与校验 |
-| `mapgen` | 生成地图：天险、裂隙、特殊地点、街区、每格的敌人波次；轮初三选一预览 |
-| `combat` | 前后排、AP 主动（战术条件→技能→目标）、PP 反应；六种标签；因果链日志（每条带公式和全场快照） |
-| `operative` | 队员生成、九项属性、特质、经历词条成长 |
-| `economy` | 住房与岗位、人口增长与无家可归者离开、电力、产出、信任因素、人才积累与候选、志愿民兵 |
-| `world`, `defense` | 边界、来潮来源、关注度；驻守与民兵、来潮结算、告急 |
-| `routes` | 路线校验、出发时预先打完整趟、回来时结算 |
-| `doctrine` | 研究（情报买三选一的条令）、换一批、条令进战斗、反应图鉴、知识库 |
-| `tasks` | 见习任务：每个系统一到三条「做一次」，按链解锁，小奖励 |
-| `actions`, `commands` | 所有玩家操作；`Command` 是它们的 JSON 形式 |
-| `sim` | 新游戏、选图、时间推进、规章、特殊人物、潮汐预报、一轮结算与收束 |
-| `view` | 视图模型：客户端要画的一切，包括「待你决定」 |
-| `save` | 存档信封：格式、版本、修订号、设备、校验和、逐版迁移 |
-| `api` | `Engine`：命令、预演（dry-run，给出红→绿对比和前后 12 小时潮汐表）、驻守逐人预演、路线预演、战斗重放 |
-| `wasm` | `wasm` feature 下的 wasm-bindgen 绑定 |
+源码分五层，每层只用它前面的层（`tests/layers.rs` 检查）；加词条、加效果、加机制各改哪里见 `docs/architecture.md`。
+
+| 层 | 模块 | 内容 |
+| --- | --- | --- |
+| 本地化 `l10n` | `l10n` | 文字目录（`locales/`）、`t!` / `txt!`、存档里的文字 |
+| 引擎 `kernel` | `geom`, `rng`, `clock`, `save`, `hash` | 15×15 棋盘几何、种子随机、离散事件时钟（`Timeline`）、存档信封（`Saved`）、FNV 哈希 |
+| 数据 `data` | `data`, `data::hooks` | 内容定义和效果词汇、数值表、加载和交叉校验；`hooks` 是代码按名字认的少数内容 id |
+| 机制 `mech` | `combat` | 前后排、AP 主动（战术条件→技能→目标）、PP 反应；六种标签；因果链日志（每条带公式和全场快照） |
+| | `operative` | 队员生成、九项属性、特质、经历词条成长 |
+| | `economy` | 住房与岗位、人口增长与无家可归者离开、电力、产出、信任因素、人才积累与候选、志愿民兵 |
+| | `world`, `defense` | 边界、来潮来源、关注度；驻守与民兵、来潮结算、告急 |
+| | `routes` | 路线校验、出发时预先打完整趟、回来时结算 |
+| | `doctrine` | 研究（情报买三选一的条令）、换一批、条令进战斗、反应图鉴、知识库 |
+| | `tasks` | 见习任务：每个系统一到三条「做一次」，按链解锁，小奖励 |
+| | `mapgen` | 生成地图：天险、裂隙、特殊地点、街区、每格的敌人波次；轮初三选一预览 |
+| | `actions`, `commands` | 所有玩家操作；`Command` 是它们的 JSON 形式 |
+| | `sim` | 新游戏、选图、时钟接入（每一刻发生什么）、规章、特殊人物、潮汐预报、一轮结算与收束 |
+| | `state` | 游戏状态（存档的内容）和 `SAVE_VERSION` |
+| 客户端 `client` | `api` | `Engine`：命令、预演（dry-run，给出红→绿对比和前后 12 小时潮汐表）、驻守逐人预演、路线预演、战斗重放 |
+| | `view` | 视图模型：客户端要画的一切，包括「待你决定」 |
+| | `textui` | 文字版和试玩会话（`textui::session`） |
+| | `wasm` | `wasm` feature 下的 wasm-bindgen 绑定 |
 
 ## 目录和命令
 
@@ -45,12 +50,12 @@ cargo run --release --example eval -- review /tmp/g.json      # 对照设计目�
 cargo run --release --example eval                           # 不带参数打印用法；子命令说明在 eval.rs 开头
 ```
 
-**文字版和试玩**（`src/textui.rs`，`docs/llm-playtest.md`）：
+**文字版和试玩**（`src/client/textui.rs`，`docs/llm-playtest.md`）：
 
 ```bash
 cargo run --release --example agent_cli -- new <存档> <种子>   # 局面 + 编号菜单，给 LLM 玩家用；不带参数看用法
 cargo run --release --example agent_cli -- do <存档> 1 3 --wait 4 --note "理由"
-cargo run --release --example agent_cli -- session new <目录> --seed 0  # 试玩会话（src/textui/session.rs，docs/eval-interface.md）：固定日程、菜单 id、感受和打分；obs / act / serve
+cargo run --release --example agent_cli -- session new <目录> --seed 0  # 试玩会话（src/client/textui/session.rs，docs/eval-interface.md）：固定日程、菜单 id、感受和打分；obs / act / serve
 cargo run --release --example autoplay -- <存档> <种子> 72 4   # 同节奏的脚本玩家对照（BOT_NORESEARCH=1 关研究）
 ```
 

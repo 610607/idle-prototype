@@ -5,7 +5,7 @@
 //! mitigation in `combat` (damage × 1000 / (1000 + def × 22)); DPR is atk (spd only orders turns).
 //! Skills, tags, traits and reactions are left out on purpose: `calibrate` measures how much of the
 //! outcome this simple index explains and what it misses.
-use idle_engine::combat::{BattleInput, UnitSpec};
+use idle_engine::mech::combat::{BattleInput, UnitSpec};
 
 /// `combat`: mitigated = raw × 1000 / (1000 + def × 22).
 pub const DEF_K: f64 = 1000.0 / 22.0;
@@ -44,11 +44,11 @@ pub struct Sample {
 }
 
 pub fn sample(input: &BattleInput, ring: i32) -> Sample {
-    let rep = idle_engine::combat::simulate(input);
+    let rep = idle_engine::mech::combat::simulate(input);
     let (hp, max) = rep
         .units
         .iter()
-        .filter(|u| u.side == idle_engine::combat::Side::Ally)
+        .filter(|u| u.side == idle_engine::mech::combat::Side::Ally)
         .fold((0.0, 0.0), |(h, m), u| {
             (h + u.hp.max(0) as f64, m + u.max_hp as f64)
         });

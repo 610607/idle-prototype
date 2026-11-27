@@ -16,11 +16,11 @@ use crate::game::{deepest_owned, fightable, spendable, squad_units};
 use crate::power;
 use crate::run::{Metrics, CHECKPOINTS};
 use crate::{payoff, strength};
-use idle_engine::api::Engine;
-use idle_engine::geom::ring;
-use idle_engine::sim;
-use idle_engine::state::Trace;
-use idle_engine::{combat::UnitSpec, routes};
+use idle_engine::client::api::Engine;
+use idle_engine::kernel::geom::ring;
+use idle_engine::mech::sim;
+use idle_engine::mech::state::Trace;
+use idle_engine::{mech::combat::UnitSpec, mech::routes};
 use std::collections::BTreeMap;
 
 /// One hour as the probes see it at its end.
@@ -154,13 +154,13 @@ impl Pace {
 /// right now, on the shortest route from the territory (1 tile for M + 1, 2 tiles for M + 2):
 /// how hard the frontier is, whatever the bot chooses to fight. Unrevealed tiles count too.
 fn winnable(e: &Engine, deepest: i32, ahead: i32) -> Option<f64> {
-    use idle_engine::geom::neighbors;
+    use idle_engine::kernel::geom::neighbors;
     let cy = &e.state.cycle;
     let squad = cy.squads.iter().find(|s| !s.members.is_empty())?.id;
     let (mut win, mut all) = (0.0, 0.0);
     let open = |i: u16| {
         let t = &cy.tiles[i as usize];
-        !t.owned && t.terrain != idle_engine::state::Terrain::Barrier
+        !t.owned && t.terrain != idle_engine::mech::state::Terrain::Barrier
     };
     for (i, t) in cy.tiles.iter().enumerate() {
         let i = i as u16;
@@ -186,7 +186,7 @@ fn winnable(e: &Engine, deepest: i32, ahead: i32) -> Option<f64> {
             continue;
         }
         all += 1.0;
-        if p.outcome == Some(idle_engine::combat::Outcome::Victory) {
+        if p.outcome == Some(idle_engine::mech::combat::Outcome::Victory) {
             win += 1.0;
         }
     }
@@ -298,7 +298,7 @@ impl Economy {
         self.gains
             .push([0, 1, 2].map(|k| now[k] - hour.after_turn[k]));
         // Intel income, task rewards included: research is the only way intel leaves.
-        let b = idle_engine::content::balance();
+        let b = idle_engine::data::balance();
         let draws = e.state.cycle.research_count;
         let spent: i64 = (hour.draws_before..draws)
             .map(|k| b.research_base + b.research_step * k as i64)

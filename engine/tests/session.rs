@@ -1,12 +1,12 @@
 //! Play-session protocol (docs/eval-interface.md, `textui::session`): a mock player plays through
 //! the library API and through `serve`, the journal replays to the same final save, and refused
 //! actions leave the directory as it was.
-use idle_engine::commands::Command;
-use idle_engine::textui::session::{
+use idle_engine::client::textui::session::{
     self, Action, Feel, Final, Manifest, Observation, Schedule, Score, Setup, DIMS, FINAL, JOURNAL,
     MANIFEST, PROTOCOL, SAVE, VISITS,
 };
-use idle_engine::textui::{self};
+use idle_engine::client::textui::{self};
+use idle_engine::mech::commands::Command;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -121,7 +121,7 @@ fn mock_player_plays_a_week_and_the_journal_replays() {
     // The directory, as docs/eval-interface.md lays it out.
     let m: Manifest =
         serde_json::from_str(&fs::read_to_string(dir.join(MANIFEST)).unwrap()).unwrap();
-    assert_eq!(m.build, idle_engine::content::fingerprint());
+    assert_eq!(m.build, idle_engine::mech::fingerprint());
     assert_eq!(
         (m.seed, m.hours, m.schedule.as_str()),
         (0, 168, "week-decay")

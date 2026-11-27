@@ -2,7 +2,7 @@
 //! §词条测价). `eval/prices.json` is the blessed price card; when content gains, loses or renames
 //! one, re-measure with
 //! `cargo run --release --example eval -- price --bless` and review what moved.
-use idle_engine::content::content;
+use idle_engine::data::content;
 use std::collections::BTreeMap;
 
 #[test]

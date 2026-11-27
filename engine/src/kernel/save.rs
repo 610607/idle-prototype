@@ -2,14 +2,27 @@
 //!
 //! A save is a JSON envelope: format tag, save version, revision, device, time, checksum and the
 //! state itself. While the game is iterating fast there are no migrations: when the state's shape
-//! changes, `SAVE_VERSION` goes up and older saves are refused (the web starts a new game).
+//! changes, its [`Saved::VERSION`] goes up and older saves are refused (the web starts a new game).
+//! The envelope knows nothing about what the state holds; the mechanics layer implements
+//! [`Saved`] for its state.
 
-use crate::state::{GameState, SAVE_VERSION};
+use crate::kernel::hash::fnv64;
 use crate::t;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const FORMAT: &str = "idle-proto-save";
+
+/// A state the envelope can carry.
+pub trait Saved: Serialize + DeserializeOwned {
+    /// The state's shape version; saves of any other version are refused.
+    const VERSION: u32;
+    fn revision(&self) -> u64;
+    fn device(&self) -> &str;
+    /// Game time of the save (unix seconds).
+    fn saved_at(&self) -> i64;
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Envelope {
@@ -31,26 +44,15 @@ pub struct SaveInfo {
     pub saved_at: i64,
 }
 
-/// FNV-1a 64 as 16 lowercase hex digits: the save checksum, and the stable hash behind play
-/// session menu ids, build fingerprints and final save digests (docs/eval-interface.md).
-pub fn fnv64(bytes: &[u8]) -> String {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in bytes {
-        h ^= *b as u64;
-        h = h.wrapping_mul(0x0100_0000_01b3);
-    }
-    format!("{:016x}", h)
-}
-
-pub fn encode(state: &GameState) -> String {
+pub fn encode<S: Saved>(state: &S) -> String {
     let value = serde_json::to_value(state).expect("state serialises");
     let body = serde_json::to_string(&value).expect("value serialises");
     let env = Envelope {
         format: FORMAT.into(),
-        version: SAVE_VERSION,
-        revision: state.revision,
-        device: state.device.clone(),
-        saved_at: state.time,
+        version: S::VERSION,
+        revision: state.revision(),
+        device: state.device().to_string(),
+        saved_at: state.saved_at(),
         checksum: fnv64(body.as_bytes()),
         state: value,
     };
@@ -68,24 +70,24 @@ pub fn info(json: &str) -> Result<SaveInfo, String> {
     })
 }
 
-pub fn decode(json: &str) -> Result<GameState, String> {
+pub fn decode<S: Saved>(json: &str) -> Result<S, String> {
     let env: Envelope =
         serde_json::from_str(json).map_err(|e| t!("err.save.unreadable", err = e))?;
     if env.format != FORMAT {
         return Err(t!("err.save.not_ours"));
     }
-    if env.version > SAVE_VERSION {
+    if env.version > S::VERSION {
         return Err(t!(
             "err.save.too_new",
             version = env.version,
-            current = SAVE_VERSION
+            current = S::VERSION
         ));
     }
-    if env.version < SAVE_VERSION {
+    if env.version < S::VERSION {
         return Err(t!(
             "err.save.too_old",
             version = env.version,
-            current = SAVE_VERSION
+            current = S::VERSION
         ));
     }
     let body = serde_json::to_string(&env.state).map_err(|e| e.to_string())?;
@@ -110,32 +112,6 @@ pub fn newer<'a>(a: &'a SaveInfo, b: &'a SaveInfo) -> &'a SaveInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{commands, sim};
-
-    #[test]
-    fn round_trip_keeps_state_and_future() {
-        let mut s = sim::new_game(7, 1_000_000, "test");
-        commands::apply(&mut s, &commands::Command::ChooseMap { index: 0 }).unwrap();
-        sim::advance(&mut s, 1_000_000 + 5 * 3600);
-        let json = encode(&s);
-        let mut loaded = decode(&json).unwrap();
-        assert_eq!(encode(&loaded), json);
-        // The loaded copy and the original continue identically.
-        sim::advance(&mut s, 1_000_000 + 30 * 3600);
-        sim::advance(&mut loaded, 1_000_000 + 30 * 3600);
-        assert_eq!(encode(&s), encode(&loaded));
-    }
-
-    #[test]
-    fn rejects_tampering_and_future_versions() {
-        let s = sim::new_game(7, 1_000_000, "test");
-        let json = encode(&s);
-        let tampered = json.replacen("\"time\":1000000", "\"time\":1000001", 1);
-        assert!(decode(&tampered).is_err());
-        let mut env: Envelope = serde_json::from_str(&json).unwrap();
-        env.version = SAVE_VERSION + 1;
-        assert!(decode(&serde_json::to_string(&env).unwrap()).is_err());
-    }
 
     #[test]
     fn newer_prefers_revision() {

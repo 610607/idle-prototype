@@ -5,10 +5,10 @@
 //! e.g. `... population 6 120 '{"housing_capacity":12,"growth_bp":2500}'`
 #[allow(dead_code)]
 use evalkit::bot::{Bot, Policy};
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
-use idle_engine::content::content;
-use idle_engine::economy;
+use idle_engine::client::api::Engine;
+use idle_engine::data::content;
+use idle_engine::mech::commands::Command;
+use idle_engine::mech::economy;
 use std::collections::BTreeMap;
 
 const T0: i64 = 1_700_000_000;
@@ -20,7 +20,7 @@ fn main() {
     // `old` as the 4th argument: the original bot that only builds where everyone stays housed.
     let staffing = args.get(4).map(|a| a != "old").unwrap_or(true);
     if let Some(p) = args.get(3).filter(|p| p.as_str() != "-") {
-        idle_engine::content::patch_balance(p).expect("balance patch");
+        idle_engine::data::patch_balance(p).expect("balance patch");
     }
     let marks = [12, 24, 48, 72, 96, 120, 168];
     let c = content();

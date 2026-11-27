@@ -1,6 +1,6 @@
 //! Print one battle log: `cargo run --example battle`.
-use idle_engine::combat::*;
-use idle_engine::content::content;
+use idle_engine::data::content;
+use idle_engine::mech::combat::*;
 
 fn ally(class: &str, key: &str) -> UnitSpec {
     let cl = &content().classes[class];

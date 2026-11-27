@@ -1,9 +1,9 @@
 //! Territory queries: border tiles, surge sources, attention, who defends what.
 
-use crate::content::{balance, content, TraitEffect};
-use crate::geom::{self, ring, TILES};
-use crate::operative;
-use crate::state::{Assignment, Cycle, GameState, SpecialKind, Terrain};
+use crate::data::{balance, content, TraitEffect};
+use crate::kernel::geom::{self, ring, TILES};
+use crate::mech::operative;
+use crate::mech::state::{Assignment, Cycle, GameState, SpecialKind, Terrain};
 
 /// A tile is a surge source if it is unowned, passable, and not the core.
 pub fn is_hostile(c: &Cycle, i: u16) -> bool {

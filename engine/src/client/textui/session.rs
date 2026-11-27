@@ -17,9 +17,9 @@ use super::{
     board, claim_tasks, cmd_name, line, menu, reach, run, setup, summary, Item, Options, Reach,
     DEVICE, T0,
 };
-use crate::api::Engine;
-use crate::commands::Command;
-use crate::state::Trace;
+use crate::client::api::Engine;
+use crate::mech::commands::Command;
+use crate::mech::state::Trace;
 use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -303,11 +303,11 @@ fn stage_name(id: &str) -> String {
 // ---------------------------------------------------------------------------
 // Hashes
 
-/// The `save_sha` of final.json: FNV-1a 64 (16 hex digits, `save::fnv64`) of the whole
+/// The `save_sha` of final.json: FNV-1a 64 (16 hex digits, `kernel::hash::fnv64`) of the whole
 /// `Engine::save()` string. Not SHA-256: the engine has no hash dependency, and this only has to
 /// tell "same final save" from "different".
 pub fn save_digest(save: &str) -> String {
-    crate::save::fnv64(save.as_bytes())
+    crate::kernel::hash::fnv64(save.as_bytes())
 }
 
 /// Menu ids: the first digits of the hash of each command's JSON, so an id stays with its
@@ -323,7 +323,7 @@ pub fn menu_ids(items: &[Item]) -> Vec<String> {
             } else {
                 format!("{json}#{k}")
             };
-            let id = crate::save::fnv64(src.as_bytes())[..ID_LEN].to_string();
+            let id = crate::kernel::hash::fnv64(src.as_bytes())[..ID_LEN].to_string();
             if !seen.contains(&id) {
                 break id;
             }
@@ -354,7 +354,7 @@ impl Default for Setup {
             hours: WEEK_HOURS,
             player: "unknown".into(),
             research: true,
-            lang: crate::i18n::DEFAULT.into(),
+            lang: crate::l10n::DEFAULT.into(),
         }
     }
 }
@@ -474,7 +474,7 @@ pub fn create(dir: &Path, s: &Setup) -> Result<Observation, String> {
     if dir.join(MANIFEST).exists() {
         return Err(t!("cli.session.err.exists", dir = dir.display()));
     }
-    crate::i18n::set_locale(&s.lang)?;
+    crate::l10n::set_locale(&s.lang)?;
     fs::create_dir_all(dir).map_err(|e| io_err(dir, e))?;
     let mut e = Engine::new(s.seed, T0, DEVICE);
     e.state.trace = Some(vec![]);
@@ -483,7 +483,7 @@ pub fn create(dir: &Path, s: &Setup) -> Result<Observation, String> {
     let journal = drain(&mut e);
     let m = Manifest {
         protocol: PROTOCOL,
-        build: crate::content::fingerprint(),
+        build: crate::mech::fingerprint(),
         seed: s.seed,
         player: s.player.clone(),
         schedule: s.schedule.name(),
@@ -700,7 +700,7 @@ impl Session {
                 want = PROTOCOL
             ));
         }
-        crate::i18n::set_locale(&m.lang)?;
+        crate::l10n::set_locale(&m.lang)?;
         let plan = Schedule::parse(&m.schedule)?.visits(m.hours);
         let e = Engine::load(read(&dir.join(SAVE))?.trim())?;
         let visits: Vec<VisitLog> = lines(&dir.join(VISITS))?;
@@ -941,7 +941,7 @@ fn menu_text(e: &mut Engine, items: &[Item], ids: &[String], save: &Path) -> Str
         t!(
             "cli.session.menu_other",
             sq = sq,
-            squad_size = crate::content::balance().squad_size,
+            squad_size = crate::data::balance().squad_size,
             save = save.display()
         ),
     );
@@ -997,12 +997,12 @@ mod tests {
         for d in DIMS {
             for part in ["name", "desc"] {
                 let k = format!("cli.session.dim.{d}.{part}");
-                assert!(crate::i18n::has(&k), "missing {k}");
+                assert!(crate::l10n::has(&k), "missing {k}");
             }
         }
         for f in FEELS {
             let k = format!("cli.session.feel.{f}");
-            assert!(crate::i18n::has(&k), "missing {k}");
+            assert!(crate::l10n::has(&k), "missing {k}");
         }
         for s in STAGES {
             assert!(!stage_name(s.0).contains("cli."));

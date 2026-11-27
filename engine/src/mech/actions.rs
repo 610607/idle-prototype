@@ -1,14 +1,15 @@
 //! Player actions that change the map or the roster. Commands and 规章 (automation rules) both call
 //! these, so a rule does exactly what the player would have done by hand.
 
-use crate::combat::{self, BattleKind};
-use crate::content::{balance, content, FacilityKind, Resources};
-use crate::economy;
-use crate::geom::{self, TILES};
-use crate::operative;
-use crate::state::{Assignment, Dial, EventKind, GameState, SpecialKind, Terrain, TileUse};
-use crate::world;
-use crate::{i18n, t, txt};
+use crate::data::hooks;
+use crate::data::{balance, content, FacilityKind, Resources};
+use crate::kernel::geom::{self, TILES};
+use crate::mech::combat::{self, BattleKind};
+use crate::mech::economy;
+use crate::mech::operative;
+use crate::mech::state::{Assignment, Dial, EventKind, GameState, SpecialKind, Terrain, TileUse};
+use crate::mech::world;
+use crate::{l10n, t, txt};
 
 pub type ActResult = Result<(), String>;
 
@@ -169,10 +170,10 @@ pub fn counter(state: &mut GameState, tile: u16) -> ActResult {
     }
     let district = t.district;
     let calc = economy::calc(state);
-    let setup = crate::defense::surge_setup(state, &calc, tile, None, BattleKind::Counter)
+    let setup = crate::mech::defense::surge_setup(state, &calc, tile, None, BattleKind::Counter)
         .ok_or_else(|| t!("err.no_enemy"))?;
     let report = combat::simulate(&setup.input);
-    crate::doctrine::note(state, &report);
+    crate::mech::doctrine::note(state, &report);
     let mut rec = setup.input.clone();
     rec.record = true;
     let rid = state.store_report(combat::simulate(&rec));
@@ -180,7 +181,7 @@ pub fn counter(state: &mut GameState, tile: u16) -> ActResult {
         let clinic = district.is_some_and(|d| {
             state.cycle.districts[d as usize].tiles.iter().any(|x| {
                 let tt = &state.cycle.tiles[*x as usize];
-                tt.owned && tt.usage.facility() == Some("clinic")
+                tt.owned && tt.usage.facility() == Some(hooks::CLINIC)
             })
         });
         let restore = if clinic {
@@ -432,7 +433,7 @@ pub fn retire(state: &mut GameState, op_id: u32) -> ActResult {
                 "event.retired.instructor",
                 name = name,
                 district = state.cycle.districts[d as usize].name.clone(),
-                profession = i18n::name("profession", &p),
+                profession = l10n::name("profession", &p),
                 pct = balance().instructor_talent_bp / 100
             )
         }
@@ -515,11 +516,11 @@ pub fn set_squad(state: &mut GameState, squad: u32, members: &[u32]) -> ActResul
     // A changed squad abandons the trip in progress (nothing is lost; it just restarts).
     s.trip = None;
     let route = s.route.clone();
-    if crate::routes::validate(state, members, &route).is_err() {
+    if crate::mech::routes::validate(state, members, &route).is_err() {
         state.squad_mut(squad).unwrap().route.clear();
     }
     let now = state.time;
-    crate::routes::try_start(state, squad, now);
+    crate::mech::routes::try_start(state, squad, now);
     Ok(())
 }
 
@@ -532,12 +533,12 @@ pub fn set_route(state: &mut GameState, squad: u32, route: &[u16]) -> ActResult 
         .ok_or_else(|| t!("err.no_squad"))?
         .members
         .clone();
-    crate::routes::validate(state, &members, route)?;
+    crate::mech::routes::validate(state, &members, route)?;
     let s = state.squad_mut(squad).unwrap();
     s.route = route.to_vec();
     s.trip = None;
     let now = state.time;
-    crate::routes::try_start(state, squad, now);
+    crate::mech::routes::try_start(state, squad, now);
     Ok(())
 }
 
@@ -550,7 +551,7 @@ pub fn receive_item(state: &mut GameState, id: &str) {
             .iter()
             .any(|o| o.equipment.as_deref() == Some(id))
         || state.org.sealed.iter().any(|x| x == id);
-    let name = i18n::name("equip", id);
+    let name = l10n::name("equip", id);
     if owned {
         // Duplicates turn into materials on arrival.
         state.cycle.resources.parts += b.salvage_parts;
@@ -598,7 +599,7 @@ pub fn equip(state: &mut GameState, op_id: u32, item: Option<&str>) -> ActResult
 pub fn seal(state: &mut GameState, item: &str, on: bool) -> ActResult {
     let b = balance();
     let slots = b.sealed_slots
-        + crate::content::OrgPerks::count(&b.org_perks.sealed, crate::sim::org_level(state));
+        + crate::data::OrgPerks::count(&b.org_perks.sealed, crate::mech::sim::org_level(state));
     if on {
         if state.org.sealed.len() >= slots {
             return Err(t!("err.seal_slots", n = slots));
@@ -682,7 +683,7 @@ pub fn set_priority(state: &mut GameState, district: u16, priority: &[String]) -
 
 pub fn pool_cap(state: &GameState) -> usize {
     let b = balance();
-    b.pool_cap + crate::content::OrgPerks::count(&b.org_perks.pool, crate::sim::org_level(state))
+    b.pool_cap + crate::data::OrgPerks::count(&b.org_perks.pool, crate::mech::sim::org_level(state))
 }
 
 /// How many border tiles there would be after claiming `tile` (for the safe-claim rule and previews).
@@ -727,7 +728,7 @@ pub fn lock(state: &mut GameState, op_id: u32, locked: bool) -> ActResult {
 pub fn set_gambits(
     state: &mut GameState,
     op_id: u32,
-    gambits: Vec<crate::content::Gambit>,
+    gambits: Vec<crate::data::Gambit>,
 ) -> ActResult {
     let c = content();
     let op = state.op(op_id).ok_or_else(|| t!("err.no_op"))?;
@@ -737,7 +738,7 @@ pub fn set_gambits(
     }
     let skills = &c.classes[&op.class].skills;
     for g in &gambits {
-        if let crate::content::Act::Skill { skill } = &g.act {
+        if let crate::data::Act::Skill { skill } = &g.act {
             if !skills.contains(skill) {
                 return Err(t!("err.unknown_skill"));
             }

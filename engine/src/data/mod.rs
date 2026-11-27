@@ -1,6 +1,8 @@
 //! Content tables. The JSON files under `engine/content/` are embedded at compile time,
 //! parsed once, and shared by every platform. Rules code reads these; UIs only see view models.
 
+pub mod hooks;
+
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
@@ -66,7 +68,7 @@ impl Tag {
     }
 
     pub fn name(self) -> String {
-        crate::i18n::tr(&format!("tag.{}.name", self.id()))
+        crate::l10n::tr(&format!("tag.{}.name", self.id()))
     }
 }
 
@@ -114,7 +116,7 @@ impl Stat {
         }
     }
     pub fn name(self) -> String {
-        crate::i18n::tr(&format!("stat.{}.name", self.id()))
+        crate::l10n::tr(&format!("stat.{}.name", self.id()))
     }
 }
 
@@ -1169,28 +1171,34 @@ impl Content {
 
 /// Every content file, embedded once: `load` parses them and `fingerprint` hashes them.
 const FILES: &[(&str, &str)] = &[
-    ("tags.json", include_str!("../content/tags.json")),
-    ("skills.json", include_str!("../content/skills.json")),
-    ("traits.json", include_str!("../content/traits.json")),
+    ("tags.json", include_str!("../../content/tags.json")),
+    ("skills.json", include_str!("../../content/skills.json")),
+    ("traits.json", include_str!("../../content/traits.json")),
     (
         "exp_traits.json",
-        include_str!("../content/exp_traits.json"),
+        include_str!("../../content/exp_traits.json"),
     ),
-    ("classes.json", include_str!("../content/classes.json")),
-    ("enemies.json", include_str!("../content/enemies.json")),
+    ("classes.json", include_str!("../../content/classes.json")),
+    ("enemies.json", include_str!("../../content/enemies.json")),
     (
         "facilities.json",
-        include_str!("../content/facilities.json"),
+        include_str!("../../content/facilities.json"),
     ),
     (
         "professions.json",
-        include_str!("../content/professions.json"),
+        include_str!("../../content/professions.json"),
     ),
-    ("world.json", include_str!("../content/world.json")),
-    ("balance.json", include_str!("../content/balance.json")),
-    ("reactions.json", include_str!("../content/reactions.json")),
-    ("doctrines.json", include_str!("../content/doctrines.json")),
-    ("tasks.json", include_str!("../content/tasks.json")),
+    ("world.json", include_str!("../../content/world.json")),
+    ("balance.json", include_str!("../../content/balance.json")),
+    (
+        "reactions.json",
+        include_str!("../../content/reactions.json"),
+    ),
+    (
+        "doctrines.json",
+        include_str!("../../content/doctrines.json"),
+    ),
+    ("tasks.json", include_str!("../../content/tasks.json")),
 ];
 
 fn parse<T: for<'de> Deserialize<'de>>(name: &str) -> T {
@@ -1203,20 +1211,23 @@ fn parse<T: for<'de> Deserialize<'de>>(name: &str) -> T {
 }
 
 /// Game version fingerprint for play sessions (docs/eval-interface.md, manifest `build`): FNV-1a
-/// 64 over `SAVE_VERSION`, every embedded content file (with `balance.json`) and any balance
-/// patch, first 8 hex digits. Only a hint: engine code changes do not move it.
-pub fn fingerprint() -> String {
-    let mut s = format!("save:{}\n", crate::state::SAVE_VERSION);
+/// 64 over the state's save version, every embedded content file (with `balance.json`) and any
+/// balance patch, first 8 hex digits. Only a hint: engine code changes do not move it. Callers
+/// use `mech::fingerprint`, which knows the save version.
+pub fn fingerprint(save_version: u32) -> String {
+    let mut s = format!("save:{}\n", save_version);
     for (name, text) in FILES.iter() {
         s += &format!("{name}:{}\n{text}\n", text.len());
     }
     if let Some(p) = BALANCE_PATCH.get() {
         s += &format!("patch:{}\n", serde_json::to_string(p).unwrap_or_default());
     }
-    crate::save::fnv64(s.as_bytes())[..8].to_string()
+    crate::kernel::hash::fnv64(s.as_bytes())[..8].to_string()
 }
 
 fn load() -> Content {
+    // Content names are looked up in the active language from here on.
+    crate::l10n::freeze();
     let tags: Vec<TagDef> = parse("tags.json");
     let mut tag_num = [TagNum {
         max: 1,
@@ -1280,10 +1291,10 @@ fn load() -> Content {
 fn localize(c: &mut Content) {
     fn text(kind: &str, id: &str, field: &str) -> String {
         let key = format!("{kind}.{id}.{field}");
-        if !crate::i18n::has(&key) {
+        if !crate::l10n::has(&key) {
             panic!("locales: missing {key}");
         }
-        crate::i18n::tr(&key)
+        crate::l10n::tr(&key)
     }
     for t in &mut c.tags {
         t.name = text("tag", t.id.id(), "name");
@@ -1395,7 +1406,7 @@ pub fn balance() -> &'static Balance {
 /// Cross-reference check: every id mentioned anywhere exists. Returns a list of problems.
 pub fn validate() -> Vec<String> {
     let c = content();
-    let mut errs = Vec::new();
+    let mut errs = hooks::check(c);
     let skill = |id: &str, ctx: &str, errs: &mut Vec<String>| {
         if !c.skills.contains_key(id) {
             errs.push(format!("{ctx}: unknown skill {id}"));

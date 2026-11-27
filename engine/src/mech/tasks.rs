@@ -2,10 +2,10 @@
 //! another, each with a small reward. No scripted tutorial: the checks read the state, so a task is
 //! done however the player got there.
 
-use crate::actions::ActResult;
-use crate::content::{content, TaskDef};
-use crate::state::*;
-use crate::{i18n, t, txt};
+use crate::data::{content, TaskDef};
+use crate::mech::actions::ActResult;
+use crate::mech::state::*;
+use crate::{l10n, t, txt};
 
 /// How many open tasks the checklist shows at once.
 pub const SHOWN: usize = 3;
@@ -75,7 +75,7 @@ pub fn claim(state: &mut GameState, id: &str) -> ActResult {
     state.org.tasks_done.push(t.id.clone());
     state.event(
         EventKind::Info,
-        txt!("event.task_done", name = i18n::name("task", &t.id)),
+        txt!("event.task_done", name = l10n::name("task", &t.id)),
         None,
         None,
         None,
@@ -86,7 +86,7 @@ pub fn claim(state: &mut GameState, id: &str) -> ActResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::{choose_map, new_game};
+    use crate::mech::sim::{choose_map, new_game};
 
     #[test]
     fn tasks_unlock_in_order_and_pay_once() {
@@ -100,14 +100,14 @@ mod tests {
         );
         assert!(claim(&mut s, "route").is_err(), "not done yet");
         assert!(claim(&mut s, "win").is_err(), "not open yet");
-        let hq = crate::geom::HQ;
-        let n = crate::geom::neighbors(hq)
+        let hq = crate::kernel::geom::HQ;
+        let n = crate::kernel::geom::neighbors(hq)
             .find(|n| {
                 s.cycle.tiles[*n as usize].claimable_kind() && !s.cycle.tiles[*n as usize].owned
             })
             .unwrap();
         let sq = s.cycle.squads[0].id;
-        crate::actions::set_route(&mut s, sq, &[n]).unwrap();
+        crate::mech::actions::set_route(&mut s, sq, &[n]).unwrap();
         let scrap = s.cycle.resources.scrap;
         claim(&mut s, "route").unwrap();
         assert_eq!(s.cycle.resources.scrap, scrap + 30);

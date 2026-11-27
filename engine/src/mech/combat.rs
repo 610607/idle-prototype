@@ -5,7 +5,8 @@
 //! points, no floats, fixed iteration order. The log is a cause chain: every reaction points at the
 //! entry that triggered it, and damage lines carry the formula that produced the number.
 
-use crate::content::{
+use crate::data::hooks;
+use crate::data::{
     balance, content, Act, ApplyTo, BaseStats, Cond, Effect, Gambit, ReactionEffect, Row,
     SkillKind, Stat, Tag, TagBonus, TagEvent, Target, TraitEffect, Trigger,
 };
@@ -414,7 +415,7 @@ pub fn simulate(input: &BattleInput) -> BattleReport {
         Battle::new(input).run()
     } else {
         // Forecasts run these many times and keep no log, so skip building its text.
-        crate::i18n::quiet(|| Battle::new(input).run())
+        crate::l10n::quiet(|| Battle::new(input).run())
     }
 }
 
@@ -734,7 +735,7 @@ impl<'a> Battle<'a> {
 
             // Defence breather: the neighbourhood patches up the defenders between waves.
             if input.defense && (wi as u8) + 1 < total_waves {
-                let bp = crate::content::balance().defense_wave_heal_bp;
+                let bp = crate::data::balance().defense_wave_heal_bp;
                 let allies: Vec<usize> = self.living(Side::Ally).collect();
                 for a in allies {
                     let amount = (self.units[a].max_hp as i64 * bp as i64 / 10_000) as i32;
@@ -966,7 +967,7 @@ impl<'a> Battle<'a> {
                 0,
                 None,
                 Some(i),
-                Some("erosion"),
+                Some(Tag::Erosion.id()),
                 taken,
                 text,
                 formula,
@@ -1060,7 +1061,7 @@ impl<'a> Battle<'a> {
                     if let Some(t) = self.select_target(
                         a,
                         sk.target_ally,
-                        sk.range == crate::content::Range::Melee,
+                        sk.range == crate::data::Range::Melee,
                         g.target,
                         tag,
                     ) {
@@ -1530,7 +1531,7 @@ impl<'a> Battle<'a> {
                     depth,
                     None,
                     None,
-                    Some("grounding_grid"),
+                    Some(hooks::GROUNDING_GRID),
                     gain,
                     text,
                     None,

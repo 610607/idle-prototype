@@ -1,9 +1,9 @@
 //! Defence curve: how often base militia (0/4/8 workers) and one starter hold a surge, by source ring.
-use idle_engine::combat::{self, enemy_spec, BattleInput, BattleKind};
-use idle_engine::defense::militia_units;
-use idle_engine::geom::ring;
-use idle_engine::state::Terrain;
-use idle_engine::{mapgen, operative, rng::Rng};
+use idle_engine::kernel::geom::ring;
+use idle_engine::mech::combat::{self, enemy_spec, BattleInput, BattleKind};
+use idle_engine::mech::defense::militia_units;
+use idle_engine::mech::state::Terrain;
+use idle_engine::{kernel::rng::Rng, mech::mapgen, mech::operative};
 
 fn main() {
     let mut rows = vec![[0i32; 8]; 8];
@@ -31,7 +31,7 @@ fn main() {
             if r > 7 {
                 continue;
             }
-            let sb = idle_engine::content::balance().surge_strength_bp;
+            let sb = idle_engine::data::balance().surge_strength_bp;
             let full: Vec<_> = t
                 .waves
                 .iter()

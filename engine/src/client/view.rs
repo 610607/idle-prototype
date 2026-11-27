@@ -1,15 +1,15 @@
 //! View models out: everything a client needs to draw, already decided. Clients never compute rules;
 //! they render these and send commands back.
 
-use crate::actions;
-use crate::content::{balance, content, Gambit, OrgPerks, Resources, Stat, Tag, Trigger};
-use crate::economy::{self, EconCalc};
-use crate::geom::{self, ring, TILES};
-use crate::operative::{self, Derived, RARITY_NAMES};
-use crate::sim::{self, CycleResults};
-use crate::state::*;
+use crate::data::{balance, content, Gambit, OrgPerks, Resources, Stat, Tag, Trigger};
+use crate::kernel::geom::{self, ring, TILES};
+use crate::mech::actions;
+use crate::mech::economy::{self, EconCalc};
+use crate::mech::operative::{self, Derived, RARITY_NAMES};
+use crate::mech::sim::{self, CycleResults};
+use crate::mech::state::*;
+use crate::mech::world;
 use crate::t;
-use crate::world;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -311,7 +311,7 @@ fn customize_view(state: &GameState, dc: &economy::DistrictCalc) -> CustomizeVie
 pub struct TripView {
     pub start: i64,
     pub end: i64,
-    pub outcome: crate::combat::Outcome,
+    pub outcome: crate::mech::combat::Outcome,
     pub walked: Vec<u16>,
     pub results: Vec<TileResultView>,
     pub loot: Resources,
@@ -322,7 +322,7 @@ pub struct TripView {
 pub struct TileResultView {
     pub tile: u16,
     pub label: String,
-    pub outcome: crate::combat::Outcome,
+    pub outcome: crate::mech::combat::Outcome,
     pub report: Option<u32>,
 }
 
@@ -344,7 +344,7 @@ pub struct FacilityOption {
     pub id: String,
     pub name: String,
     pub icon: String,
-    pub kind: crate::content::FacilityKind,
+    pub kind: crate::data::FacilityKind,
     pub profession: Option<String>,
     pub jobs: i32,
     pub power: i32,
@@ -443,7 +443,7 @@ pub struct TasksView {
 
 pub fn tasks_view(state: &GameState) -> TasksView {
     TasksView {
-        open: crate::tasks::open(state)
+        open: crate::mech::tasks::open(state)
             .into_iter()
             .map(|t| TaskView {
                 id: t.id.clone(),
@@ -451,7 +451,7 @@ pub fn tasks_view(state: &GameState) -> TasksView {
                 name: t.name.clone(),
                 desc: t.desc.clone(),
                 reward: t.reward.clone(),
-                done: crate::tasks::done(state, &t.check),
+                done: crate::mech::tasks::done(state, &t.check),
             })
             .collect(),
         claimed: state.org.tasks_done.len(),
@@ -519,7 +519,7 @@ pub struct ResearchView {
     pub total: usize,
 }
 
-fn tag_chip(t: crate::content::Tag) -> TagChip {
+fn tag_chip(t: crate::data::Tag) -> TagChip {
     let c = content();
     let d = c.tags.iter().find(|x| x.id == t);
     TagChip {
@@ -552,27 +552,27 @@ pub fn research_view(state: &GameState) -> ResearchView {
                 .collect(),
         })
     };
-    let cost = crate::doctrine::research_cost(state);
+    let cost = crate::mech::doctrine::research_cost(state);
     ResearchView {
         cost,
         step: balance().research_step,
-        reroll_cost: crate::doctrine::reroll_cost(state),
+        reroll_cost: crate::mech::doctrine::reroll_cost(state),
         reroll_ok: active
             && !cy.research_offers.is_empty()
-            && !crate::doctrine::pool(state).is_empty()
-            && cy.resources.scrap >= crate::doctrine::reroll_cost(state),
+            && !crate::mech::doctrine::pool(state).is_empty()
+            && cy.resources.scrap >= crate::mech::doctrine::reroll_cost(state),
         affordable: active && cy.resources.intel >= cost,
         left: if active {
-            crate::doctrine::pool(state).len()
+            crate::mech::doctrine::pool(state).len()
         } else {
             0
         },
         offers: cy.research_offers.iter().filter_map(dv).collect(),
         held: cy.doctrines.iter().filter_map(dv).collect(),
         archive: state.org.archive.iter().filter_map(dv).collect(),
-        archive_slots: crate::doctrine::archive_slots(state),
+        archive_slots: crate::mech::doctrine::archive_slots(state),
         library: state.org.known_doctrines.iter().filter_map(dv).collect(),
-        reactions_on: cy.doctrines.iter().any(|d| d == crate::doctrine::HUB),
+        reactions_on: cy.doctrines.iter().any(|d| d == crate::mech::doctrine::HUB),
         codex: c
             .reactions
             .iter()
@@ -748,7 +748,7 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
             id: s.id.clone(),
             name: s.name.clone(),
             icon: s.icon.clone(),
-            passive: s.kind == crate::content::SkillKind::Passive,
+            passive: s.kind == crate::data::SkillKind::Passive,
             desc: s.desc.clone(),
             reads: s.reads(),
             writes: s.writes(),
@@ -816,7 +816,7 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
         class_name: class.name.clone(),
         icon: class.icon.clone(),
         side: class.side.clone(),
-        front: class.row == crate::content::Row::Front,
+        front: class.row == crate::data::Row::Front,
         rarity: op.rarity,
         rarity_name: RARITY_NAMES[op.rarity.min(3) as usize],
         origin: op.origin.render(),
@@ -1122,7 +1122,8 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 special: if t.revealed { t.special } else { None },
                 special_done: t.special_done,
                 natives: if t.revealed { t.natives } else { 0 },
-                next_surge: is_border.then(|| crate::defense::next_surge_after(i, state.time)),
+                next_surge: is_border
+                    .then(|| crate::mech::defense::next_surge_after(i, state.time)),
                 surge_source: if is_border {
                     world::surge_source(cy, i)
                 } else {
@@ -1416,8 +1417,8 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             district: None,
         });
     } else {
-        let cost = crate::doctrine::research_cost(state);
-        if cy.resources.intel >= cost && !crate::doctrine::pool(state).is_empty() {
+        let cost = crate::mech::doctrine::research_cost(state);
+        if cy.resources.intel >= cost && !crate::mech::doctrine::pool(state).is_empty() {
             pending.push(PendingView {
                 kind: "research",
                 text: t!("view.pending.research_ready", cost = cost),
@@ -1474,14 +1475,14 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
 /// Static content the client needs once: tag meta, names, icons.
 #[derive(Serialize)]
 pub struct ContentView {
-    pub tags: Vec<crate::content::TagDef>,
-    pub professions: Vec<crate::content::ProfessionDef>,
-    pub facilities: Vec<crate::content::FacilityDef>,
+    pub tags: Vec<crate::data::TagDef>,
+    pub professions: Vec<crate::data::ProfessionDef>,
+    pub facilities: Vec<crate::data::FacilityDef>,
     pub stats: Vec<(&'static str, String)>,
     pub skills: Vec<SkillView>,
     pub classes: Vec<(String, String, String)>,
-    pub policies: Vec<crate::content::PolicyDef>,
-    pub rift_kinds: Vec<crate::content::RiftKindDef>,
+    pub policies: Vec<crate::data::PolicyDef>,
+    pub rift_kinds: Vec<crate::data::RiftKindDef>,
 }
 
 pub fn content_view() -> ContentView {
@@ -1516,7 +1517,7 @@ pub fn content_view() -> ContentView {
                 id: s.id.clone(),
                 name: s.name.clone(),
                 icon: s.icon.clone(),
-                passive: s.kind == crate::content::SkillKind::Passive,
+                passive: s.kind == crate::data::SkillKind::Passive,
                 desc: s.desc.clone(),
                 reads: s.reads(),
                 writes: s.writes(),

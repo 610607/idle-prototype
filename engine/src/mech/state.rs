@@ -1,9 +1,9 @@
 //! Game state. Everything here is saved; derived values (border, alerts, power) are recomputed.
 
-use crate::combat::{BattleReport, Outcome};
-use crate::content::{Gambit, Resources};
-use crate::i18n::Text;
-use crate::rng::Rng;
+use crate::data::{Gambit, Resources};
+use crate::kernel::rng::Rng;
+use crate::l10n::Text;
+use crate::mech::combat::{BattleReport, Outcome};
 use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -132,7 +132,7 @@ impl Tile {
         }
     }
     pub fn claimable(&self) -> bool {
-        !self.owned && self.claimable_kind() && self.warden >= crate::content::balance().warden_max
+        !self.owned && self.claimable_kind() && self.warden >= crate::data::balance().warden_max
     }
 }
 
@@ -241,7 +241,7 @@ pub struct Trip {
     /// Battle inputs per fought tile, kept in memory so a client can replay any fight with the
     /// full cause-chain log (combat is pure, so re-simulating gives the identical result).
     #[serde(skip)]
-    pub inputs: Vec<(u16, crate::combat::BattleInput)>,
+    pub inputs: Vec<(u16, crate::mech::combat::BattleInput)>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -467,7 +467,7 @@ pub enum Trace {
     /// how time is advanced does not change the result, so (time, command) pairs replay exactly.
     Command {
         t: i64,
-        cmd: crate::commands::Command,
+        cmd: crate::mech::commands::Command,
     },
 }
 
@@ -548,5 +548,50 @@ impl GameState {
             }
         }
         id
+    }
+}
+
+impl crate::kernel::save::Saved for GameState {
+    const VERSION: u32 = SAVE_VERSION;
+    fn revision(&self) -> u64 {
+        self.revision
+    }
+    fn device(&self) -> &str {
+        &self.device
+    }
+    fn saved_at(&self) -> i64 {
+        self.time
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kernel::save::{decode, encode, Envelope};
+    use crate::mech::{commands, sim};
+
+    #[test]
+    fn round_trip_keeps_state_and_future() {
+        let mut s = sim::new_game(7, 1_000_000, "test");
+        commands::apply(&mut s, &commands::Command::ChooseMap { index: 0 }).unwrap();
+        sim::advance(&mut s, 1_000_000 + 5 * 3600);
+        let json = encode(&s);
+        let mut loaded: GameState = decode(&json).unwrap();
+        assert_eq!(encode(&loaded), json);
+        // The loaded copy and the original continue identically.
+        sim::advance(&mut s, 1_000_000 + 30 * 3600);
+        sim::advance(&mut loaded, 1_000_000 + 30 * 3600);
+        assert_eq!(encode(&s), encode(&loaded));
+    }
+
+    #[test]
+    fn rejects_tampering_and_future_versions() {
+        let s = sim::new_game(7, 1_000_000, "test");
+        let json = encode(&s);
+        let tampered = json.replacen("\"time\":1000000", "\"time\":1000001", 1);
+        assert!(decode::<GameState>(&tampered).is_err());
+        let mut env: Envelope = serde_json::from_str(&json).unwrap();
+        env.version = SAVE_VERSION + 1;
+        assert!(decode::<GameState>(&serde_json::to_string(&env).unwrap()).is_err());
     }
 }

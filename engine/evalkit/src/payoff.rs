@@ -37,10 +37,10 @@
 //!   `event.rule.hired`), the two are one novelty, named after the rule.
 use crate::run::{Metrics, Persona, T0};
 use crate::strength::Mag;
-use idle_engine::api::Engine;
-use idle_engine::geom::{label, ring};
-use idle_engine::sim;
-use idle_engine::state::{EventKind, Trace};
+use idle_engine::client::api::Engine;
+use idle_engine::kernel::geom::{label, ring};
+use idle_engine::mech::sim;
+use idle_engine::mech::state::{EventKind, Trace};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
@@ -124,7 +124,7 @@ fn ring_m(r: i32) -> f64 {
 
 /// A district joining up multiplies its output by 1 + `contiguity_output_bp`.
 fn contiguous_m() -> f64 {
-    (1.0 + idle_engine::content::balance().contiguity_output_bp as f64 / 10_000.0).log2()
+    (1.0 + idle_engine::data::balance().contiguity_output_bp as f64 / 10_000.0).log2()
 }
 
 /// Size of a felt event for peak comparisons: m, with a category event (or a felt event whose m is

@@ -1,13 +1,15 @@
-//! Command line for the text client (`idle_engine::textui`): prints the board and a numbered
+//! Command line for the text client (`idle_engine::client::textui`): prints the board and a numbered
 //! menu, runs menu numbers or JSON commands, and advances time. Same engine and save format as
 //! the web client. `agent_cli` with no arguments prints the usage. Every `do` is appended to
 //! `<save>.log` as JSONL. Settings: AGENT_HOURS (default 72), AGENT_NORESEARCH=1 (control group),
 //! AGENT_LANG (default zh-CN). `agent_cli session …` is the play-session protocol
 //! (docs/eval-interface.md, `textui::session`): fixed visit schedule, menu ids, feel and scores.
-use idle_engine::api::Engine;
+use idle_engine::client::api::Engine;
+use idle_engine::client::textui::session::{
+    self, Action, Feel, Observation, Schedule, Score, Setup,
+};
+use idle_engine::client::textui::{self, Options, MAX_WAIT};
 use idle_engine::t;
-use idle_engine::textui::session::{self, Action, Feel, Observation, Schedule, Score, Setup};
-use idle_engine::textui::{self, Options, MAX_WAIT};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -90,7 +92,7 @@ fn session_cli(a: &[String]) {
         "new" => {
             let mut s = Setup {
                 lang: std::env::var("AGENT_LANG")
-                    .unwrap_or_else(|_| idle_engine::i18n::DEFAULT.into()),
+                    .unwrap_or_else(|_| idle_engine::l10n::DEFAULT.into()),
                 ..Setup::default()
             };
             while i < rest.len() {
@@ -198,7 +200,7 @@ fn session_cli(a: &[String]) {
 
 fn main() {
     if let Ok(lang) = std::env::var("AGENT_LANG") {
-        idle_engine::i18n::set_locale(&lang).unwrap_or_else(|e| fail(e));
+        idle_engine::l10n::set_locale(&lang).unwrap_or_else(|e| fail(e));
     }
     let opts = options();
     let a: Vec<String> = std::env::args().collect();

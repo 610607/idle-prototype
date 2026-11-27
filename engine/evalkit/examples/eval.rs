@@ -20,7 +20,7 @@
 //! Personas: `greedy` (the reference bot: nearest ring first), `explorer` (deepest winnable target
 //! first), `builder` (economy first), `turtle` (defense first), `scholar` (research first),
 //! `tactician` (greedy plus squad care); `@N` acts only every N hours (`greedy@4`).
-//! `--patch` overrides balance.json fields for this process (`content::patch_balance`).
+//! `--patch` overrides balance.json fields for this process (`data::patch_balance`).
 use evalkit::run::{self, Persona, RunFile};
 use evalkit::{
     calib, fmt, model, payoff, price, read_run, registry, review, session, stats, synergy,
@@ -59,9 +59,9 @@ fn print_summary(f: &RunFile) {
             fmt(s.p90)
         );
     }
-    let all: Vec<String> = idle_engine::textui::samples()
+    let all: Vec<String> = idle_engine::client::textui::samples()
         .iter()
-        .map(idle_engine::textui::cmd_name)
+        .map(idle_engine::client::textui::cmd_name)
         .collect();
     let unused: Vec<&String> = all
         .iter()
@@ -134,14 +134,14 @@ fn main() {
             let hours: i64 = arg(&args, "--hours").map_or(72, |s| s.parse().unwrap());
             let patch = arg(&args, "--patch");
             if let Some(p) = &patch {
-                idle_engine::content::patch_balance(p).unwrap();
+                idle_engine::data::patch_balance(p).unwrap();
             }
             let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
             let seeds: Vec<u64> = (0..n).collect();
             let sessions = arg(&args, "--sessions").map(std::path::PathBuf::from);
             let mut f = run::run(persona, &seeds, hours, threads, sessions.as_deref());
             f.patch = patch;
-            f.build = Some(idle_engine::content::fingerprint());
+            f.build = Some(idle_engine::mech::fingerprint());
             print_summary(&f);
             if let Some(out) = arg(&args, "--out") {
                 std::fs::write(&out, serde_json::to_string_pretty(&f).unwrap()).unwrap();
@@ -230,7 +230,7 @@ fn main() {
         Some("numbers") => calib::numbers(),
         Some("pace") => {
             if let Some(p) = arg(&args, "--patch") {
-                idle_engine::content::patch_balance(&p).unwrap();
+                idle_engine::data::patch_balance(&p).unwrap();
             }
             let bot = arg(&args, "--vs").map(|f| read_run(&f));
             let every = bot
@@ -257,7 +257,7 @@ fn main() {
                 .unwrap_or(Persona::REFERENCE);
             let hours: i64 = arg(&args, "--hours").map_or(72, |s| s.parse().unwrap());
             if let Some(p) = arg(&args, "--patch") {
-                idle_engine::content::patch_balance(&p).unwrap();
+                idle_engine::data::patch_balance(&p).unwrap();
             }
             run::timeline(seed, persona, hours);
         }
@@ -271,7 +271,7 @@ fn main() {
                 .unwrap_or(Persona::REFERENCE);
             let hours: i64 = arg(&args, "--hours").map_or(168, |s| s.parse().unwrap());
             if let Some(p) = arg(&args, "--patch") {
-                idle_engine::content::patch_balance(&p).unwrap();
+                idle_engine::data::patch_balance(&p).unwrap();
             }
             payoff::print(seed, persona, hours);
         }

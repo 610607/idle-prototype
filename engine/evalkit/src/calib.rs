@@ -9,11 +9,11 @@ use crate::game::{fightable, squad_units};
 use crate::power::{self, Sample};
 use crate::run::{self, Persona};
 use crate::synergy;
-use idle_engine::api::Engine;
-use idle_engine::combat::{BattleInput, BattleKind, UnitSpec};
-use idle_engine::geom::ring;
-use idle_engine::operative;
-use idle_engine::routes;
+use idle_engine::client::api::Engine;
+use idle_engine::kernel::geom::ring;
+use idle_engine::mech::combat::{BattleInput, BattleKind, UnitSpec};
+use idle_engine::mech::operative;
+use idle_engine::mech::routes;
 
 pub const FIELD_HOURS: [i64; 4] = [6, 12, 24, 48];
 /// What `calibrate` switches off in the field, to price it (on/off comparison).
@@ -247,7 +247,7 @@ pub fn numbers() {
         let (mut ds, mut ps, mut waves, mut sizes) = (vec![], vec![], vec![], vec![]);
         for seed in 0..40u64 {
             for modifier in ["static_turbulence", "dense_fog"] {
-                let m = idle_engine::mapgen::generate(seed, modifier);
+                let m = idle_engine::mech::mapgen::generate(seed, modifier);
                 for (i, t) in m.tiles.iter().enumerate() {
                     if ring(i as u16) != r || t.waves.is_empty() {
                         continue;
@@ -257,7 +257,7 @@ pub fn numbers() {
                         .iter()
                         .map(|w| {
                             w.iter()
-                                .map(|id| idle_engine::combat::enemy_spec(id, r, 10_000))
+                                .map(|id| idle_engine::mech::combat::enemy_spec(id, r, 10_000))
                                 .collect()
                         })
                         .collect();

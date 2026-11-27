@@ -12,11 +12,11 @@
 mod districts;
 mod tactics;
 
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
-use idle_engine::geom;
-use idle_engine::state::Assignment;
-use idle_engine::view::{OpView, TideView, View};
+use idle_engine::client::api::Engine;
+use idle_engine::client::view::{OpView, TideView, View};
+use idle_engine::kernel::geom;
+use idle_engine::mech::commands::Command;
+use idle_engine::mech::state::Assignment;
 use std::collections::BTreeMap;
 
 /// The knobs a persona or a script turns; everything else is the same greedy play.
@@ -126,7 +126,7 @@ fn route_for(deep_first: bool, e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
         let p = e.preview_route(squad, &[*t]);
         if p.ok
             && p.outcome
-                .map(|o| o == idle_engine::combat::Outcome::Victory)
+                .map(|o| o == idle_engine::mech::combat::Outcome::Victory)
                 .unwrap_or(false)
         {
             return Some(vec![*t]);
@@ -135,7 +135,7 @@ fn route_for(deep_first: bool, e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
             let p = e.preview_route(squad, &[n, *t]);
             if p.ok
                 && p.outcome
-                    .map(|o| o == idle_engine::combat::Outcome::Victory)
+                    .map(|o| o == idle_engine::mech::combat::Outcome::Victory)
                     .unwrap_or(false)
             {
                 return Some(vec![n, *t]);
@@ -173,7 +173,7 @@ impl Bot {
         if r.is_ok() {
             *self
                 .used
-                .entry(idle_engine::textui::cmd_name(cmd))
+                .entry(idle_engine::client::textui::cmd_name(cmd))
                 .or_insert(0) += 1;
         }
         r
@@ -209,7 +209,7 @@ impl Bot {
         let v = e.view();
         // Hire anything affordable up to the roster cap: operatives have no upkeep, and the ones not in
         // a squad are the garrisons `defend` moves around.
-        let cap = idle_engine::content::balance().roster_cap as usize;
+        let cap = idle_engine::data::balance().roster_cap as usize;
         let mut roster = v.operatives.len();
         for c in &v.candidates {
             if roster < cap
@@ -305,7 +305,7 @@ impl Bot {
         }
         // Build: one facility per hour, only where the district keeps everyone housed.
         let v = e.view();
-        let cap = idle_engine::content::balance().housing_capacity;
+        let cap = idle_engine::data::balance().housing_capacity;
         let border_districts: Vec<u16> = v
             .tiles
             .iter()
@@ -524,7 +524,7 @@ impl Bot {
     /// housing to spare, like the staffing builds in `Bot::step`.
     fn fortify(&mut self, e: &mut Engine) {
         let v = e.view();
-        let cap = idle_engine::content::balance().housing_capacity;
+        let cap = idle_engine::data::balance().housing_capacity;
         let mut threatened: Vec<u16> = v
             .tide
             .iter()

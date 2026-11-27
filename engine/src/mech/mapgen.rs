@@ -2,11 +2,13 @@
 //! Barriers (rivers, viaducts, walls), rifts out toward the edge, a few special tiles,
 //! the cycle's otherworld core on the edge, and city tiles grouped into named districts.
 
-use crate::content::{balance, content, Tag};
-use crate::geom::{self, ring, TILES};
-use crate::i18n::{self, Text};
-use crate::rng::Rng;
-use crate::state::{Dial, District, MapPreview, RiftState, SpecialKind, Terrain, Tile, TileUse};
+use crate::data::{balance, content, Tag};
+use crate::kernel::geom::{self, ring, TILES};
+use crate::kernel::rng::Rng;
+use crate::l10n::{self, Text};
+use crate::mech::state::{
+    Dial, District, MapPreview, RiftState, SpecialKind, Terrain, Tile, TileUse,
+};
 use crate::txt;
 use std::collections::VecDeque;
 
@@ -206,7 +208,7 @@ fn build_districts(rng: &mut Rng, tiles: &mut [Tile]) -> Vec<District> {
             groups[o].extend(moved);
         }
     }
-    let mut names: Vec<u16> = (0..i18n::list_len("names.district") as u16).collect();
+    let mut names: Vec<u16> = (0..l10n::list_len("names.district") as u16).collect();
     rng.shuffle(&mut names);
     let professions: Vec<String> = c.professions.iter().map(|p| p.id.clone()).collect();
     let mut out = Vec::new();
@@ -243,7 +245,7 @@ fn build_districts(rng: &mut Rng, tiles: &mut [Tile]) -> Vec<District> {
 /// Pick enemy ids for one wave on a tile.
 fn roll_wave(rng: &mut Rng, terrain: &str, r: i32, favored: Tag, count: usize) -> Vec<String> {
     let c = content();
-    let pool: Vec<&crate::content::EnemyDef> = c
+    let pool: Vec<&crate::data::EnemyDef> = c
         .enemies
         .values()
         .filter(|e| e.terrain == terrain && e.rings[0] <= r && r <= e.rings[1])
@@ -264,14 +266,11 @@ fn roll_wave(rng: &mut Rng, terrain: &str, r: i32, favored: Tag, count: usize) -
         let mut i = rng.pick_weighted(&weights).unwrap_or(0);
         // Make sure each wave has someone in front.
         if k + 1 == count && !has_front {
-            if let Some(f) = pool
-                .iter()
-                .position(|e| e.row == crate::content::Row::Front)
-            {
+            if let Some(f) = pool.iter().position(|e| e.row == crate::data::Row::Front) {
                 i = f;
             }
         }
-        if pool[i].row == crate::content::Row::Front {
+        if pool[i].row == crate::data::Row::Front {
             has_front = true;
         }
         wave.push(pool[i].id.clone());

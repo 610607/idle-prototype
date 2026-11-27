@@ -3,14 +3,15 @@
 //! set of rule changes that multiply once they close a loop through the reaction table. Reactions
 //! that go off light up the codex; a few doctrines can be filed in the 知识库 to start every cycle.
 
-use crate::actions::ActResult;
-use crate::combat::{BattleInput, BattleReport};
-use crate::content::{balance, content, DoctrineDef, OrgPerks, TraitEffect};
-use crate::state::*;
-use crate::{i18n, t, txt};
+use crate::data::hooks;
+use crate::data::{balance, content, DoctrineDef, OrgPerks, TraitEffect};
+use crate::mech::actions::ActResult;
+use crate::mech::combat::{BattleInput, BattleReport};
+use crate::mech::state::*;
+use crate::{l10n, t, txt};
 
 /// The doctrine every first draw of a cycle offers while it is not held: the hub the rest wire into.
-pub const HUB: &str = "react";
+pub const HUB: &str = hooks::HUB_DOCTRINE;
 
 pub fn research_cost(state: &GameState) -> i64 {
     let b = balance();
@@ -18,14 +19,14 @@ pub fn research_cost(state: &GameState) -> i64 {
 }
 
 pub fn archive_slots(state: &GameState) -> usize {
-    let level = crate::sim::org_level(state);
+    let level = crate::mech::sim::org_level(state);
     let b = balance();
     b.archive_slots + OrgPerks::count(&b.org_perks.archive, level)
 }
 
 /// Doctrines that can still be drawn this cycle.
 pub fn pool(state: &GameState) -> Vec<&'static DoctrineDef> {
-    let level = crate::sim::org_level(state);
+    let level = crate::mech::sim::org_level(state);
     let cy = &state.cycle;
     content()
         .doctrines
@@ -123,7 +124,7 @@ pub fn pick(state: &mut GameState, id: &str) -> ActResult {
             } else {
                 "event.research.done"
             },
-            name = i18n::name("doctrine", &d.id)
+            name = l10n::name("doctrine", &d.id)
         ),
         None,
         None,
@@ -204,7 +205,7 @@ pub fn note(state: &mut GameState, report: &BattleReport) {
         if first {
             state.event(
                 EventKind::Info,
-                txt!("event.codex_lit", name = i18n::name("reaction", id)),
+                txt!("event.codex_lit", name = l10n::name("reaction", id)),
                 None,
                 None,
                 None,
@@ -216,7 +217,7 @@ pub fn note(state: &mut GameState, report: &BattleReport) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::{choose_map, collapse, new_game};
+    use crate::mech::sim::{choose_map, collapse, new_game};
 
     fn started(seed: u64) -> GameState {
         let mut s = new_game(seed, 1_000_000_000 - 1_000_000_000 % 3600, "test");
@@ -280,12 +281,12 @@ mod tests {
             .cycle
             .operatives
             .iter()
-            .map(crate::operative::spec)
+            .map(crate::mech::operative::spec)
             .collect();
-        let tile = crate::geom::neighbors(crate::geom::HQ)
+        let tile = crate::kernel::geom::neighbors(crate::kernel::geom::HQ)
             .find(|n| !s.cycle.tiles[*n as usize].owned)
             .unwrap();
-        let input = crate::routes::route_battle(&s, &specs, tile, false);
+        let input = crate::mech::routes::route_battle(&s, &specs, tile, false);
         for (u, base) in input.allies.iter().zip(&specs) {
             assert_eq!(u.max_hp, base.max_hp + 12);
             assert_eq!(u.def, base.def + 3);
@@ -299,10 +300,12 @@ mod tests {
     #[test]
     fn reactions_light_up_the_codex_once() {
         let mut s = started(5);
-        let mut report = crate::combat::simulate(&crate::routes::route_battle(
+        let mut report = crate::mech::combat::simulate(&crate::mech::routes::route_battle(
             &s,
             &[],
-            crate::geom::neighbors(crate::geom::HQ).next().unwrap(),
+            crate::kernel::geom::neighbors(crate::kernel::geom::HQ)
+                .next()
+                .unwrap(),
             false,
         ));
         report.reactions = vec![("short_circuit".into(), 2)];

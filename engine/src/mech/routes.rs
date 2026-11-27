@@ -3,13 +3,13 @@
 //! get patrolled back up. With the map unchanged a trip always takes the same time and yields the same
 //! result, so offline trips are just repeated.
 
-use crate::combat::{self, enemy_spec, BattleInput, BattleKind, Outcome, UnitSpec};
-use crate::content::{balance, content, Resources, TraitEffect};
-use crate::geom::{self, ring};
-use crate::operative;
-use crate::state::{EventKind, GameState, SpecialKind, TileResult, Trip};
-use crate::world;
-use crate::{i18n, t, txt};
+use crate::data::{balance, content, Resources, TraitEffect};
+use crate::kernel::geom::{self, ring};
+use crate::mech::combat::{self, enemy_spec, BattleInput, BattleKind, Outcome, UnitSpec};
+use crate::mech::operative;
+use crate::mech::state::{EventKind, GameState, SpecialKind, TileResult, Trip};
+use crate::mech::world;
+use crate::{l10n, t, txt};
 use std::collections::BTreeMap;
 
 pub fn squad_effect(
@@ -89,7 +89,7 @@ pub fn route_battle(
         defense: false,
         record,
     };
-    crate::doctrine::apply(&cy.doctrines, &mut input);
+    crate::mech::doctrine::apply(&cy.doctrines, &mut input);
     input
 }
 
@@ -100,7 +100,7 @@ fn tile_loot(state: &mut GameState, tile: u16, drops: &mut Vec<String>) -> Resou
     let r = ring(tile) as i64;
     let mut loot = Resources::default();
     match (t.terrain, t.special) {
-        (crate::state::Terrain::Rift, _) => {
+        (crate::mech::state::Terrain::Rift, _) => {
             loot.crystal += b.loot_rift_crystal * r;
             if state.rng.chance_bp(b.equip_drop_bp + r as i32 * 150) {
                 let weights: Vec<i32> = c
@@ -174,7 +174,7 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
         }
         let input = route_battle(state, &specs, tile, false);
         let report = combat::simulate(&input);
-        crate::doctrine::note(state, &report);
+        crate::mech::doctrine::note(state, &report);
         inputs.push((tile, input.clone()));
         rounds += report.rounds;
         for u in &report.units {
@@ -185,9 +185,9 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
             {
                 let e = counters.entry(id).or_default();
                 *e.entry("shock_received".into()).or_insert(0) +=
-                    u.tags_received[crate::content::Tag::Shock.idx()];
+                    u.tags_received[crate::data::Tag::Shock.idx()];
                 *e.entry("erosion_received".into()).or_insert(0) +=
-                    u.tags_received[crate::content::Tag::Erosion.idx()];
+                    u.tags_received[crate::data::Tag::Erosion.idx()];
                 *e.entry("tags_consumed".into()).or_insert(0) += u.tags_consumed;
                 if u.alive && u.hp * 100 < u.max_hp * 30 {
                     *e.entry("low_hp_survivals".into()).or_insert(0) += 1;
@@ -269,7 +269,7 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             state.cycle.stats.core_sealed = true;
             state.cycle.core_cut += b.core_attention_cut;
             state.cycle.resources.crystal += b.core_crystal;
-            let core = i18n::Text::new(&format!("modifier.{}.core_name", state.cycle.modifier));
+            let core = l10n::Text::new(&format!("modifier.{}.core_name", state.cycle.modifier));
             state.event(
                 EventKind::Core,
                 txt!(
@@ -306,7 +306,7 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             let before = t.warden;
             t.warden = (t.warden + b.warden_route_win).min(b.warden_max);
             if before < b.warden_max && t.warden >= b.warden_max {
-                let key = if t.terrain == crate::state::Terrain::Rift {
+                let key = if t.terrain == crate::mech::state::Terrain::Rift {
                     "event.claimable.rift"
                 } else {
                     "event.claimable.city"
@@ -343,17 +343,17 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
     // Loot and drops.
     state.cycle.resources.add(&trip.loot);
     for d in &trip.drops {
-        crate::actions::receive_item(state, d);
+        crate::mech::actions::receive_item(state, d);
     }
     // Experience.
     for (id, cs) in &trip.counters {
         for (k, v) in cs {
-            crate::sim::bump_counter(state, *id, k, *v);
+            crate::mech::sim::bump_counter(state, *id, k, *v);
         }
     }
     if revealed > 0 {
         for id in &members {
-            crate::sim::bump_counter(state, *id, "tiles_revealed", revealed);
+            crate::mech::sim::bump_counter(state, *id, "tiles_revealed", revealed);
         }
     }
     let deepest = trip.walked.iter().map(|i| ring(*i)).max().unwrap_or(0);
@@ -390,11 +390,15 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
         }
     }
     if let Some(tr) = state.trace.as_mut() {
-        tr.extend(trip.results.iter().map(|r| crate::state::Trace::Route {
-            t: trip.end,
-            tile: r.tile,
-            won: r.outcome == Outcome::Victory,
-        }));
+        tr.extend(
+            trip.results
+                .iter()
+                .map(|r| crate::mech::state::Trace::Route {
+                    t: trip.end,
+                    tile: r.tile,
+                    won: r.outcome == Outcome::Victory,
+                }),
+        );
     }
     let sq = &mut state.cycle.squads[si];
     sq.trips += 1;

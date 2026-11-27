@@ -1,20 +1,20 @@
 //! The engine's whole surface for clients: JSON strings in, JSON strings out. Both the wasm
 //! bindings and (later) UniFFI wrap this one type, so web and iOS can't drift apart.
 
-use crate::combat::{self, BattleReport};
-use crate::commands::{self, Command};
-use crate::content::{balance, Resources};
-use crate::defense;
-use crate::economy;
-use crate::geom;
-use crate::i18n::Text;
-use crate::routes;
-use crate::save;
-use crate::sim;
-use crate::state::{GameState, Phase, TideEntry};
+use crate::client::view::{self, TideView};
+use crate::data::{balance, Resources};
+use crate::kernel::geom;
+use crate::kernel::save;
+use crate::l10n::Text;
+use crate::mech::combat::{self, BattleReport};
+use crate::mech::commands::{self, Command};
+use crate::mech::defense;
+use crate::mech::economy;
+use crate::mech::routes;
+use crate::mech::sim;
+use crate::mech::state::{GameState, Phase, TideEntry};
+use crate::mech::world;
 use crate::t;
-use crate::view::{self, TideView};
-use crate::world;
 use serde::Serialize;
 
 struct TideCache {
@@ -157,7 +157,7 @@ impl Engine {
             self.tide = None;
             let t = self.state.time;
             if let Some(tr) = self.state.trace.as_mut() {
-                tr.push(crate::state::Trace::Command {
+                tr.push(crate::mech::state::Trace::Command {
                     t,
                     cmd: cmd.clone(),
                 });
@@ -232,8 +232,8 @@ impl Engine {
             income: calc.income.map(|v| v / 100),
             power: (calc.power_supply, calc.power_demand),
             border: world::border_tiles(cy).len(),
-            alerts: crate::actions::alert_tiles(state).len(),
-            claimable: crate::actions::claimable_tiles(state).len(),
+            alerts: crate::mech::actions::alert_tiles(state).len(),
+            claimable: crate::mech::actions::claimable_tiles(state).len(),
             held: tide.iter().filter(|e| e.held).count(),
             lost: tide.iter().filter(|e| !e.held && !e.skipped_alert).count(),
             lost_tiles,
@@ -537,18 +537,18 @@ impl Engine {
             };
             let (held, lw, tw, rounds, hp, wg) = summarize(&r);
             let busy = match o.assignment {
-                crate::state::Assignment::Idle => None,
-                crate::state::Assignment::Garrison { tile: t } if t == tile => None,
-                crate::state::Assignment::Garrison { tile: t } => {
+                crate::mech::state::Assignment::Idle => None,
+                crate::mech::state::Assignment::Garrison { tile: t } if t == tile => None,
+                crate::mech::state::Assignment::Garrison { tile: t } => {
                     Some(t!("view.garrison.busy_garrison", tile = geom::label(t)))
                 }
-                crate::state::Assignment::Squad { squad } => cy
+                crate::mech::state::Assignment::Squad { squad } => cy
                     .squads
                     .iter()
                     .find(|s| s.id == squad)
                     .map(|s| t!("view.garrison.busy_squad", squad = s.name)),
             };
-            let icon = crate::content::content()
+            let icon = crate::data::content()
                 .classes
                 .get(&o.class)
                 .map(|c| c.icon.clone())
@@ -623,7 +623,7 @@ impl Engine {
             attention_before,
             attention_after: attention_before,
         };
-        if let Err(e) = crate::actions::set_route(&mut copy, squad, route) {
+        if let Err(e) = crate::mech::actions::set_route(&mut copy, squad, route) {
             return empty(e);
         }
         if let Some(sq) = copy.cycle.squads.iter_mut().find(|s| s.id == squad) {
@@ -708,7 +708,9 @@ mod tests {
     fn dry_run_leaves_state_alone() {
         let mut e = started();
         let before = e.save();
-        let tile = crate::geom::neighbors(crate::geom::HQ).next().unwrap();
+        let tile = crate::kernel::geom::neighbors(crate::kernel::geom::HQ)
+            .next()
+            .unwrap();
         let d = e.dry_run(&Command::Build {
             tile,
             facility: Some("workshop".into()),

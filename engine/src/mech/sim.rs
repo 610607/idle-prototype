@@ -2,22 +2,23 @@
 //! returning, a surge, the hourly settlement), process everything due at that instant in a fixed
 //! order, then let the 规章 (automation rules) react. Forecasts run the same loop on a copy.
 
-use crate::actions;
-use crate::combat::BattleReport;
-use crate::content::{balance, content, OrgPerks, Tag};
-use crate::defense;
-use crate::economy;
-use crate::geom::TILES;
-use crate::mapgen;
-use crate::operative::{self, Origin};
-use crate::rng::Rng;
-use crate::routes;
-use crate::state::*;
-use crate::world;
-use crate::{i18n, t, txt};
+use crate::data::hooks;
+use crate::data::{balance, content, OrgPerks, Tag};
+use crate::kernel::clock::{self, Timeline, HOUR};
+use crate::kernel::geom::TILES;
+use crate::kernel::rng::Rng;
+use crate::mech::actions;
+use crate::mech::combat::BattleReport;
+use crate::mech::defense;
+use crate::mech::economy;
+use crate::mech::mapgen;
+use crate::mech::operative::{self, Origin};
+use crate::mech::routes;
+use crate::mech::state::*;
+use crate::mech::world;
+use crate::{l10n, t, txt};
 use std::collections::BTreeMap;
 
-const HOUR: i64 = 3600;
 pub fn org_level(state: &GameState) -> u32 {
     balance()
         .org_levels
@@ -42,7 +43,7 @@ pub fn bump_counter(state: &mut GameState, op_id: u32, counter: &str, by: i32) {
             txt!(
                 "event.trait_grown",
                 op = name.clone(),
-                name = i18n::name("trait", &id)
+                name = l10n::name("trait", &id)
             ),
             None,
             Some(op_id),
@@ -187,7 +188,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
     // 快反规章: the first ring starts fully held.
     if level >= perks.rapid_response {
         for i in 0..TILES as u16 {
-            if crate::geom::ring(i) == 1 && cy.tiles[i as usize].claimable_kind() {
+            if crate::kernel::geom::ring(i) == 1 && cy.tiles[i as usize].claimable_kind() {
                 cy.tiles[i as usize].warden = b.warden_max;
             }
         }
@@ -196,7 +197,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
 
     // Starting crew from HQ, plus every special operative kept from earlier cycles.
     let mut ops = Vec::new();
-    for class in ["vanguard", "marksman", "medic"] {
+    for class in hooks::START_CREW {
         let id = state.next_id;
         state.next_id += 1;
         let origin = Origin {
@@ -227,7 +228,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
         state.next_id += 1;
         sq.push(Squad {
             id,
-            name: i18n::Text::item("names.squad", k as u16),
+            name: l10n::Text::item("names.squad", k as u16),
             members: if k == 0 { first.clone() } else { vec![] },
             route: vec![],
             trip: None,
@@ -252,7 +253,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
         txt!(
             "event.cycle_started",
             n = n,
-            modifier = i18n::name("modifier", &p.modifier)
+            modifier = l10n::name("modifier", &p.modifier)
         ),
         None,
         None,
@@ -362,62 +363,76 @@ pub fn collapse(state: &mut GameState) -> Result<(), String> {
 // The event loop
 // ---------------------------------------------------------------------------
 
-fn next_event(state: &GameState, border: &[u16]) -> i64 {
-    let t = state.time;
-    let mut next = (t / HOUR + 1) * HOUR;
-    for s in &state.cycle.squads {
-        match &s.trip {
-            Some(trip) => next = next.min(trip.end.max(t + 1)),
-            None => {
-                if !s.route.is_empty() && !s.members.is_empty() && s.rest_until > t {
-                    next = next.min(s.rest_until);
+/// The clock's view of a game: what happens when, and in which order at one instant. The loop
+/// itself is `kernel::clock`; a new periodic mechanic adds its next time to `next_event`, its
+/// check to `due` and its step to `instant`.
+impl Timeline for GameState {
+    /// The border, fixed for one instant.
+    type Frame = Vec<u16>;
+
+    fn now(&self) -> i64 {
+        self.time
+    }
+
+    fn set_now(&mut self, t: i64) {
+        self.time = t;
+    }
+
+    fn running(&self) -> bool {
+        self.cycle.phase == Phase::Active
+    }
+
+    fn begin(&mut self) {
+        // Squads that are idle but able start right away.
+        let ids: Vec<u32> = self.cycle.squads.iter().map(|s| s.id).collect();
+        for id in &ids {
+            let now = self.time;
+            routes::try_start(self, *id, now);
+        }
+    }
+
+    fn frame(&self) -> Vec<u16> {
+        world::border_tiles(&self.cycle)
+    }
+
+    fn next_event(&self, border: &Vec<u16>) -> i64 {
+        let t = self.time;
+        let mut next = (t / HOUR + 1) * HOUR;
+        for s in &self.cycle.squads {
+            match &s.trip {
+                Some(trip) => next = next.min(trip.end.max(t + 1)),
+                None => {
+                    if !s.route.is_empty() && !s.members.is_empty() && s.rest_until > t {
+                        next = next.min(s.rest_until);
+                    }
                 }
             }
         }
+        for &i in border {
+            next = next.min(defense::next_surge_after(i, t));
+        }
+        next
     }
-    for &i in border {
-        next = next.min(defense::next_surge_after(i, t));
+
+    fn due(&self, border: &Vec<u16>, t: i64) -> bool {
+        t % HOUR == 0
+            || self.cycle.squads.iter().any(|s| {
+                s.trip.as_ref().is_some_and(|x| x.end == t)
+                    || (s.trip.is_none() && s.rest_until == t)
+            })
+            || border
+                .iter()
+                .any(|i| defense::next_surge_after(*i, t - 1) == t)
     }
-    next
+
+    fn instant(&mut self, border: &Vec<u16>, t: i64) {
+        process_instant(self, border, t);
+    }
 }
 
-/// Advance the simulation to `target`.
+/// Advance the simulation to `target` (the clock loop over this game's timeline).
 pub fn advance(state: &mut GameState, target: i64) {
-    if state.cycle.phase != Phase::Active {
-        state.time = state.time.max(target);
-        return;
-    }
-    // Squads that are idle but able start right away.
-    let ids: Vec<u32> = state.cycle.squads.iter().map(|s| s.id).collect();
-    for id in &ids {
-        let now = state.time;
-        routes::try_start(state, *id, now);
-    }
-    let mut guard = 0;
-    while state.time < target && guard < 100_000 {
-        guard += 1;
-        let border = world::border_tiles(&state.cycle);
-        let t = next_event(state, &border).min(target);
-        if t <= state.time {
-            break;
-        }
-        state.time = t;
-        if t == target && !due(state, &border, t) {
-            break;
-        }
-        process_instant(state, &border, t);
-    }
-    state.time = state.time.max(target);
-}
-
-fn due(state: &GameState, border: &[u16], t: i64) -> bool {
-    t % HOUR == 0
-        || state.cycle.squads.iter().any(|s| {
-            s.trip.as_ref().is_some_and(|x| x.end == t) || (s.trip.is_none() && s.rest_until == t)
-        })
-        || border
-            .iter()
-            .any(|i| defense::next_surge_after(*i, t - 1) == t)
+    clock::advance(state, target);
 }
 
 fn process_instant(state: &mut GameState, border: &[u16], t: i64) {
@@ -507,7 +522,7 @@ fn self_sufficiency_tick(state: &mut GameState) {
 
 fn run_rules(state: &mut GameState) {
     let rules = state.org.rules.clone();
-    if rules.get("auto_claim").copied().unwrap_or(false) {
+    if rules.get(hooks::RULE_AUTO_CLAIM).copied().unwrap_or(false) {
         for tile in actions::claimable_tiles(state) {
             let t = &state.cycle.tiles[tile as usize];
             if t.terrain != Terrain::City {
@@ -519,8 +534,8 @@ fn run_rules(state: &mut GameState) {
                     EventKind::Rule,
                     txt!(
                         "event.rule.claimed",
-                        rule = i18n::name("rule", "auto_claim"),
-                        tile = crate::geom::label(tile),
+                        rule = l10n::name("rule", hooks::RULE_AUTO_CLAIM),
+                        tile = crate::kernel::geom::label(tile),
                         before = before,
                         after = after
                     ),
@@ -531,7 +546,11 @@ fn run_rules(state: &mut GameState) {
             }
         }
     }
-    if rules.get("auto_recruit").copied().unwrap_or(false) {
+    if rules
+        .get(hooks::RULE_AUTO_RECRUIT)
+        .copied()
+        .unwrap_or(false)
+    {
         let cap = actions::pool_cap(state);
         let picks: Vec<u32> = state
             .cycle
@@ -554,7 +573,7 @@ fn run_rules(state: &mut GameState) {
                     EventKind::Rule,
                     txt!(
                         "event.rule.hired",
-                        rule = i18n::name("rule", "auto_recruit"),
+                        rule = l10n::name("rule", hooks::RULE_AUTO_RECRUIT),
                         name = name.clone()
                     ),
                     None,
@@ -564,7 +583,11 @@ fn run_rules(state: &mut GameState) {
             }
         }
     }
-    if rules.get("auto_counter").copied().unwrap_or(false) {
+    if rules
+        .get(hooks::RULE_AUTO_COUNTER)
+        .copied()
+        .unwrap_or(false)
+    {
         for tile in actions::alert_tiles(state) {
             if let Some((r, _)) = defense::preview(state, tile, None, false) {
                 if r.won() && actions::counter(state, tile).is_ok() {
@@ -572,8 +595,8 @@ fn run_rules(state: &mut GameState) {
                         EventKind::Rule,
                         txt!(
                             "event.rule.countered",
-                            rule = i18n::name("rule", "auto_counter"),
-                            tile = crate::geom::label(tile)
+                            rule = l10n::name("rule", hooks::RULE_AUTO_COUNTER),
+                            tile = crate::kernel::geom::label(tile)
                         ),
                         Some(tile),
                         None,
@@ -641,7 +664,7 @@ fn check_specials(state: &mut GameState) {
         let origin = Origin {
             label: txt!(
                 "origin.special",
-                side = i18n::Text::new(&format!("special.{}.side", s.id))
+                side = l10n::Text::new(&format!("special.{}.side", s.id))
             ),
             district: None,
             profession: None,
@@ -667,8 +690,8 @@ fn check_specials(state: &mut GameState) {
             EventKind::Special,
             txt!(
                 "event.special_arrived",
-                name = i18n::name("special", &s.id),
-                rule = i18n::Text::new(&format!("special.{}.rule", s.id))
+                name = l10n::name("special", &s.id),
+                rule = l10n::Text::new(&format!("special.{}.rule", s.id))
             ),
             None,
             None,
@@ -703,8 +726,8 @@ mod tests {
     }
 
     fn ring1_route(s: &GameState) -> Vec<u16> {
-        let hq = crate::geom::HQ;
-        let n = crate::geom::neighbors(hq)
+        let hq = crate::kernel::geom::HQ;
+        let n = crate::kernel::geom::neighbors(hq)
             .find(|n| s.cycle.tiles[*n as usize].claimable_kind())
             .unwrap();
         vec![n]

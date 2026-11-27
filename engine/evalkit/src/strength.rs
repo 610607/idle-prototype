@@ -36,11 +36,11 @@ use crate::game::{deepest_owned, fightable};
 use crate::model::{self, Profile};
 use crate::run::{Metrics, CHECKPOINTS, T0};
 use crate::synergy;
-use idle_engine::api::Engine;
-use idle_engine::combat::{self, BattleInput, BattleKind, UnitSpec};
-use idle_engine::geom::{neighbors, ring};
-use idle_engine::state::{GameState, Trace};
-use idle_engine::{doctrine, operative, routes};
+use idle_engine::client::api::Engine;
+use idle_engine::kernel::geom::{neighbors, ring};
+use idle_engine::mech::combat::{self, BattleInput, BattleKind, UnitSpec};
+use idle_engine::mech::state::{GameState, Trace};
+use idle_engine::{mech::doctrine, mech::operative, mech::routes};
 use std::sync::OnceLock;
 
 /// Smallest hourly strength ratio that counts as a felt jump in `payoff.sawtooth.power`: the

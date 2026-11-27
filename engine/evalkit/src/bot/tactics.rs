@@ -9,15 +9,15 @@
 use super::{Bot, HIRE_RESERVE};
 use crate::game::{deepest_owned, fightable};
 use crate::power;
-use idle_engine::actions::pool_cap;
-use idle_engine::api::Engine;
-use idle_engine::combat::UnitSpec;
-use idle_engine::commands::Command;
-use idle_engine::content::{balance, Cond, Gambit, Target};
-use idle_engine::geom::ring;
-use idle_engine::operative;
-use idle_engine::routes;
-use idle_engine::state::{Assignment, GameState, Operative};
+use idle_engine::client::api::Engine;
+use idle_engine::data::{balance, Cond, Gambit, Target};
+use idle_engine::kernel::geom::ring;
+use idle_engine::mech::actions::pool_cap;
+use idle_engine::mech::combat::UnitSpec;
+use idle_engine::mech::commands::Command;
+use idle_engine::mech::operative;
+use idle_engine::mech::routes;
+use idle_engine::mech::state::{Assignment, GameState, Operative};
 
 /// Turns between lineup and item passes, and between tactic passes.
 const LINEUP_EVERY: u32 = 6;

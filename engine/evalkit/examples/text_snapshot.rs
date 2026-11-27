@@ -7,9 +7,9 @@
 //! cargo run --release --example text_snapshot -- <out-file> [hours]
 //! ```
 use evalkit::bot;
-use idle_engine::api::Engine;
-use idle_engine::commands::Command;
-use idle_engine::textui::{self, Options};
+use idle_engine::client::api::Engine;
+use idle_engine::client::textui::{self, Options};
+use idle_engine::mech::commands::Command;
 use std::fmt::Write;
 
 fn json<T: serde::Serialize>(x: &T) -> String {
