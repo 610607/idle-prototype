@@ -1,5 +1,5 @@
 // 像素图标小工具：读调色板、读/写网格、几何图元、按左上光源自动上明暗、自动描边。
-// 没有依赖，node 直接跑。A 版（16×16）手画草稿走 parse→shade→outline；B 版（32×32）用图元拼。
+// 没有依赖，node 直接跑。草稿走 parse→shade→outline（见 build.mjs）。
 import { readFileSync } from 'node:fs';
 
 export function loadPalette(path) {

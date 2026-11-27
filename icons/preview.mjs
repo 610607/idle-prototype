@@ -1,37 +1,32 @@
 // Writes icons/preview.svg: every pixel icon at 1× and 2× on the UI's dark panel colour.
 // Usage: node icons/preview.mjs   (no dependencies)
+// Colour icons use icons/palette.txt; monochrome control glyphs (# + *) are drawn in the UI's ink.
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Grid, loadPalette, toPaths } from './tools/px.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dir = join(here, 'pixel');
+const pal = loadPalette(join(here, 'palette.txt'));
 const ids = readdirSync(dir)
   .filter((f) => f.endsWith('.txt'))
   .map((f) => f.slice(0, -4))
   .sort();
 
-const INK = '#e8e0c8';
+const INK = '#ede4ca';
 const ACCENT = '#e0b43c';
-const BG = '#2c3028';
+const BG = '#282c24';
 
 function paths(txt) {
-  const d = { '#': '', '+': '', '*': '' };
-  txt
-    .replace(/\r/g, '')
-    .split('\n')
-    .slice(0, 16)
-    .forEach((row, y) => {
-      let x = 0;
-      while (x < 16) {
-        const c = row[x] ?? '.';
-        let w = 1;
-        while (x + w < 16 && (row[x + w] ?? '.') === c) w++;
-        if (c in d) d[c] += `M${x} ${y}h${w}v1h-${w}z`;
-        x += w;
-      }
-    });
-  return `<path d="${d['+']}" fill="${INK}" opacity=".45"/><path d="${d['#']}" fill="${INK}"/><path d="${d['*']}" fill="${ACCENT}"/>`;
+  return Object.entries(toPaths(Grid.parse(txt)))
+    .map(([ch, d]) => {
+      if (ch === '#') return `<path d="${d}" fill="${INK}"/>`;
+      if (ch === '+') return `<path d="${d}" fill="${INK}" opacity=".45"/>`;
+      if (ch === '*') return `<path d="${d}" fill="${ACCENT}"/>`;
+      return `<path d="${d}" fill="${pal.colors[ch]}"/>`;
+    })
+    .join('');
 }
 
 const COLS = 8;

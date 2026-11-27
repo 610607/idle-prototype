@@ -155,27 +155,10 @@ h1, h2, h3, h4 { font-family: var(--font-head); margin: 0; font-weight: 400; let
 ::selection { background: var(--hazard); color: var(--hazard-ink); }
 * { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 
-/* ---------------------------------------------------------------- icon tints
-   The pixel art is one colour (currentColor) until the redraw is decided; tint by category here.
-   :where() keeps these at zero specificity so any context below can override them. */
-:where(.icon[data-icon^='res-scrap']) { color: var(--res-scrap); }
-:where(.icon[data-icon^='res-parts']) { color: var(--res-parts); }
-:where(.icon[data-icon^='res-intel']) { color: var(--res-intel); }
-:where(.icon[data-icon^='res-crystal']) { color: var(--res-crystal); }
-:where(.icon[data-icon='power'], .icon[data-icon^='dial-']) { color: var(--power); }
-:where(.icon[data-icon^='enemy-'], .icon[data-icon^='rift-'], .icon[data-icon='tile-rift']) { color: var(--rift-lt); }
-:where(.icon[data-icon^='sp-'], .icon[data-icon='star'], .icon[data-icon='tile-hq']) { color: var(--hazard); }
-:where(.icon[data-icon='alert'], .icon[data-icon='surge'], .icon[data-icon='hp']) { color: var(--bad); }
-:where(.icon[data-icon='warn'], .icon[data-icon='atk']) { color: var(--warn); }
-:where(.icon[data-icon='def'], .icon[data-icon='squad']) { color: var(--elec); }
-:where(.icon[data-icon='spd'], .icon[data-icon='check'], .icon[data-icon^='militia'], .icon[data-icon='housing']) { color: var(--good); }
-:where(.icon[data-icon='tag-shock']) { color: var(--tag-shock); }
-:where(.icon[data-icon='tag-mark']) { color: var(--tag-mark); }
-:where(.icon[data-icon='tag-overload']) { color: var(--tag-overload); }
-:where(.icon[data-icon='tag-erosion']) { color: var(--tag-erosion); }
-:where(.icon[data-icon='tag-shield']) { color: var(--tag-shield); }
-:where(.icon[data-icon='tag-fortify']) { color: var(--tag-fortify); }
-:where(.icon[data-icon='trait-resonance'], .icon[data-icon='trait-rift']) { color: var(--rift); }
+/* ---------------------------------------------------------------- icons
+   Colour pixel icons carry their own palette (icons/palette.txt). Only the monochrome control glyphs
+   (check, close, play …) follow currentColor; :where() keeps these at zero specificity. */
+:where(.icon[data-icon='check']) { color: var(--good); }
 /* places where the icon must follow its surroundings */
 .chip .icon, .btn.primary .icon, .btn.selected .icon, .btn.danger .icon, .btn.break .icon,
 .seg [aria-pressed='true'] .icon, .section-badge .icon, .badge .icon, .op-avatar .icon { color: inherit; }
@@ -240,7 +223,8 @@ h1, h2, h3, h4 { font-family: var(--font-head); margin: 0; font-weight: 400; let
   color: var(--ink-3); cursor: pointer; font-family: var(--font-head); font-size: 16px; letter-spacing: 0.08em;
   border-top: 3px solid var(--line); margin-bottom: -1px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
-.tab .icon { color: inherit; }
+.tab .icon { color: inherit; opacity: 0.6; filter: saturate(0.35); }
+.tab:hover .icon, .tab[aria-selected='true'] .icon { opacity: 1; filter: none; }
 .tab:hover { color: var(--ink-2); background: var(--panel-2); }
 .tab[aria-selected='true'] { color: var(--ink); background: var(--bg); border-color: var(--line-2); border-top-color: var(--hazard); border-bottom: 1px solid var(--bg); }
 .tab[aria-selected='true'] .icon { color: var(--hazard); }
@@ -288,9 +272,9 @@ h1, h2, h3, h4 { font-family: var(--font-head); margin: 0; font-weight: 400; let
     display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; position: relative;
     border-top: 3px solid transparent;
   }
-  .bottom-nav button .icon { color: inherit; }
+  .bottom-nav button .icon { color: inherit; opacity: 0.6; filter: saturate(0.35); }
   .bottom-nav button[aria-selected='true'] { color: var(--ink); border-top-color: var(--hazard); background: var(--panel-3); }
-  .bottom-nav button[aria-selected='true'] .icon { color: var(--hazard); }
+  .bottom-nav button[aria-selected='true'] .icon { color: var(--hazard); opacity: 1; filter: none; }
   .bottom-nav .badge { position: absolute; top: 3px; left: calc(50% + 6px); }
 }
 
@@ -494,7 +478,6 @@ h1, h2, h3, h4 { font-family: var(--font-head); margin: 0; font-weight: 400; let
   border-bottom: 1px solid var(--sunk); box-shadow: 0 1px 0 var(--line), 0 3px 0 rgba(0, 0, 0, 0.2); position: sticky; top: 0; z-index: 2;
 }
 .page-head > .icon { padding: 3px; width: 40px; height: 40px; background: var(--sunk); border: 1px solid var(--line); }
-.page-head > .icon:not([data-icon^='enemy-']):not([data-icon^='rift-']):not([data-icon^='tile-rift']):not([data-icon^='sp-']):not([data-icon='tile-hq']) { color: var(--ink); }
 .page-head h2 { font-size: 21px; }
 .page-head .crumbs { font-size: 12px; color: var(--ink-3); }
 .page-head .crumbs button { border: 0; background: none; color: var(--ink-2); cursor: pointer; padding: 0; text-decoration: underline dotted; }
@@ -530,15 +513,11 @@ button.list-item:disabled { cursor: not-allowed; opacity: 0.55; }
 .pending-item:hover { background: var(--panel-3); border-color: var(--line-2); }
 .pending-item.alert, .pending-item.defend, .pending-item.alert_more, .pending-item.defend_more { background: var(--bad-bg); border-color: rgba(219, 94, 66, 0.45); }
 .pending-item.alert::before, .pending-item.defend::before, .pending-item.alert_more::before, .pending-item.defend_more::before { background: repeating-linear-gradient(0deg, var(--bad) 0 6px, var(--sunk) 6px 9px); }
-.pending-item.alert > .icon:first-child, .pending-item.defend > .icon:first-child, .pending-item.alert_more > .icon:first-child, .pending-item.defend_more > .icon:first-child { color: var(--bad); }
 .pending-item.claim::before { background: var(--good); }
 .pending-item.claim > .icon:first-child { color: var(--good); }
 .pending-item.candidate::before, .pending-item.policy::before { background: var(--warn); }
-.pending-item.candidate > .icon:first-child, .pending-item.policy > .icon:first-child { color: var(--warn); }
 .pending-item.route::before { background: var(--hazard); }
-.pending-item.route > .icon:first-child { color: var(--hazard); }
 .pending-item.research::before { background: var(--elec); }
-.pending-item.research > .icon:first-child { color: var(--elec); }
 
 /* ---------------------------------------------------------------- deltas (red → green) */
 .deltas { display: grid; grid-template-columns: minmax(5em, auto) minmax(0, 1fr) auto minmax(0, 1fr); gap: 3px 10px; align-items: center; font-size: 13px; }
