@@ -9,6 +9,7 @@ use crate::content::{
     balance, content, Act, ApplyTo, BaseStats, Cond, Effect, Gambit, ReactionEffect, Row,
     SkillKind, Stat, Tag, TagBonus, TagEvent, Target, TraitEffect, Trigger,
 };
+use crate::t;
 use serde::{Deserialize, Serialize};
 
 pub const MAX_ROUNDS: u8 = 15;
@@ -591,18 +592,22 @@ impl<'a> Battle<'a> {
                     .iter()
                     .filter(|u| u.side == Side::Enemy)
                     .map(|u| {
-                        format!(
-                            "{}（{}）",
-                            u.name,
-                            if u.row == Row::Front { "前" } else { "后" }
+                        t!(
+                            "battle.wave.enemy",
+                            name = u.name,
+                            row = t!(if u.row == Row::Front {
+                                "battle.row.front"
+                            } else {
+                                "battle.row.back"
+                            })
                         )
                     })
                     .collect();
-                let text = format!(
-                    "第 {}/{} 波接敌：{}",
-                    self.wave,
-                    total_waves,
-                    names.join("、")
+                let text = t!(
+                    "battle.wave.engaged",
+                    wave = self.wave,
+                    total = total_waves,
+                    names = names.join(&t!("battle.sep.list"))
                 );
                 self.push(
                     LogKind::Wave,
@@ -636,7 +641,7 @@ impl<'a> Battle<'a> {
                         None,
                         None,
                         0,
-                        format!("第 {} 回合", r),
+                        t!("battle.log.round", round = r),
                         None,
                         vec![],
                     );
@@ -664,9 +669,9 @@ impl<'a> Battle<'a> {
                             }) => self.act(actor, &skill, target, rule),
                             Some(Choice::Emergency) => {
                                 outcome = Outcome::Emergency;
-                                let text = format!(
-                                    "{} 按战术规则下令紧急撤退，小队立刻脱战。",
-                                    self.units[actor].name
+                                let text = t!(
+                                    "battle.log.retreat_emergency",
+                                    name = self.units[actor].name
                                 );
                                 self.push(
                                     LogKind::Retreat,
@@ -702,12 +707,9 @@ impl<'a> Battle<'a> {
                 outcome = Outcome::Wipe;
                 lost_wave = Some(self.wave);
                 let text = if self.side_alive(Side::Ally) {
-                    format!(
-                        "第 {} 波拖满 {} 回合没打下来，判负。",
-                        self.wave, MAX_ROUNDS
-                    )
+                    t!("battle.log.timeout", wave = self.wave, rounds = MAX_ROUNDS)
                 } else {
-                    format!("第 {} 波全员倒下。", self.wave)
+                    t!("battle.log.wipe", wave = self.wave)
                 };
                 self.push(
                     LogKind::End,
@@ -735,15 +737,16 @@ impl<'a> Battle<'a> {
                     self.units[a].hp = (before + amount).min(self.units[a].max_hp);
                     let healed = self.units[a].hp - before;
                     if healed > 0 && self.rec() {
-                        let text = format!(
-                            "波次间隙，街坊给 {} 包扎，回复 {} 生命",
-                            self.units[a].name, healed
+                        let text = t!(
+                            "battle.log.breather",
+                            name = self.units[a].name,
+                            hp = healed
                         );
-                        let formula = Some(format!(
-                            "最大生命 {} × {} = {}",
-                            self.units[a].max_hp,
-                            pct(bp as i64),
-                            amount
+                        let formula = Some(t!(
+                            "battle.formula.max_hp",
+                            max = self.units[a].max_hp,
+                            pct = pct(bp as i64),
+                            n = amount
                         ));
                         self.push(
                             LogKind::Facility,
@@ -774,9 +777,10 @@ impl<'a> Battle<'a> {
                             && g.cond2.as_ref().is_none_or(|c| self.cond_ok(a, c))
                         {
                             outcome = Outcome::Planned;
-                            let text = format!(
-                                "第 {} 波清空后，{} 按计划收队，带回全部所得。",
-                                self.wave, self.units[a].name
+                            let text = t!(
+                                "battle.log.retreat_planned",
+                                wave = self.wave,
+                                name = self.units[a].name
                             );
                             self.push(
                                 LogKind::Retreat,
@@ -798,7 +802,7 @@ impl<'a> Battle<'a> {
         }
 
         if outcome == Outcome::Victory {
-            let text = format!("{} 波全部肃清。", total_waves);
+            let text = t!("battle.log.victory", waves = total_waves);
             self.push(
                 LogKind::End,
                 None,
@@ -887,7 +891,7 @@ impl<'a> Battle<'a> {
                 let amount = (self.units[i].max_hp as i64 * regen as i64 / 10_000) as i32;
                 let healed = self.heal(i, i, amount);
                 if healed > 0 && self.rec() {
-                    let text = format!("{} 缓过一口气，回复 {} 生命", self.units[i].name, healed);
+                    let text = t!("battle.log.regen", name = self.units[i].name, hp = healed);
                     self.push(
                         LogKind::Facility,
                         None,
@@ -926,20 +930,28 @@ impl<'a> Battle<'a> {
             // snowballing forever on a target that cannot cleanse.
             self.units[i].tags[Tag::Erosion.idx()] = stacks - 1;
             let formula = if self.rec() {
-                let mut f = format!(
-                    "最大生命 {} × 4% × {} 层 = {}",
-                    self.units[i].max_hp, stacks, base
+                let mut f = t!(
+                    "battle.formula.erosion",
+                    max = self.units[i].max_hp,
+                    stacks = stacks,
+                    n = base
                 );
                 if cut > 0 {
-                    f.push_str(&format!("；减免 {} → {}", pct(cut as i64), dmg));
+                    f.push_str(&t!(
+                        "battle.formula.erosion_cut",
+                        pct = pct(cut as i64),
+                        n = dmg
+                    ));
                 }
                 Some(f)
             } else {
                 None
             };
-            let text = format!(
-                "{} 受 {} 层 [侵蚀] 侵蚀，损失 {} 生命（退去 1 层）",
-                self.units[i].name, stacks, taken
+            let text = t!(
+                "battle.log.erosion",
+                name = self.units[i].name,
+                stacks = stacks,
+                hp = taken
             );
             let id = self.push(
                 LogKind::Dot,
@@ -1213,19 +1225,19 @@ impl<'a> Battle<'a> {
             if landed > 0 {
                 out.push(to);
                 if self.rec() {
-                    let verb = match event {
-                        TagEvent::Consumed => "被消耗",
-                        TagEvent::Applied => "挂上",
-                        TagEvent::Tick => "发作",
-                    };
-                    let text = format!(
-                        "「{}」：{} 的 [{}] {}，转成 {} 层 [{}]",
-                        trait_name(&src),
-                        self.units[target].name,
-                        from.name(),
-                        verb,
-                        landed,
-                        to.name()
+                    let verb = t!(match event {
+                        TagEvent::Consumed => "battle.transmute.consumed",
+                        TagEvent::Applied => "battle.transmute.applied",
+                        TagEvent::Tick => "battle.transmute.tick",
+                    });
+                    let text = t!(
+                        "battle.log.transmute",
+                        src = trait_name(&src),
+                        name = self.units[target].name,
+                        from = from.name(),
+                        verb = verb,
+                        n = landed,
+                        to = to.name()
                     );
                     self.push(
                         LogKind::Tag,
@@ -1302,13 +1314,13 @@ impl<'a> Battle<'a> {
                                 / 10_000)
                                 .max(1) as i32;
                         let hp = self.take_damage(target, dmg, Some(actor));
-                        parts.push(format!("{} 伤害", hp));
+                        parts.push(t!("battle.tag_reaction.burst", hp = hp));
                     }
                     ReactionEffect::Apply { tag, stacks } => {
                         let k = self.add_tag(target, *tag, *stacks, Some(cause), depth, false);
                         if k > 0 {
                             added.push(*tag);
-                            parts.push(format!("+{} 层 [{}]", k, tag.name()));
+                            parts.push(t!("battle.tag_reaction.apply", n = k, tag = tag.name()));
                         }
                     }
                     ReactionEffect::Spread { tag, stacks } => {
@@ -1321,14 +1333,17 @@ impl<'a> Battle<'a> {
                             m += self.add_tag(o, *tag, *stacks, Some(cause), depth, false);
                         }
                         if m > 0 {
-                            parts.push(format!("[{}] 扩散 {} 层", tag.name(), m));
+                            parts.push(t!("battle.tag_reaction.spread", tag = tag.name(), n = m));
                         }
                     }
                     ReactionEffect::ExtraAction => {
                         if self.units[actor].alive && !self.units[actor].resonance_used {
                             self.units[actor].resonance_used = true;
                             self.units[actor].ap += 1;
-                            parts.push(format!("{} 再行动一次", self.units[actor].name));
+                            parts.push(t!(
+                                "battle.tag_reaction.extra_action",
+                                name = self.units[actor].name
+                            ));
                         }
                     }
                 }
@@ -1337,13 +1352,13 @@ impl<'a> Battle<'a> {
                 Some(x) => x.1 += 1,
                 None => self.tag_reactions.push((r.id.clone(), 1)),
             }
-            let text = format!(
-                "【{}】{} 身上 [{}] 碰上 [{}]：{}",
-                r.name,
-                self.units[target].name,
-                r.a.name(),
-                r.b.name(),
-                parts.join("，")
+            let text = t!(
+                "battle.log.tag_reaction",
+                reaction = r.name,
+                name = self.units[target].name,
+                a = r.a.name(),
+                b = r.b.name(),
+                parts = parts.join(&t!("battle.sep.comma"))
             );
             let id = self.push(
                 LogKind::Tag,
@@ -1389,13 +1404,13 @@ impl<'a> Battle<'a> {
             self.units[u].charge[tag.idx()] = after;
             if log && self.rec() && after > before {
                 let name = trait_name(&src);
-                let text = format!(
-                    "{}「{}」把 {} 层 [{}] 存了下来（共 {} 层）",
-                    self.units[u].name,
-                    name,
-                    after - before,
-                    tag.name(),
-                    after
+                let text = t!(
+                    "battle.log.absorb_store",
+                    name = self.units[u].name,
+                    src = name,
+                    n = after - before,
+                    tag = tag.name(),
+                    total = after
                 );
                 self.push(
                     LogKind::Tag,
@@ -1435,13 +1450,13 @@ impl<'a> Battle<'a> {
                 if let Some(o) = to {
                     let n = self.add_tag(o, tag, excess, cause, depth + 1, false);
                     if n > 0 && log && self.rec() {
-                        let text = format!(
-                            "「{}」：{} 身上放不下的 {} 层 [{}] 溢到 {}",
-                            trait_name(&src),
-                            self.units[u].name,
-                            n,
-                            tag.name(),
-                            self.units[o].name
+                        let text = t!(
+                            "battle.log.overflow",
+                            src = trait_name(&src),
+                            name = self.units[u].name,
+                            n = n,
+                            tag = tag.name(),
+                            target = self.units[o].name
                         );
                         self.push(
                             LogKind::Tag,
@@ -1463,10 +1478,10 @@ impl<'a> Battle<'a> {
             if let Some(src) = self.has_effect(u, |e| matches!(e, TraitEffect::MarkedGainPp)) {
                 self.units[u].pp += 1;
                 if log && self.rec() {
-                    let text = format!(
-                        "{}「{}」：被盯上了，PP +1",
-                        self.units[u].name,
-                        trait_name(&src)
+                    let text = t!(
+                        "battle.log.marked_pp",
+                        name = self.units[u].name,
+                        src = trait_name(&src)
                     );
                     self.push(
                         LogKind::Tag,
@@ -1496,7 +1511,7 @@ impl<'a> Battle<'a> {
             if *tag == Tag::Shock && self.input.grounding > 0 {
                 let gain = self.input.grounding * n;
                 self.warden_gain += gain;
-                let text = format!("接地网导走 {} 层 [震荡]：本格镇守度 +{}", n, gain);
+                let text = t!("battle.log.grounding", n = n, gain = gain);
                 self.push(
                     LogKind::Facility,
                     Some(cause),
@@ -1529,12 +1544,12 @@ impl<'a> Battle<'a> {
                     let src = self
                         .has_effect(by, |e| matches!(e, TraitEffect::ConsumeHeal { .. }))
                         .unwrap_or_default();
-                    let text = format!(
-                        "{}「{}」：拆掉 {} 层标签，恢复 {} 生命",
-                        self.units[by].name,
-                        trait_name(&src),
-                        total,
-                        healed
+                    let text = t!(
+                        "battle.log.consume_heal",
+                        name = self.units[by].name,
+                        src = trait_name(&src),
+                        n = total,
+                        hp = healed
                     );
                     self.push(
                         LogKind::Tag,
@@ -1590,12 +1605,12 @@ impl<'a> Battle<'a> {
                     self.units[a].hp -= back;
                     self.units[a].taken += back;
                     self.units[d].dealt += back;
-                    let text = format!(
-                        "{}「{}」：护盾碎裂，把 {} 点还给 {}",
-                        self.units[d].name,
-                        trait_name(&src),
-                        back,
-                        self.units[a].name
+                    let text = t!(
+                        "battle.log.shield_burst",
+                        name = self.units[d].name,
+                        src = trait_name(&src),
+                        n = back,
+                        target = self.units[a].name
                     );
                     let id = self.push(
                         LogKind::Tag,
@@ -1641,7 +1656,7 @@ impl<'a> Battle<'a> {
         if self.units[u].alive && self.units[u].hp <= 0 {
             self.units[u].hp = 0;
             self.units[u].alive = false;
-            let text = format!("{} 倒下", self.units[u].name);
+            let text = t!("battle.log.death", name = self.units[u].name);
             self.push(
                 LogKind::Death,
                 Some(cause),
@@ -1674,7 +1689,7 @@ impl<'a> Battle<'a> {
         let stat_bp = 10_000 + (stat - 40).max(0) as i64 * 50;
         let mut f: i64 = power as i64 * stat_bp / 10_000;
         if rec {
-            notes.push(format!("威力 {}", pct(power as i64)));
+            notes.push(t!("battle.note.power", pct = pct(power as i64)));
             if let Some(s) = scale {
                 notes.push(format!("{} {} ×{}", s.name(), stat, pct(stat_bp)));
             }
@@ -1685,7 +1700,11 @@ impl<'a> Battle<'a> {
         if over > 0 {
             mul(&mut f, 1500 * over);
             if rec {
-                notes.push(format!("自身过载 {} 层 +{}", over, pct(1500 * over)));
+                notes.push(t!(
+                    "battle.note.self_overload",
+                    n = over,
+                    pct = pct(1500 * over)
+                ));
             }
         }
         let effects = self.units[a].effects.clone();
@@ -1698,12 +1717,12 @@ impl<'a> Battle<'a> {
                     if n > 0 {
                         mul(&mut f, *bp_per_stack as i64 * n);
                         if rec {
-                            notes.push(format!(
-                                "「{}」自身{} {} 层 +{}",
-                                trait_name(src),
-                                tag.name(),
-                                n,
-                                pct(*bp_per_stack as i64 * n)
+                            notes.push(t!(
+                                "battle.note.feed_on",
+                                src = trait_name(src),
+                                tag = tag.name(),
+                                n = n,
+                                pct = pct(*bp_per_stack as i64 * n)
                             ));
                         }
                     }
@@ -1711,17 +1730,21 @@ impl<'a> Battle<'a> {
                 TraitEffect::LowHpBonus { below, bp } if self.units[a].hp_pct_lt(*below) => {
                     mul(&mut f, *bp as i64);
                     if rec {
-                        notes.push(format!("「{}」+{}", trait_name(src), pct(*bp as i64)));
+                        notes.push(t!(
+                            "battle.note.low_hp",
+                            src = trait_name(src),
+                            pct = pct(*bp as i64)
+                        ));
                     }
                 }
                 TraitEffect::BonusVsTag { tag, bp } if self.units[d].tags[tag.idx()] > 0 => {
                     mul(&mut f, *bp as i64);
                     if rec {
-                        notes.push(format!(
-                            "「{}」对{} +{}",
-                            trait_name(src),
-                            tag.name(),
-                            pct(*bp as i64)
+                        notes.push(t!(
+                            "battle.note.vs_tag",
+                            src = trait_name(src),
+                            tag = tag.name(),
+                            pct = pct(*bp as i64)
                         ));
                     }
                 }
@@ -1733,11 +1756,11 @@ impl<'a> Battle<'a> {
             if n > 0 {
                 mul(&mut f, b.per_stack as i64 * n);
                 if rec {
-                    notes.push(format!(
-                        "目标{} {} 层 +{}",
-                        b.tag.name(),
-                        n,
-                        pct(b.per_stack as i64 * n)
+                    notes.push(t!(
+                        "battle.note.target_tag",
+                        tag = b.tag.name(),
+                        n = n,
+                        pct = pct(b.per_stack as i64 * n)
                     ));
                 }
             }
@@ -1751,11 +1774,11 @@ impl<'a> Battle<'a> {
                 self.units[d].tags[cb.tag.idx()] -= n;
                 consumed.push((cb.tag, n));
                 if rec {
-                    notes.push(format!(
-                        "消耗目标{} {} 层 +{}",
-                        cb.tag.name(),
-                        n,
-                        pct(cb.per_stack as i64 * n as i64)
+                    notes.push(t!(
+                        "battle.note.consume",
+                        tag = cb.tag.name(),
+                        n = n,
+                        pct = pct(cb.per_stack as i64 * n as i64)
                     ));
                 }
             }
@@ -1769,17 +1792,21 @@ impl<'a> Battle<'a> {
         let mut mult: i64 = 10_000 + 1000 * shock + 800 * dover;
         let mut taken_notes = Vec::new();
         if rec && shock > 0 {
-            taken_notes.push(format!("震荡 {} 层 +{}", shock, pct(1000 * shock)));
+            taken_notes.push(t!("battle.note.shock", n = shock, pct = pct(1000 * shock)));
         }
         if rec && dover > 0 {
-            taken_notes.push(format!("过载 {} 层 +{}", dover, pct(800 * dover)));
+            taken_notes.push(t!(
+                "battle.note.overload",
+                n = dover,
+                pct = pct(800 * dover)
+            ));
         }
         if self.units[d].tags[Tag::Fortify.idx()] > 0 {
             mult = mult * 7000 / 10_000;
             self.units[d].tags[Tag::Fortify.idx()] -= 1;
             consumed.push((Tag::Fortify, 1));
             if rec {
-                taken_notes.push("固守 -30%（消耗 1 层）".to_string());
+                taken_notes.push(t!("battle.note.fortify"));
             }
         }
         let mut dmg = (mitigated * mult / 10_000).max(1) as i32;
@@ -1800,16 +1827,25 @@ impl<'a> Battle<'a> {
             let extra = (self.units[d].max_hp as i64 * burst_bp * burst_n / 10_000) as i32;
             dmg += extra;
             if rec {
-                taken_notes.push(format!("消耗 {} 层爆裂 +{}", burst_n, extra));
+                taken_notes.push(t!("battle.note.burst", n = burst_n, dmg = extra));
             }
         }
         let formula = if rec {
-            let mut s = format!("攻击 {} × {} = {}", atk, notes.join(" × "), raw);
-            s.push_str(&format!("；防御 {} 减伤 → {}", def, mitigated));
+            let mut s = t!(
+                "battle.formula.attack",
+                atk = atk,
+                notes = notes.join(" × "),
+                raw = raw
+            );
+            s.push_str(&t!("battle.formula.defense", def = def, n = mitigated));
             if !taken_notes.is_empty() {
-                s.push_str(&format!("；{} → {}", taken_notes.join("，"), dmg));
+                s.push_str(&t!(
+                    "battle.formula.taken",
+                    notes = taken_notes.join(&t!("battle.sep.comma")),
+                    n = dmg
+                ));
             } else if dmg as i64 != mitigated {
-                s.push_str(&format!("；保底 → {}", dmg));
+                s.push_str(&t!("battle.formula.floor", n = dmg));
             }
             Some(s)
         } else {
@@ -1834,7 +1870,7 @@ impl<'a> Battle<'a> {
         for r in self.reacted.iter_mut() {
             *r = 0;
         }
-        let rule_note = rule.map(|r| format!("规则 {}", r + 1));
+        let rule_note = rule.map(|r| t!("battle.rule", n = r + 1));
         let id = self.push(
             LogKind::Action,
             None,
@@ -1859,19 +1895,19 @@ impl<'a> Battle<'a> {
                             * (10_000 + (st - 40).max(0) as i64 * 50)
                             / 10_000) as i32;
                         let h = self.heal(a, t, amt);
-                        parts.push(format!("恢复 {} 生命", h));
+                        parts.push(t!("battle.support.heal", hp = h));
                     }
                     Effect::Shield { ratio } => {
                         let amt = (self.units[t].max_hp as i64 * *ratio as i64 / 10_000) as i32;
                         let s = self.give_shield(a, t, amt);
-                        parts.push(format!("护盾 {}", s));
+                        parts.push(t!("battle.support.shield", n = s));
                         tags.push(Tag::Shield);
                     }
                     Effect::Apply { tag, stacks, to } => {
                         let who = if *to == ApplyTo::SelfUnit { a } else { t };
                         let n = self.add_tag(who, *tag, *stacks, Some(id), 1, true);
                         if n > 0 {
-                            parts.push(format!("{} 层 [{}]", n, tag.name()));
+                            parts.push(t!("battle.support.apply", n = n, tag = tag.name()));
                             tags.push(*tag);
                         }
                     }
@@ -1879,16 +1915,16 @@ impl<'a> Battle<'a> {
                 }
             }
             if self.rec() {
-                let text = format!(
-                    "{} 对 {} 使用「{}」：{}",
-                    self.units[a].name,
-                    if t == a {
-                        "自己".to_string()
+                let text = t!(
+                    "battle.log.support",
+                    name = self.units[a].name,
+                    target = if t == a {
+                        t!("battle.self")
                     } else {
                         self.units[t].name.clone()
                     },
-                    sk.name,
-                    parts.join("，")
+                    skill = sk.name,
+                    parts = parts.join(&t!("battle.sep.comma"))
                 );
                 self.fill(id, text, None, tags, 0, rule_note);
             }
@@ -1922,7 +1958,7 @@ impl<'a> Battle<'a> {
                 Effect::SelfDamage { bp } => {
                     let cost = (self.units[a].max_hp as i64 * *bp as i64 / 10_000).max(1) as i32;
                     self.units[a].hp = (self.units[a].hp - cost).max(1);
-                    extra_text.push(format!("自损 {}", cost));
+                    extra_text.push(t!("battle.extra.self_damage", n = cost));
                 }
                 Effect::Damage {
                     power,
@@ -1955,7 +1991,11 @@ impl<'a> Battle<'a> {
                                 applied.push(*tag);
                             }
                         }
-                        extra_text.push(format!("全体敌人 +{} 层 [{}]", stacks, tag.name()));
+                        extra_text.push(t!(
+                            "battle.extra.all_enemies",
+                            n = stacks,
+                            tag = tag.name()
+                        ));
                     }
                     ApplyTo::Attacker => {}
                 },
@@ -1970,7 +2010,7 @@ impl<'a> Battle<'a> {
                             n += self.add_tag(o, *tag, 1, Some(id), 1, true);
                         }
                         if n > 0 {
-                            extra_text.push(format!("[{}] 扩散到 {} 名敌人", tag.name(), n));
+                            extra_text.push(t!("battle.extra.spread", tag = tag.name(), n = n));
                         }
                     }
                 }
@@ -2012,13 +2052,13 @@ impl<'a> Battle<'a> {
                                 |e| matches!(e, TraitEffect::Absorb { tag: t } if *t == tag),
                             )
                             .unwrap_or_default();
-                        let text = format!(
-                            "{}「{}」把存下的 {} 层 [{}] 转给 {}",
-                            self.units[a].name,
-                            trait_name(&src),
-                            landed,
-                            tag.name(),
-                            self.units[target].name
+                        let text = t!(
+                            "battle.log.absorb_release",
+                            name = self.units[a].name,
+                            src = trait_name(&src),
+                            n = landed,
+                            tag = tag.name(),
+                            target = self.units[target].name
                         );
                         self.push(
                             LogKind::Tag,
@@ -2038,17 +2078,20 @@ impl<'a> Battle<'a> {
         }
 
         if self.rec() {
-            let mut text = format!(
-                "{} 对 {} 使用「{}」，造成 {} 伤害",
-                self.units[a].name, self.units[target].name, sk.name, dealt
+            let mut text = t!(
+                "battle.log.attack",
+                name = self.units[a].name,
+                target = self.units[target].name,
+                skill = sk.name,
+                dmg = dealt
             );
             if target != t {
-                text.push_str(&format!("（{} 挡在了前面）", self.units[target].name));
+                text.push_str(&t!("battle.attack.guarded", name = self.units[target].name));
             }
             let mut tags = applied.clone();
             for (tg, n) in &consumed {
                 if *n > 0 {
-                    text.push_str(&format!("，消耗 {} 层 [{}]", n, tg.name()));
+                    text.push_str(&t!("battle.attack.consumed", n = n, tag = tg.name()));
                     tags.push(*tg);
                 }
             }
@@ -2057,10 +2100,13 @@ impl<'a> Battle<'a> {
                     .iter()
                     .map(|t| format!("[{}]", t.name()))
                     .collect();
-                text.push_str(&format!("，挂上 {}", names.join("")));
+                text.push_str(&t!("battle.attack.applied", tags = names.join("")));
             }
             if !extra_text.is_empty() {
-                text.push_str(&format!("（{}）", extra_text.join("，")));
+                text.push_str(&t!(
+                    "battle.attack.extra",
+                    list = extra_text.join(&t!("battle.sep.comma"))
+                ));
             }
             self.fill(id, text, formula, dedup_tags(&tags), dealt, rule_note);
         }
@@ -2095,13 +2141,13 @@ impl<'a> Battle<'a> {
                 if let Some(tg) = hit {
                     self.units[a].resonance_used = true;
                     self.units[a].ap += 1;
-                    let text = format!(
-                        "{}「{}」：{} 的 [{}] 叠到 {} 层，额外行动一次",
-                        self.units[a].name,
-                        trait_name(&src),
-                        self.units[target].name,
-                        tg.name(),
-                        th
+                    let text = t!(
+                        "battle.log.resonance",
+                        name = self.units[a].name,
+                        src = trait_name(&src),
+                        target = self.units[target].name,
+                        tag = tg.name(),
+                        n = th
                     );
                     self.push(
                         LogKind::Extra,
@@ -2133,7 +2179,7 @@ impl<'a> Battle<'a> {
     ) {
         if let Some(e) = self.log.iter_mut().rev().find(|e| e.id == id) {
             e.text = match rule {
-                Some(r) => format!("{}　〔{}〕", text, r),
+                Some(r) => t!("battle.rule_note", text = text, rule = r),
                 None => text,
             };
             e.formula = formula;
@@ -2329,7 +2375,7 @@ impl<'a> Battle<'a> {
             match e {
                 Effect::Guard => {
                     guard = Some(u);
-                    parts.push(format!("替 {} 挡下这一击", self.units[t].name));
+                    parts.push(t!("battle.react.guard", name = self.units[t].name));
                 }
                 Effect::Apply { tag, stacks, to } => {
                     let who = match to {
@@ -2341,15 +2387,15 @@ impl<'a> Battle<'a> {
                     if let Some(w) = who {
                         let n = self.add_tag(w, *tag, *stacks, Some(id), depth + 1, true);
                         if n > 0 {
-                            parts.push(format!(
-                                "{} +{} 层 [{}]",
-                                if w == u {
-                                    "自己".to_string()
+                            parts.push(t!(
+                                "battle.react.apply",
+                                name = if w == u {
+                                    t!("battle.self")
                                 } else {
                                     self.units[w].name.clone()
                                 },
-                                n,
-                                tag.name()
+                                n = n,
+                                tag = tag.name()
                             ));
                             if self.units[w].side != self.units[u].side {
                                 applied.push(*tag);
@@ -2370,7 +2416,11 @@ impl<'a> Battle<'a> {
                         formula = r.formula;
                         parts.insert(
                             0,
-                            format!("对 {} 造成 {} 伤害", self.units[t].name, r.dealt),
+                            t!(
+                                "battle.react.damage",
+                                name = self.units[t].name,
+                                dmg = r.dealt
+                            ),
                         );
                         let _ = r.killed;
                     }
@@ -2381,34 +2431,34 @@ impl<'a> Battle<'a> {
                         * (10_000 + (st - 40).max(0) as i64 * 50)
                         / 10_000) as i32;
                     let h = self.heal(u, t, amt);
-                    parts.push(format!("为 {} 恢复 {} 生命", self.units[t].name, h));
+                    parts.push(t!("battle.react.heal", name = self.units[t].name, hp = h));
                 }
                 Effect::Shield { ratio } => {
                     let amt = (self.units[t].max_hp as i64 * *ratio as i64 / 10_000) as i32;
                     let s = self.give_shield(u, t, amt);
-                    parts.push(format!("给 {} {} 护盾", self.units[t].name, s));
+                    parts.push(t!("battle.react.shield", name = self.units[t].name, n = s));
                 }
                 _ => {}
             }
         }
         if self.rec() {
-            let why = match trigger {
-                Trigger::AllyTargeted => "队友被攻击",
-                Trigger::AllyHit => "队友命中",
-                Trigger::TagApplied => "标签挂上",
-                Trigger::AllyLowHp => "队友重伤",
-                Trigger::TagConsumed => "标签被消耗",
-            };
-            let mut text = format!(
-                "↳ {}（{}）发动「{}」：{}",
-                self.units[u].name,
-                why,
-                sk.name,
-                parts.join("，")
+            let why = t!(match trigger {
+                Trigger::AllyTargeted => "battle.trigger.ally_targeted",
+                Trigger::AllyHit => "battle.trigger.ally_hit",
+                Trigger::TagApplied => "battle.trigger.tag_applied",
+                Trigger::AllyLowHp => "battle.trigger.ally_low_hp",
+                Trigger::TagConsumed => "battle.trigger.tag_consumed",
+            });
+            let mut text = t!(
+                "battle.log.react",
+                name = self.units[u].name,
+                why = why,
+                skill = sk.name,
+                parts = parts.join(&t!("battle.sep.comma"))
             );
             for (tg, n) in &consumed {
                 if *n > 0 {
-                    text.push_str(&format!("，消耗 {} 层 [{}]", n, tg.name()));
+                    text.push_str(&t!("battle.attack.consumed", n = n, tag = tg.name()));
                 }
             }
             let mut tags: Vec<Tag> = applied.clone();
@@ -2468,7 +2518,7 @@ fn trait_name(id: &str) -> String {
         .or_else(|| {
             id.strip_prefix("doctrine:")
                 .and_then(|d| c.doctrine(d))
-                .map(|d| format!("条令·{}", d.name))
+                .map(|d| t!("battle.doctrine", name = d.name))
         })
         .unwrap_or_else(|| id.to_string())
 }
