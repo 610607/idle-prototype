@@ -76,6 +76,10 @@ pub struct RunFile {
     pub metrics: BTreeMap<String, Vec<Option<f64>>>,
     /// Accepted commands by name, summed over seeds.
     pub commands: BTreeMap<String, u32>,
+    /// Game build the run measured (`content::fingerprint`, includes the patch); absent in files
+    /// written before it was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<String>,
 }
 
 #[derive(Default)]

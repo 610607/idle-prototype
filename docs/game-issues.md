@@ -52,7 +52,7 @@
 ### 7. 来潮失守率远高于目标
 
 - **现象**：一周下来来潮失守率 0.67，提议区间是 0.10～0.25。
-- **来源**：`surge_lost.all`；`engine/eval/bands.json`。
+- **来源**：`surge_lost.all`；`engine/eval/goals.json` 目标 `defense`。
 - **说明**：区间是提议，还没确认（`docs/balance-eval.md`“合格区间”）。
 
 ## 规则漏洞
