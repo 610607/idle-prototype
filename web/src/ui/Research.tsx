@@ -1,8 +1,9 @@
+import { t } from '../i18n';
 import { Icon } from '../icons';
 import type { DoctrineView, Tag } from '../types';
 import { Section, TagChip, useCtx } from './common';
 
-const RARITY = ['', '常见', '少见', '罕见'];
+const RARITY = ['', t('research.rarity.common'), t('research.rarity.uncommon'), t('research.rarity.rare')];
 
 // ---------------------------------------------------------------------------
 // 研究 tab: intel buys a draw of three doctrines; held ones join every battle this cycle; a few can
@@ -40,26 +41,26 @@ function Draw() {
   const { view, run } = useCtx();
   const r = view.research;
   return (
-    <Section title="研究" icon="trait-book" hint={`情报 ${view.resources.intel}`}>
+    <Section title={t('research.draw.title')} icon="trait-book" hint={t('research.draw.intel', { n: view.resources.intel })}>
       {r.offers.length ? (
         <>
           <div className="small muted" style={{ marginBottom: 6 }}>
-            三条里挑一条。挑中的条令这一轮里对所有路线战和守城战生效。
+            {t('research.draw.offers_note')}
           </div>
           <div className="stack" style={{ gap: 8 }}>
             {r.offers.map((d) => (
               <DoctrineCard key={d.id} d={d}>
-                <button className="btn small primary" onClick={() => run({ cmd: 'pick_doctrine', doctrine: d.id }, `拿到条令「${d.name}」`)}>
-                  要这条
+                <button className="btn small primary" onClick={() => run({ cmd: 'pick_doctrine', doctrine: d.id }, t('research.draw.picked', { name: d.name }))}>
+                  {t('research.draw.pick')}
                 </button>
               </DoctrineCard>
             ))}
           </div>
           <div className="row" style={{ marginTop: 8 }}>
             <button className="btn small" disabled={!r.reroll_ok} onClick={() => run({ cmd: 'reroll' })}>
-              <Icon id="res-scrap" size={14} /> 换一批（{r.reroll_cost} 废材）
+              <Icon id="res-scrap" size={14} /> {t('research.draw.reroll', { n: r.reroll_cost })}
             </button>
-            <span className="small faint">换掉这三条；本轮每换一次贵一些。</span>
+            <span className="small faint">{t('research.draw.reroll_note')}</span>
           </div>
         </>
       ) : (
@@ -67,17 +68,17 @@ function Draw() {
           <div className="row">
             {r.left > 0 ? (
               <button className="btn primary" disabled={!r.affordable} onClick={() => run({ cmd: 'research' })}>
-                <Icon id="res-intel" size={16} /> 研究（{r.cost} 情报）
+                <Icon id="res-intel" size={16} /> {t('research.draw.research', { n: r.cost })}
               </button>
             ) : null}
             <span className="small muted grow">
-              {r.left === 0 ? '这一轮能研究的条令都拿到了' : `还有 ${r.left} 条可研究；每次研究价格 +${r.step}`}
+              {r.left === 0 ? t('research.draw.all_done') : t('research.draw.left', { n: r.left, step: r.step })}
             </span>
           </div>
-          <div className="small faint">情报来自档案室（文员）、线索格和守城后的残留。</div>
+          <div className="small faint">{t('research.draw.intel_source')}</div>
           {!r.reactions_on ? (
             <div className="small">
-              <Icon id="trait-resonance" size={14} /> 先拿「反应协议」：它打开标签反应表，别的条令大多接在它上面才会相乘。
+              <Icon id="trait-resonance" size={14} /> {t('research.draw.reactions_first')}
             </div>
           ) : null}
         </div>
@@ -91,16 +92,16 @@ function Held() {
   const r = view.research;
   const full = r.archive.length >= r.archive_slots;
   return (
-    <Section title="本轮条令" icon="rules" hint={`${r.held.length} 条 · 图鉴 ${r.known}/${r.total}`}>
-      {r.held.length === 0 ? <div className="empty">还没有条令。研究一次就有了。</div> : null}
+    <Section title={t('research.held.title')} icon="rules" hint={t('research.held.hint', { n: r.held.length, known: r.known, total: r.total })}>
+      {r.held.length === 0 ? <div className="empty">{t('research.held.empty')}</div> : null}
       <div className="stack" style={{ gap: 8 }}>
         {r.held.map((d) => (
           <DoctrineCard key={d.id} d={d} compact>
             {d.archived ? (
-              <span className="chip good">下一轮带上</span>
+              <span className="chip good">{t('research.held.archived')}</span>
             ) : (
-              <button className="btn small ghost" disabled={full} title={full ? `只能带 ${r.archive_slots} 条，先在知识库里取下一条` : '下一轮开局就带着'} onClick={() => run({ cmd: 'archive', doctrine: d.id, on: true }, `下一轮带上「${d.name}」`)}>
-                下一轮带上
+              <button className="btn small ghost" disabled={full} title={full ? t('research.held.full_title', { n: r.archive_slots }) : t('research.held.archive_title')} onClick={() => run({ cmd: 'archive', doctrine: d.id, on: true }, t('research.held.archived_toast', { name: d.name }))}>
+                {t('research.held.archive')}
               </button>
             )}
           </DoctrineCard>
@@ -116,12 +117,12 @@ export function Archive() {
   const r = view.research;
   const full = r.archive.length >= r.archive_slots;
   return (
-    <Section title="知识库 · 带入" icon="seal" hint={`带 ${r.archive.length}/${r.archive_slots} · 收录 ${r.library.length}/${r.total}`}>
+    <Section title={t('research.archive.title')} icon="seal" hint={t('research.archive.hint', { n: r.archive.length, slots: r.archive_slots, have: r.library.length, total: r.total })}>
       {r.library.length === 0 ? (
-        <div className="empty">研究过的条令都记在这里。每一轮开局可以带上其中几条（组织 Lv.3、Lv.5 各多一格），选图时也能换。</div>
+        <div className="empty">{t('research.archive.empty')}</div>
       ) : (
         <div className="small muted" style={{ marginBottom: 6 }}>
-          勾上的条令下一轮开局就带着。选图时也能换。
+          {t('research.archive.note')}
         </div>
       )}
       <div className="stack" style={{ gap: 4 }}>
@@ -151,14 +152,14 @@ function DoctrineCard({ d, compact, children }: { d: DoctrineView; compact?: boo
         <Icon id={d.icon} size={20} />
         <b>{d.name}</b>
         <span className={`rarity r${d.rarity}`}>{RARITY[d.rarity] ?? ''}</span>
-        {d.new && !d.held ? <span className="chip warn">新</span> : null}
+        {d.new && !d.held ? <span className="chip warn">{t('research.card.new')}</span> : null}
         <span className="grow" />
         {children}
       </div>
       <div className={compact ? 'small muted' : 'small'}>{d.desc}</div>
       {d.links_held.length ? (
         <div className="small good" style={{ marginTop: 2 }}>
-          接得上：{d.links_held.map((n) => `「${n}」`).join('')}
+          {t('research.card.links', { names: d.links_held.map((n) => t('research.card.link', { name: n })).join('') })}
         </div>
       ) : null}
     </div>
@@ -170,10 +171,10 @@ function Codex() {
   const r = view.research;
   const seen = r.codex.filter((e) => e.seen).length;
   return (
-    <Section title="反应图鉴" icon="trait-resonance" hint={`${seen}/${r.codex.length}`}>
+    <Section title={t('research.codex.title')} icon="trait-resonance" hint={`${seen}/${r.codex.length}`}>
       {!r.reactions_on && view.phase === 'active' ? (
         <div className="small muted" style={{ marginBottom: 8 }}>
-          反应表还没打开。研究到「反应协议」以后，两种标签在同一个敌人身上相遇就会起反应，第一次触发会点亮这里。
+          {t('research.codex.locked')}
         </div>
       ) : null}
       <div className="stack" style={{ gap: 8 }}>
@@ -188,11 +189,11 @@ function Codex() {
               <span className="grow" />
               {e.seen ? (
                 <span className="tiny muted num">
-                  本轮 {e.this_cycle} · 累计 {e.total}
+                  {t('research.codex.counts', { cycle: e.this_cycle, total: e.total })}
                 </span>
               ) : null}
             </div>
-            <div className={'small ' + (e.seen ? '' : 'muted')}>{e.seen ? e.text : `传闻：${e.text}`}</div>
+            <div className={'small ' + (e.seen ? '' : 'muted')}>{e.seen ? e.text : t('research.codex.rumor', { text: e.text })}</div>
           </div>
         ))}
       </div>
