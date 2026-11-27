@@ -3,8 +3,6 @@
   "web/src/ui/App.tsx": 50,
   "web/src/ui/BattleReport.tsx": 38,
   "web/src/ui/Board.tsx": 12,
-  "web/src/ui/Panels.tsx": 152,
-  "web/src/ui/Research.tsx": 61,
   "web/src/ui/Sheets.tsx": 174,
   "web/src/ui/TileSheet.tsx": 128,
   "web/src/ui/common.tsx": 39
