@@ -1,17 +1,24 @@
 import { useMemo, useState } from 'react';
+// `t` is the tile throughout this file, so the text lookup goes by `tr`.
+import { t as tr } from '../i18n';
 import { Icon } from '../icons';
 import type { Command, Dial, DryRun, GarrisonOption, TileView } from '../types';
 import { Cost, DIAL_NAMES, DryRunView, fmtIn, Page, Section, TagIO, useCtx } from './common';
 
 const TERRAIN_NAMES: Record<string, string> = {
-  unknown: '迷雾',
-  hq: '总部',
-  city: '城区',
-  rift: '裂隙',
-  special: '特殊地点',
-  barrier: '天险',
+  unknown: tr('tile.terrain.unknown'),
+  hq: tr('terrain.hq'),
+  city: tr('terrain.city'),
+  rift: tr('terrain.rift'),
+  special: tr('tile.terrain.special'),
+  barrier: tr('tile.terrain.barrier'),
 };
-const SPECIAL_NAMES: Record<string, string> = { landmark: '地标', cache: '物资点', clue: '线索', core: '异界核心' };
+const SPECIAL_NAMES: Record<string, string> = {
+  landmark: tr('tile.special.landmark'),
+  cache: tr('tile.special.cache'),
+  clue: tr('tile.special.clue'),
+  core: tr('tile.special.core'),
+};
 
 export function TileSheet({ tile, onClose }: { tile: number; onClose: () => void }) {
   const { view } = useCtx();
@@ -34,10 +41,10 @@ export function TileSheet({ tile, onClose }: { tile: number; onClose: () => void
   ) : undefined;
   return (
     <Page title={title} icon={icon} onClose={onClose} aside={aside}>
-      <Section title="概况" icon={icon}>
+      <Section title={tr('tile.overview.title')} icon={icon}>
         <Status t={t} />
-        {!t.revealed && t.terrain !== 'barrier' ? <p className="muted small">还在迷雾里。小队走到旁边、或者瞭望点，会把它揭开。</p> : null}
-        {t.terrain === 'barrier' ? <p className="muted small">天险：路线过不去。老邮差这类人物可以带队穿过。</p> : null}
+        {!t.revealed && t.terrain !== 'barrier' ? <p className="muted small">{tr('tile.overview.fog')}</p> : null}
+        {t.terrain === 'barrier' ? <p className="muted small">{tr('tile.overview.barrier')}</p> : null}
       </Section>
       {t.claimable ? <ClaimBlock t={t} /> : null}
       {t.alert ? <AlertBlock t={t} /> : null}
@@ -51,16 +58,17 @@ export function TileSheet({ tile, onClose }: { tile: number; onClose: () => void
 function Status({ t }: { t: TileView }) {
   const { view, now } = useCtx();
   const items: [string, React.ReactNode][] = [];
-  items.push(['圈层', `第 ${t.ring} 圈`]);
+  items.push([tr('tile.status.ring'), tr('tile.status.ring_value', { n: t.ring })]);
   if (t.revealed && t.terrain !== 'barrier') {
-    items.push(['镇守度', <span className={t.alert ? 'bad' : ''}>{t.warden} / 100{t.owned ? '' : '（满了可占领）'}</span>]);
+    items.push([tr('tile.status.warden'), <span className={t.alert ? 'bad' : ''}>{t.warden} / 100{t.owned ? '' : tr('tile.status.warden_claimable')}</span>]);
   }
-  if (t.revealed && t.natives) items.push(['原住民', `${t.natives} 人`]);
-  if (t.owned && t.workers) items.push(['在岗', `${t.workers[0]} / ${t.workers[1]}`]);
-  if (t.frozen) items.push(['冻结的用途', t.frozen]);
-  if (t.rift) items.push(['裂隙', `${t.rift.name} · 居民 ${t.rift.resident} ${t.rift.residents} 人`]);
-  if (t.next_surge !== undefined) items.push(['下次来潮', `${fmtIn(t.next_surge - now)}后（来自 ${view.tiles[t.surge_source ?? 0]?.label}）`]);
-  if (t.squads.length) items.push(['途经路线', t.squads.map((id) => view.squads.find((s) => s.id === id)?.name).join('、')]);
+  if (t.revealed && t.natives) items.push([tr('tile.status.natives'), tr('tile.status.natives_value', { n: t.natives })]);
+  if (t.owned && t.workers) items.push([tr('tile.status.workers'), `${t.workers[0]} / ${t.workers[1]}`]);
+  if (t.frozen) items.push([tr('tile.status.frozen'), t.frozen]);
+  if (t.rift) items.push([tr('tile.status.rift'), tr('tile.status.rift_value', { name: t.rift.name, resident: t.rift.resident, n: t.rift.residents })]);
+  if (t.next_surge !== undefined)
+    items.push([tr('tile.status.next_surge'), tr('tile.status.next_surge_value', { in: fmtIn(t.next_surge - now), from: view.tiles[t.surge_source ?? 0]?.label })]);
+  if (t.squads.length) items.push([tr('tile.status.squads'), t.squads.map((id) => view.squads.find((s) => s.id === id)?.name).join(tr('tile.status.squads_sep'))]);
   return (
     <dl className="kv">
       {items.map(([k, v]) => (
@@ -89,7 +97,7 @@ function Confirm({ cmd, label, danger, okText, onDone }: { cmd: Command; label: 
       <div className="row wrap">
         {!dry ? (
           <button className="btn small" onClick={() => setDry(game.dryRun(cmd))}>
-            <Icon id="tide" size={14} /> 预演
+            <Icon id="tide" size={14} /> {tr('tile.confirm.preview')}
           </button>
         ) : null}
         <button
@@ -111,7 +119,7 @@ function ClaimBlock({ t }: { t: TileView }) {
   const dry = useMemo(() => game.dryRun({ cmd: 'claim', tile: t.i }), [game, t.i]);
   return (
     <div className="card striped good">
-      <Section title={t.terrain === 'rift' ? '镇压这道裂隙' : '占领这一格'} icon="check" hint="改变地图形状，只由你决定">
+      <Section title={t.terrain === 'rift' ? tr('tile.claim.title_rift') : tr('tile.claim.title')} icon="check" hint={tr('tile.claim.hint')}>
         <DryRunView dry={dry} />
         <div className="row" style={{ marginTop: 8 }}>
           <ClaimButton tile={t.i} ok={dry.ok} />
@@ -124,8 +132,8 @@ function ClaimBlock({ t }: { t: TileView }) {
 function ClaimButton({ tile, ok }: { tile: number; ok: boolean }) {
   const { run } = useCtx();
   return (
-    <button className="btn primary" disabled={!ok} onClick={() => run({ cmd: 'claim', tile }, '已占领')}>
-      占领
+    <button className="btn primary" disabled={!ok} onClick={() => run({ cmd: 'claim', tile }, tr('tile.claim.done'))}>
+      {tr('tile.claim.button')}
     </button>
   );
 }
@@ -135,21 +143,24 @@ function AlertBlock({ t }: { t: TileView }) {
   const report = useMemo(() => game.previewSurge(t.i, undefined), [game, t.i]);
   return (
     <div className="card striped bad">
-      <Section title="告急" icon="alert" hint="停产，但不会自己丢">
+      <Section title={tr('tile.alert.title')} icon="alert" hint={tr('tile.alert.hint')}>
         <p className="small muted" style={{ margin: 0 }}>
-          反击：用当前驻守打一场。赢了镇守度回到 50（街区有诊所回到 75）。也可以放弃这一格。
+          {tr('tile.alert.body')}
         </p>
         {report ? (
           <div className="row small" style={{ margin: '8px 0' }}>
             <span className={report.outcome === 'victory' ? 'good' : 'bad'}>
-              预演：{report.outcome === 'victory' ? '能打赢' : `第 ${report.lost_wave ?? 1} 波会输`}
+              {report.outcome === 'victory' ? tr('tile.alert.preview_win') : tr('tile.alert.preview_lose', { wave: report.lost_wave ?? 1 })}
             </span>
-            <button className="btn small ghost" onClick={() => open({ kind: 'report', title: `${t.label} 反击预演`, load: () => game.previewSurge(t.i, undefined) })}>
-              看过程
+            <button
+              className="btn small ghost"
+              onClick={() => open({ kind: 'report', title: tr('tile.alert.report_title', { tile: t.label }), load: () => game.previewSurge(t.i, undefined) })}
+            >
+              {tr('tile.alert.replay')}
             </button>
           </div>
         ) : null}
-        <Confirm cmd={{ cmd: 'counter', tile: t.i }} label="反击" okText="反击成功" />
+        <Confirm cmd={{ cmd: 'counter', tile: t.i }} label={tr('tile.alert.counter')} okText={tr('tile.alert.counter_done')} />
       </Section>
     </div>
   );
@@ -162,21 +173,21 @@ function DefenseBlock({ t }: { t: TileView }) {
   const tide = view.tide.filter((e) => e.tile === t.i);
   const load = () => setOpts(game.garrisonOptions(t.i));
   return (
-    <Section title="守线" icon="garrison" hint={current ? `驻守：${current.name}` : '没人驻守'}>
+    <Section title={tr('tile.defense.title')} icon="garrison" hint={current ? tr('tile.defense.held_by', { name: current.name }) : tr('tile.defense.none')}>
       {tide.length ? (
         <div className="row wrap small" style={{ gap: 6, marginBottom: 8 }}>
-          <span className="muted">12 小时内来潮：</span>
+          <span className="muted">{tr('tile.defense.tide')}</span>
           {tide.map((e, k) => (
             <span key={k} className={'chip ' + (e.held ? 'good' : 'bad')}>
               <Icon id="wave" size={12} />
-              {e.held ? '守住' : `第 ${e.lost_wave} 波失守`}
+              {e.held ? tr('tile.defense.tide_held') : tr('tile.defense.tide_lost', { wave: e.lost_wave! })}
             </span>
           ))}
         </div>
       ) : null}
       {!opts ? (
         <button className="btn" onClick={load}>
-          <Icon id="garrison" size={16} /> 挑选驻守（逐人预演下一次来潮）
+          <Icon id="garrison" size={16} /> {tr('tile.defense.pick')}
         </button>
       ) : (
         <div className="list">
@@ -186,31 +197,33 @@ function DefenseBlock({ t }: { t: TileView }) {
               <div className="grow">
                 <div className="row" style={{ gap: 6 }}>
                   <b>{o.name}</b>
-                  {o.current ? <span className="chip">当前</span> : null}
+                  {o.current ? <span className="chip">{tr('tile.defense.current')}</span> : null}
                   {o.busy ? <span className="faint tiny">{o.busy}</span> : null}
                 </div>
                 <div className={'small ' + (o.held ? 'good' : 'bad')}>
-                  {o.held ? `守住 · 剩 ${o.hp_left_pct}% 生命 · ${o.rounds} 回合` : `第 ${o.lost_wave}/${o.total_waves} 波失守`}
-                  {o.warden_gain ? <span className="muted"> · 接地 +{o.warden_gain}</span> : null}
+                  {o.held
+                    ? tr('tile.defense.option_held', { hp: o.hp_left_pct, rounds: o.rounds })
+                    : tr('tile.defense.option_lost', { wave: o.lost_wave!, total: o.total_waves })}
+                  {o.warden_gain ? <span className="muted">{tr('tile.defense.grounding', { n: o.warden_gain })}</span> : null}
                 </div>
               </div>
               <button
                 className="btn small ghost"
                 onClick={() =>
-                  open({ kind: 'report', title: `${t.label} 来潮预演 · ${o.name}`, load: () => game.previewSurge(t.i, o.op) })
+                  open({ kind: 'report', title: tr('tile.defense.report_title', { tile: t.label, name: o.name }), load: () => game.previewSurge(t.i, o.op) })
                 }
               >
-                过程
+                {tr('tile.defense.replay')}
               </button>
               {!o.current ? (
                 <button
                   className="btn small"
                   onClick={() => {
                     const cmd: Command = o.op === null ? { cmd: 'garrison', op: t.garrison!, tile: null } : { cmd: 'garrison', op: o.op, tile: t.i };
-                    if (run(cmd, o.op === null ? '已撤下驻守' : `${o.name} 驻守 ${t.label}`)) load();
+                    if (run(cmd, o.op === null ? tr('tile.defense.withdrawn') : tr('tile.defense.posted', { name: o.name, tile: t.label }))) load();
                   }}
                 >
-                  {o.op === null ? '撤下' : '派驻'}
+                  {o.op === null ? tr('tile.defense.withdraw') : tr('tile.defense.post')}
                 </button>
               ) : null}
             </div>
@@ -232,16 +245,17 @@ function BuildBlock({ t }: { t: TileView }) {
     setPick(id ?? 'housing');
     setDry(game.dryRun({ cmd: 'build', tile: t.i, facility: id }));
   };
-  const usageName = current === 'housing' ? '民居' : current === 'none' ? '空地' : view.facilities.find((f) => f.id === current)?.name ?? current;
+  const usageName =
+    current === 'housing' ? tr('tile.build.housing') : current === 'none' ? tr('tile.build.empty') : view.facilities.find((f) => f.id === current)?.name ?? current;
   return (
-    <Section title="用途" icon="housing" hint={`现在：${usageName}`}>
+    <Section title={tr('tile.build.title')} icon="housing" hint={tr('tile.build.now', { name: usageName })}>
       <div className="list">
         {current !== 'housing' ? (
           <button className={'list-item' + (pick === 'housing' ? ' selected' : '')} onClick={() => choose(null)}>
             <Icon id="housing" size={20} />
             <div className="grow">
-              <b>改回民居</b>
-              <div className="small muted">安置 40 名居民。</div>
+              <b>{tr('tile.build.revert')}</b>
+              <div className="small muted">{tr('tile.build.revert_desc')}</div>
             </div>
           </button>
         ) : null}
@@ -253,8 +267,8 @@ function BuildBlock({ t }: { t: TileView }) {
               <div className="grow">
                 <div className="row" style={{ gap: 6 }}>
                   <b>{f.name}</b>
-                  {f.jobs ? <span className="faint tiny">岗位 {f.jobs}</span> : null}
-                  {f.power ? <span className="faint tiny">耗电 {f.power}</span> : null}
+                  {f.jobs ? <span className="faint tiny">{tr('tile.build.jobs', { n: f.jobs })}</span> : null}
+                  {f.power ? <span className="faint tiny">{tr('tile.build.power', { n: f.power })}</span> : null}
                 </div>
                 <div className="small muted">{f.desc}</div>
               </div>
@@ -262,7 +276,7 @@ function BuildBlock({ t }: { t: TileView }) {
             </button>
           ))}
       </div>
-      {hiddenCount > 0 ? <div className="faint tiny">还有 {hiddenCount} 种设施，材料攒到一半就会出现。</div> : null}
+      {hiddenCount > 0 ? <div className="faint tiny">{tr('tile.build.hidden', { n: hiddenCount })}</div> : null}
       {pick && dry ? (
         <div className="card flat" style={{ marginTop: 8 }}>
           <DryRunView dry={dry} />
@@ -271,16 +285,16 @@ function BuildBlock({ t }: { t: TileView }) {
               className="btn primary"
               disabled={!dry.ok}
               onClick={() => {
-                if (run({ cmd: 'build', tile: t.i, facility: pick === 'housing' ? null : pick }, '已改建')) {
+                if (run({ cmd: 'build', tile: t.i, facility: pick === 'housing' ? null : pick }, tr('tile.build.done'))) {
                   setPick(null);
                   setDry(null);
                 }
               }}
             >
-              确定改建
+              {tr('tile.build.confirm')}
             </button>
             <button className="btn ghost" onClick={() => setPick(null)}>
-              取消
+              {tr('tile.build.cancel')}
             </button>
           </div>
         </div>
@@ -295,9 +309,9 @@ function DialBlock({ t }: { t: TileView }) {
   const dials: Dial[] = ['mine', 'balance', 'seal'];
   const [dry, setDry] = useState<{ d: Dial; r: DryRun } | null>(null);
   return (
-    <Section title="裂隙旋钮" icon={`dial-${r.dial}`} hint={`人才 ${r.talent_pct}%`}>
+    <Section title={tr('tile.dial.title')} icon={`dial-${r.dial}`} hint={tr('tile.dial.talent', { pct: r.talent_pct })}>
       <p className="small muted" style={{ margin: '0 0 8px' }}>
-        开采：晶体多、来潮强、居民流失。平衡：居民慢慢出人才。封印：来潮弱、几乎不产出。
+        {tr('tile.dial.help')}
       </p>
       <div className="seg">
         {dials.map((d) => (
@@ -310,8 +324,11 @@ function DialBlock({ t }: { t: TileView }) {
         <div className="card flat" style={{ marginTop: 8 }}>
           <DryRunView dry={dry.r} />
           <div className="row" style={{ marginTop: 8 }}>
-            <button className="btn primary" onClick={() => run({ cmd: 'set_dial', tile: t.i, dial: dry.d }, `旋钮转到${DIAL_NAMES[dry.d]}`) && setDry(null)}>
-              转到{DIAL_NAMES[dry.d]}
+            <button
+              className="btn primary"
+              onClick={() => run({ cmd: 'set_dial', tile: t.i, dial: dry.d }, tr('tile.dial.done', { dial: DIAL_NAMES[dry.d] })) && setDry(null)}
+            >
+              {tr('tile.dial.set', { dial: DIAL_NAMES[dry.d] })}
             </button>
           </div>
         </div>
@@ -323,11 +340,11 @@ function DialBlock({ t }: { t: TileView }) {
 function EnemyBlock({ t }: { t: TileView }) {
   const { view, setRouteEdit, open, toast, game } = useCtx();
   return (
-    <Section title="盘踞的敌人" icon="wave" hint={`${t.enemies.length} 波`}>
+    <Section title={tr('tile.enemy.title')} icon="wave" hint={tr('tile.enemy.waves', { n: t.enemies.length })}>
       <div className="stack" style={{ gap: 4 }}>
         {t.enemies.map((w, k) => (
           <div key={k} className="row wrap small" style={{ gap: 10 }}>
-            <span className="faint num">第{k + 1}波</span>
+            <span className="faint num">{tr('tile.enemy.wave', { n: k + 1 })}</span>
             {w.map((e, j) => (
               <span key={j} className="row" style={{ gap: 4 }}>
                 <Icon id={e.icon} size={16} />
@@ -339,7 +356,7 @@ function EnemyBlock({ t }: { t: TileView }) {
         ))}
       </div>
       <p className="small muted" style={{ margin: '8px 0' }}>
-        小队路线每赢一次这一格，镇守度 +10；满 100 就可以占领。
+        {tr('tile.enemy.help')}
       </p>
       <div className="row wrap">
         {view.squads
@@ -352,7 +369,7 @@ function EnemyBlock({ t }: { t: TileView }) {
                 const next = s.route.includes(t.i) ? s.route : [...s.route, t.i];
                 const p = game.previewRoute(s.id, next);
                 if (!p.ok) {
-                  toast(p.error ?? '路线不通', true);
+                  toast(p.error ?? tr('tile.enemy.route_blocked'), true);
                   setRouteEdit({ squad: s.id, route: s.route });
                 } else {
                   setRouteEdit({ squad: s.id, route: next });
@@ -360,7 +377,7 @@ function EnemyBlock({ t }: { t: TileView }) {
                 open(null);
               }}
             >
-              <Icon id="route" size={14} /> 加进{s.name}路线
+              <Icon id="route" size={14} /> {tr('tile.enemy.add_route', { name: s.name })}
             </button>
           ))}
       </div>
@@ -377,8 +394,8 @@ function DistrictLink({ id }: { id: number }) {
       <div className="grow">
         <b>{d.name}</b>
         <div className="small muted">
-          {d.owned}/{d.total} 格 · 信任 {d.trust}（趋向 {d.trust_target}）· 人口 {d.population}
-          {d.contiguous ? ' · 连片' : ''}
+          {tr('tile.district.stats', { owned: d.owned, total: d.total, trust: d.trust, target: d.trust_target, pop: d.population })}
+          {d.contiguous ? tr('tile.district.contiguous') : ''}
         </div>
       </div>
       <Icon id="chevron-right" size={16} />
@@ -392,14 +409,14 @@ function AbandonBlock({ t }: { t: TileView }) {
     return (
       <div>
         <button className="btn small ghost faint" onClick={() => setShow(true)}>
-          放弃这一格…
+          {tr('tile.abandon.open')}
         </button>
       </div>
     );
   return (
     <div className="card flat bad">
-      <Section title="放弃这一格" icon="warn">
-        <Confirm cmd={{ cmd: 'abandon', tile: t.i }} label="确定放弃" danger okText="已放弃" />
+      <Section title={tr('tile.abandon.title')} icon="warn">
+        <Confirm cmd={{ cmd: 'abandon', tile: t.i }} label={tr('tile.abandon.confirm')} danger okText={tr('tile.abandon.done')} />
       </Section>
     </div>
   );
