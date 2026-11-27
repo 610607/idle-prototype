@@ -5,6 +5,8 @@ import { t } from './i18n';
 import { App } from './ui/App';
 import './style.css';
 
+// index.html carries the same title for the moment before this script runs.
+document.title = t('app.title');
 const root = createRoot(document.getElementById('root')!);
 
 Game.boot()

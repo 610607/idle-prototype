@@ -1,6 +1,6 @@
 //! Saves for the web text dump (`web/scripts/text_dump.mjs`): a fresh game, one well into its
-//! cycle and the screen between cycles. Deterministic, so the dump only changes when the text
-//! does.
+//! cycle, the same game left to run with auto-claim off (so tiles wait to be claimed) and the
+//! screen between cycles. Deterministic, so the dump only changes when the text does.
 //!
 //! ```text
 //! cargo run --release --example web_fixtures -- <out-dir>
@@ -26,6 +26,15 @@ fn main() {
         textui::claim_tasks(&mut e);
     }
     write("mid", &e);
+    let mut idle = Engine::load(&e.save()).unwrap();
+    idle.command(&Command::SetRule {
+        rule: "auto_claim".into(),
+        on: false,
+    })
+    .unwrap();
+    let now = idle.state.time;
+    idle.advance(now + 8 * 3600);
+    write("unclaimed", &idle);
     e.command(&Command::Collapse).unwrap();
     write("between", &e);
 }

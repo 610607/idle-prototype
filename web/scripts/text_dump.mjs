@@ -5,7 +5,8 @@
 //
 // It writes deterministic saves with the engine example `web_fixtures`, serves the app with vite,
 // freezes the clock, and in a desktop and a phone viewport opens every tab and every sheet (each
-// tile, operative, candidate, district, squad, battle report and the tide table). For each
+// tile, operative, candidate, district, squad, battle report, surge preview of each owned tile
+// and the tide table). For each
 // screen it records the visible text and the title / aria-label / placeholder / alt attributes.
 // Opening sheets goes through `window.__idle`, which App sets in dev builds only.
 import { execFileSync } from 'node:child_process';
@@ -39,7 +40,7 @@ const VIEWPORTS = [
   ['phone', { width: 390, height: 844 }],
 ];
 
-for (const name of ['early', 'mid', 'between']) {
+for (const name of ['early', 'mid', 'unclaimed', 'between']) {
   const save = readFileSync(join(fx, `${name}.json`), 'utf8').trim();
   const at = JSON.parse(save).saved_at * 1000;
   for (const [vp, viewport] of VIEWPORTS) {
@@ -82,6 +83,7 @@ for (const name of ['early', 'mid', 'between']) {
         district: v.districts.map((d) => d.id),
         squad: v.squads.map((s) => s.id),
         report: v.events.filter((e) => e.report != null).map((e) => e.report),
+        surge: v.tiles.filter((t) => t.owned).map((t) => t.i),
       };
     });
     for (const [kind, list] of Object.entries(ids)) {
@@ -89,7 +91,13 @@ for (const name of ['early', 'mid', 'between']) {
         await page.evaluate(
           ([kind, id]) => {
             const h = window.__idle;
-            const sheet = kind === 'report' ? { kind, title: 'report', load: () => h.game.report(id) } : { kind, [kind]: id };
+            // Saved reports are gone after a reload, so surge previews give the report bodies.
+            const sheet =
+              kind === 'report'
+                ? { kind, title: 'report', load: () => h.game.report(id) }
+                : kind === 'surge'
+                  ? { kind: 'report', title: 'surge', load: () => h.game.previewSurge(id, undefined) }
+                  : { kind, [kind]: id };
             h.open(sheet, true);
           },
           [kind, id],
