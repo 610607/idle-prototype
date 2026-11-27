@@ -1,6 +1,6 @@
 //! Macro runs: play many seeds with one bot persona and record metrics by id.
 //!
-//! A persona is the greedy policy in `bot_policy.rs` in one of two styles (`greedy` clears the
+//! A persona is the greedy policy in `evalkit/src/bot.rs` in one of two styles (`greedy` clears the
 //! nearest ring first, `explorer` routes to the deepest target it can win), acting every hour or
 //! only every k hours (`greedy@4`: a player who checks in less often; the automation rules carry
 //! the rest). The engine's trace
@@ -13,7 +13,7 @@
 //! commands replayed at their moments (`eval session`, docs/eval-interface.md §评估会话). Both
 //! start from `Engine::new(seed, T0, textui::DEVICE)` and the `textui::setup` commands, so a bot
 //! game written as a session directory replays to the same game and the same metrics.
-use crate::bot_policy;
+use crate::bot;
 use crate::power::{self, Sample};
 use idle_engine::api::Engine;
 use idle_engine::combat::UnitSpec;
@@ -193,11 +193,11 @@ pub fn setup_cmds() -> &'static [Command] {
 /// A fresh game as every persona starts it: the text client's game (`Engine::new(seed, T0,
 /// textui::DEVICE)`; the device name only goes into the save) and the setup commands.
 pub fn new_game(seed: u64, persona: Persona) -> Engine {
-    bot_policy::USED.with(|u| u.borrow_mut().clear());
-    bot_policy::DEEP_FIRST.with(|d| d.set(persona.explorer));
+    bot::USED.with(|u| u.borrow_mut().clear());
+    bot::DEEP_FIRST.with(|d| d.set(persona.explorer));
     let mut e = Engine::new(seed, T0, textui::DEVICE);
     for cmd in setup_cmds() {
-        bot_policy::act(&mut e, cmd).unwrap();
+        bot::act(&mut e, cmd).unwrap();
     }
     e
 }
@@ -320,7 +320,7 @@ impl Driver<'_> {
             Driver::Bot(persona) => {
                 let used_before = used();
                 if persona.acts(h - 1) {
-                    bot_policy::step(e);
+                    bot::step(e);
                 }
                 // Commands the bot issued this hour, by name.
                 let mut issued = used();
@@ -467,7 +467,7 @@ fn squad_power(e: &Engine, r: i32) -> (Option<f64>, Option<f64>) {
 
 /// Accepted commands so far, by name.
 fn used() -> BTreeMap<String, u32> {
-    bot_policy::USED.with(|u| u.borrow().clone())
+    bot::USED.with(|u| u.borrow().clone())
 }
 
 /// `play`, also returning the payoff timeline (docs/balance-eval.md §爽点时间轴).
@@ -709,7 +709,7 @@ pub fn run(
                                 crate::session::write_bot(&dir, seed, persona, hours, &mut g)
                                     .unwrap_or_else(|e| panic!("{e}"));
                             }
-                            let used = bot_policy::USED.with(|u| u.borrow().clone());
+                            let used = bot::USED.with(|u| u.borrow().clone());
                             (seed, g.metrics, used)
                         })
                         .collect::<Vec<_>>()
@@ -759,7 +759,7 @@ pub fn timeline(seed: u64, persona: Persona, hours: i64) {
     println!("hour owned ring squads ops claimable next_ring_warden");
     for h in 1..=hours {
         if persona.acts(h - 1) {
-            bot_policy::step(&mut e);
+            bot::step(&mut e);
         }
         e.advance(T0 + h * 3600);
         let cy = &e.state.cycle;

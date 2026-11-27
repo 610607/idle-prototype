@@ -6,12 +6,11 @@
 //! ```text
 //! cargo run --release --example text_snapshot -- <out-file> [hours]
 //! ```
+use evalkit::bot;
 use idle_engine::api::Engine;
 use idle_engine::commands::Command;
 use idle_engine::textui::{self, Options};
 use std::fmt::Write;
-#[path = "bot_policy.rs"]
-mod bot_policy;
 
 fn json<T: serde::Serialize>(x: &T) -> String {
     serde_json::to_string(x).unwrap()
@@ -115,7 +114,7 @@ fn main() {
         let mut seen = 0;
         let mut h = 0;
         while h < hours {
-            bot_policy::step(&mut e);
+            bot::step(&mut e);
             let now = e.state.time;
             e.advance(now + 2 * 3600);
             h += 2;

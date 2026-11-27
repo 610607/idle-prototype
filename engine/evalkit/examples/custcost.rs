@@ -11,13 +11,12 @@
 //! The old balance (residents nearly free) for comparison:
 //! `... custcost 6 '{"housing_capacity":40,"growth_bp":0,"homeless_leave_bp":0,"natives_base":12,
 //!   "natives_per_ring":4,"natives_rand":10,"volunteer_div":1000,"score_pop_div":20}'`
+use evalkit::bot;
 use idle_engine::api::Engine;
 use idle_engine::commands::Command;
 use idle_engine::content::{balance, content};
 use idle_engine::state::{Cycle, GameState};
 use idle_engine::{economy, world};
-#[path = "bot_policy.rs"]
-mod bot_policy;
 
 const T0: i64 = 1_700_000_000;
 const AFTER: i64 = 24;
@@ -106,7 +105,7 @@ fn main() {
                 .unwrap();
             }
             for h in 1..=at {
-                bot_policy::step(&mut e);
+                bot::step(&mut e);
                 e.advance(T0 + h * 3600);
             }
             for r in ["auto_claim", "auto_recruit"] {

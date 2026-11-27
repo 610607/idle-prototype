@@ -15,8 +15,15 @@ use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
-pub const GOALS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/eval/goals.json");
-pub const BASELINE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/eval/baseline");
+/// The design goals (`engine/eval/goals.json`).
+pub fn goals_path() -> String {
+    crate::data("goals.json")
+}
+
+/// Where blessed baselines live (`engine/eval/baseline/`).
+pub fn baseline_dir() -> String {
+    crate::data("baseline")
+}
 /// A model ÷ measurement ratio this far from 1 means the model is missing a mechanism
 /// (`CLAUDE.md`: "模型和机器人对不上超过两成，要补模型或写明原因").
 const MODEL_TOLERANCE: f64 = 0.2;
@@ -267,7 +274,11 @@ pub fn delta(a: &RunFile, b: &RunFile, id: &str) -> Option<Delta> {
 }
 
 pub fn baseline_path(persona: &str) -> String {
-    format!("{BASELINE_DIR}/{}.json", persona.replace([':', '/'], "_"))
+    format!(
+        "{}/{}.json",
+        baseline_dir(),
+        persona.replace([':', '/'], "_")
+    )
 }
 
 /// Commands no run used: nothing measured what they do.
@@ -718,7 +729,7 @@ mod tests {
     #[test]
     fn goals_use_registered_ids() {
         let reg = registry::load();
-        let goals = load(GOALS);
+        let goals = load(&goals_path());
         let bad: Vec<String> = goals
             .iter()
             .flat_map(|g| g.checks.keys().map(move |id| format!("{}: {id}", g.id)))
@@ -764,7 +775,7 @@ mod tests {
             "surge_lost.all".into(),
             vec![Some(0.6), Some(0.7), Some(0.6), Some(0.7)],
         );
-        let (report, ok) = review(&[now], bp.to_str(), GOALS);
+        let (report, ok) = review(&[now], bp.to_str(), &goals_path());
         let _ = std::fs::remove_dir_all(&dir);
         assert!(
             !ok,
@@ -787,7 +798,7 @@ mod tests {
         f.metrics.insert("payoff.ladder.h48".into(), vec![None]);
         f.metrics
             .insert("payoff.ladder.h72".into(), vec![Some(104.0)]);
-        let (report, _) = review(&[f], None, GOALS);
+        let (report, _) = review(&[f], None, &goals_path());
         assert!(report.contains("模拟标尺封顶") && report.contains("payoff.ladder.h72"));
         assert!(
             !report.contains("payoff.ladder.h48"),

@@ -13,8 +13,7 @@
 //!
 //! `cargo run --release --example fixtures`
 #[allow(dead_code)]
-#[path = "synergy.rs"]
-mod synergy;
+use evalkit::synergy;
 
 use idle_engine::combat::{self, enemy_spec, BattleInput, BattleKind, UnitSpec};
 use idle_engine::content::{balance, Row, Tag, TraitEffect};

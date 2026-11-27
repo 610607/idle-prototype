@@ -18,10 +18,10 @@
 
 ## 数值评估（docs/balance-eval.md、docs/balance-model.md）
 
-- 新系统、新词条都要接进评估工具 `engine/examples/eval`，按 `docs/balance-eval.md`“新系统怎么接入”的清单在同一个改动里补齐：指标、机器人会用到它、合格区间、模型系数。
+- 新系统、新词条都要接进评估工具 `engine/evalkit`，按 `docs/balance-eval.md`“新系统怎么接入”的清单在同一个改动里补齐：指标、机器人会用到它、合格区间、模型系数。
 - 新特质、装备、学说跑 `cargo run --release --example eval -- price --bless`，把价格写进 `engine/eval/prices.json` 一起提交；`cargo test` 里的 `eval_prices` 测试会拦漏测价的词条。
 - 改数值：先用 `eval pace --patch '{…}'` 和 `eval model` 算预期，再用 `eval run`（参考玩家是 `greedy`）+ `eval review`（对照 `engine/eval/goals.json` 的设计目标和基线）/ `eval compare` 验证，有意改动后 `eval review … --bless` 更新基线；模型和机器人对不上超过两成，要补模型或写明原因。
-- 机器人用不到的命令会出现在 `commands.never`，等于没被评估：给 `examples/bot_policy.rs` 加规则或加人格。
+- 机器人用不到的命令会出现在 `commands.never`，等于没被评估：给 `evalkit/src/bot.rs` 加规则或加人格。
 - 爽点声明：新的事件 key 要在 `engine/eval/payoff_classes.json` 里归类（爽点类别和级别，或记为涓流）；新指标 id 要登记到 `engine/eval/metrics.json`。两样 `cargo test` 都会拦。
 - LLM 和其他模型试玩走会话协议（`agent_cli session`，见 `docs/eval-interface.md`），事后用 `eval session` 重放算分。观察、行动或会话目录有不兼容的改动，要把 `protocol` 加一并在文档里写明。
 

@@ -3,14 +3,13 @@
 //!
 //! `cargo run --release --example population [seeds] [hours] [balance patch JSON]`
 //! e.g. `... population 6 120 '{"housing_capacity":12,"growth_bp":2500}'`
+#[allow(dead_code)]
+use evalkit::bot;
 use idle_engine::api::Engine;
 use idle_engine::commands::Command;
 use idle_engine::content::content;
 use idle_engine::economy;
 use std::collections::BTreeMap;
-#[allow(dead_code)]
-#[path = "bot_policy.rs"]
-mod bot_policy;
 
 const T0: i64 = 1_700_000_000;
 
@@ -43,7 +42,7 @@ fn main() {
         }
         let mut seen = std::collections::BTreeSet::new();
         for h in 1..=hours {
-            bot_policy::step_with(&mut e, staffing);
+            bot::step_with(&mut e, staffing);
             e.advance(T0 + h * 3600);
             for cand in &e.state.cycle.candidates {
                 if seen.insert(cand.id) {

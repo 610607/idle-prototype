@@ -425,7 +425,7 @@ mod tests {
         let dir = tmp("bot");
         let persona = Persona::REFERENCE;
         let mut g = run::play_bot(seed, persona, hours);
-        let used = crate::bot_policy::USED.with(|u| u.borrow().clone());
+        let used = crate::bot::USED.with(|u| u.borrow().clone());
         write_bot(&dir, seed, persona, hours, &mut g).unwrap();
         let bot = RunFile::collect(persona.name(), hours, vec![(seed, g.metrics, used)]);
 

@@ -43,7 +43,7 @@ cargo run --release --example eval -- session /tmp/llm/s0 /tmp/llm/s1 --out /tmp
 
 ## 机器人人格
 
-人格是 `examples/bot_policy.rs` 里同一套贪心策略的变体：
+人格是 `evalkit/src/bot.rs` 里同一套贪心策略的变体：
 
 - `greedy`：参考机器人，每小时行动一次，先打最近一环。
   - 招募到名册上限（队员没有维持费）。
@@ -112,7 +112,7 @@ L1 指标（`calibrate` 输出）：
 
 到达时间只回答“多久进下一环”，回答不了“这一周玩起来爽不爽”。爽点时间轴把一局里玩家能感觉到的每一次收获记成带时刻和幅度的事件，再从整条时间轴算形状指标（`payoff.*`）。依据和取舍见 `docs/payoff-pacing-research.md`。
 
-代码在 `examples/eval/payoff.rs`（事件和指标）和 `examples/eval/strength.rs`（需要战斗模型的幅度）。`eval run` 每 5 分钟把引擎的测量钩子（事件日志条目、战斗、来潮、被接受的命令）交给时间轴，跑完算指标；不需要单独开关。
+代码在 `evalkit/src/payoff.rs`（事件和指标）和 `evalkit/src/strength.rs`（需要战斗模型的幅度）。`eval run` 每 5 分钟把引擎的测量钩子（事件日志条目、战斗、来潮、被接受的命令）交给时间轴，跑完算指标；不需要单独开关。
 
 **事件类别**（`Ev::class`）：
 
@@ -311,8 +311,8 @@ L1 实战（`calibrate field greedy`，机器人第 6/12/24/48 小时的真实�
 0. **词条**：新特质、装备、学说跑 `eval price --bless`，看它落在同类的什么位置；`cargo test` 会拦漏测价的。
 1. **数值进数据**：常数放 `balance.json` 或内容数据（`CLAUDE.md` 已有规定）。
 2. **L0**：如果它有随环、随时间变化的曲线，在 `numbers` 里加一行，打印曲线和相邻倍数。
-3. **L2 指标**：在 `examples/eval/run.rs` 里加 id。按事件计的结果走 `GameState::trace` 钩子（不存档，`None` 时没有开销），不要靠轮询状态去猜。
-4. **有人用**：给 `bot_policy.rs` 加一条会用它的规则，或者加一个人格；否则它会出现在 `commands.never`，等于没被评估。
+3. **L2 指标**：在 `evalkit/src/run.rs` 里加 id。按事件计的结果走 `GameState::trace` 钩子（不存档，`None` 时没有开销），不要靠轮询状态去猜。
+4. **有人用**：给 `evalkit/src/bot.rs` 加一条会用它的规则，或者加一个人格；否则它会出现在 `commands.never`，等于没被评估。
 5. **目标和区间**：在 `goals.json` 里把它挂到相关的设计目标下（或起草新目标），区间写明依据（来自哪条曲线或哪个参考游戏），没把握的先用 `watch`。可以用 `docs/prompts/declare.md` 起草。
 6. **战斗相关的**：在 `calibrate` 里加一个开关对照（像 `no_doctrines`），用“开 vs 关”的胜率差给它定价；如果它改变了 AUC 或 ρ50，说明指数需要加项。
 7. **模型**：新职业、新敌人跑 `eval model` 量出系数；改了战斗或节奏规则，先用 `eval pace --patch` 算预期，再用机器人验证，模型和实测差超过两成就要补模型。

@@ -136,7 +136,10 @@ fn size(ev: &Ev) -> f64 {
 /// Event classification (docs/balance-eval.md §爽点时间轴): every `event.*` key in
 /// `locales/zh-CN/events.json` must be in this file, so a new event declares whether it is a
 /// payoff when it is added (the test below fails otherwise).
-pub const CLASSES_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/eval/payoff_classes.json");
+/// The event classes file (`engine/eval/payoff_classes.json`).
+pub fn classes_path() -> String {
+    crate::data("payoff_classes.json")
+}
 
 /// Every class the file may name.
 const KNOWN: [&str; 23] = [
@@ -189,8 +192,8 @@ type Class = (&'static str, u8, bool);
 fn classes() -> &'static BTreeMap<String, Class> {
     static C: OnceLock<BTreeMap<String, Class>> = OnceLock::new();
     C.get_or_init(|| {
-        let p = CLASSES_PATH;
-        let text = std::fs::read_to_string(p).unwrap_or_else(|e| panic!("{p}: {e}"));
+        let p = classes_path();
+        let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e}"));
         let f: ClassFile = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{p}: {e}"));
         f.keys
             .into_iter()
@@ -736,8 +739,9 @@ mod tests {
     /// still exists.
     #[test]
     fn every_event_key_is_classified() {
-        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../locales/zh-CN/events.json");
-        let text = std::fs::read_to_string(p).unwrap();
+        let p = crate::repo_dir().join("locales/zh-CN/events.json");
+        let p = p.display();
+        let text = std::fs::read_to_string(p.to_string()).unwrap();
         let mut keys = Vec::new();
         leaves(&serde_json::from_str(&text).unwrap(), "", &mut keys);
         let keys: BTreeSet<String> = keys
@@ -748,8 +752,9 @@ mod tests {
         let missing: Vec<_> = keys.iter().filter(|k| !c.contains_key(*k)).collect();
         assert!(
             missing.is_empty(),
-            "classify these event keys in {CLASSES_PATH} (a payoff class and tier, or a tier-0 \
-             trickle class): {missing:?}"
+            "classify these event keys in {} (a payoff class and tier, or a tier-0 trickle \
+             class): {missing:?}",
+            classes_path()
         );
         let stale: Vec<_> = c.keys().filter(|k| !keys.contains(*k)).collect();
         assert!(stale.is_empty(), "no longer in {p}: {stale:?}");

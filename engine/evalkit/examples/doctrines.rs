@@ -6,8 +6,7 @@
 //!
 //! `cargo run --release --example doctrines`
 #[allow(dead_code)]
-#[path = "synergy.rs"]
-mod synergy;
+use evalkit::synergy;
 
 use idle_engine::combat::UnitSpec;
 use idle_engine::content::{Tag, TagEvent, TraitEffect};

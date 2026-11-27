@@ -1,6 +1,6 @@
 # 声明起草
 
-加新系统时，起草它对评估工具的声明：事件归类、指标、成长线、目标、机器人规则、模型系数、文字版。对应 `docs/balance-eval.md`“新系统怎么接入”的清单。产出是草案：人确认后再改 `engine/eval/*.json`、`examples/bot_policy.rs` 和文字版，`cargo test` 会拦漏掉的部分。
+加新系统时，起草它对评估工具的声明：事件归类、指标、成长线、目标、机器人规则、模型系数、文字版。对应 `docs/balance-eval.md`“新系统怎么接入”的清单。产出是草案：人确认后再改 `engine/eval/*.json`、`evalkit/src/bot.rs` 和文字版，`cargo test` 会拦漏掉的部分。
 
 变量：
 
@@ -86,7 +86,7 @@
 - 受影响的现有目标：id 和原因
 - 新目标草案（如有）：JSON
 
-## 5. 机器人（examples/bot_policy.rs）
+## 5. 机器人（evalkit/src/bot.rs）
 一条让参考机器人用上它的规则（触发条件、做什么），或者为什么需要新人格。
 
 ## 6. 模型（docs/balance-model.md）

@@ -11,7 +11,7 @@
 ### 1. 战斗卡不住扩张
 
 - **现象**：最强小队对前线各格的最佳模型强度，第 6 小时 7.75，第 48 小时 2.37，第 168 小时 1.79，始终大于 1。一周里没有一小时出现“前线一格都打不赢”（`payoff.wall.count` 0）。扩张速度由吞吐量和镇守累积决定，不由战斗决定。
-- **来源**：`payoff.frontier.margin.h*`、`payoff.wall.*`（`examples/eval/strength.rs`）；`docs/balance-model.md`“节奏”“反推”。
+- **来源**：`payoff.frontier.margin.h*`、`payoff.wall.*`（`evalkit/src/strength.rs`）；`docs/balance-model.md`“节奏”“反推”。
 - **影响**：“扩张门槛由战斗强度卡”已经定下（`docs/balance-eval.md`“已定”），但现在战斗没起作用，研究和养成也就没有“破墙”的爽点。
 - **方向**：按 `docs/balance-model.md`“反推”定每环的敌人强度。
 - **防守机器人**：前线强度不变。另外 8 个种子里有 3 个在第 24 小时已经有再下一环的格子可打，第一支小队按预演全都能赢（`deep_win.h24`，目标 ≤ 0.30）。以前的统计口径把这条读成“无法判断”，见 `docs/balance-eval.md`“指标”一节末尾的缺值读法。
@@ -32,7 +32,7 @@
 ### 4. 组织等级 1 能抽到的学说几乎不加输出
 
 - **现象**：组织等级 1 的学说池里，数值类只有 `plating`（加生存）；`overclock` 要 2 级，`spotter` 要 3 级。战斗模型里输出检查是紧约束，所以每次研究让参考小队模型强度变化的 m 都是 0。其余学说是效果类，模型看不到；有没有用正在用“按固定遭遇表实际打”的标尺补量。
-- **来源**：`payoff.m.research.*`、`payoff.research.m_max`、`payoff.ladder_gain.research.*`（`examples/eval/strength.rs`）；强度标尺的手算（`overclock` 约 ×1.16）。
+- **来源**：`payoff.m.research.*`、`payoff.research.m_max`、`payoff.ladder_gain.research.*`（`evalkit/src/strength.rs`）；强度标尺的手算（`overclock` 约 ×1.16）。
 - **补量结果**：改用“按固定遭遇表实际打，数赢了几场”来量（104 场，含第 7 环的加强档）：`bloodhound` 每次多赢 20～33 场（平均 26，第 46～66 小时研究），是唯一的大跳；`react` 3～7（平均 5.4）；`ionize`、`overflow` 平均约 1，有正有负；`burst`、`field_dressing` 0；`etch` 平均 −0.3；`spall` 每次少赢 2～5 场（平均 −3.9，消耗守势换成电击）。最强小队的胜场第 72 小时起停在 81 左右，后四天不再增长。
 - **影响**：第一轮里大多数学说的强度收益很小、为零甚至为负，成长集中在一次 `bloodhound`；第 72 小时以后战斗这条线没有成长。
 - **防守机器人**：一周的战斗成长几乎全看有没有抽到那一次大跳。研究 7～9 次的 6 个种子都有一次多赢 18～33 场的研究；种子 1 和 6 只研究了 6 次，没有大跳，最强小队一周只多赢 9～10 场，其余种子 33～43 场（`payoff.ladder_gain.research.*`、`payoff.growth.ladder`）。和第 3 条连在一起：情报少的局，成长也少一大截。

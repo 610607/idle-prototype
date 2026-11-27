@@ -1,11 +1,10 @@
 //! Pacing bot: plays N seeds for 72 hours with a simple greedy policy and prints the curve.
 //! `cargo run --release --example bot [seeds] [hours]`
+use bot::step;
+use evalkit::bot;
 use idle_engine::api::Engine;
 use idle_engine::commands::Command;
 use idle_engine::geom;
-#[path = "bot_policy.rs"]
-mod bot_policy;
-use bot_policy::step;
 
 const T0: i64 = 1_700_000_000;
 

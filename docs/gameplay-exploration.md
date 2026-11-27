@@ -231,7 +231,7 @@
 | 规则类效果对整边生效：任何一个站着的队员（或固定物）持有，全队享受 | `combat.rs` 的 `side_effect`、`transmute` |
 | 标签反应表与结算，战报新增 `reactions`（各反应触发次数） | `engine/content/reactions.json`，`combat.rs` 的 `tag_reactions` |
 | 固定物：`UnitSpec.fixture`，不能被选中、没有回合、不算存活，只反应、只借规则 | `combat.rs` |
-| 三个探索脚本 | `engine/examples/synergy.rs`、`doctrines.rs`、`fixtures.rs` |
+| 三个探索脚本 | `engine/evalkit/examples/synergy.rs`、`doctrines.rs`、`fixtures.rs` |
 
 还没有接进内容和界面：没有任何职业、装备、设施或政策带上这些效果，客户端也不显示反应。
 

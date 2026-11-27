@@ -11,8 +11,6 @@ use idle_engine::textui::{self, Options, MAX_WAIT};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-#[path = "bot_policy.rs"]
-mod bot_policy;
 
 fn options() -> Options {
     Options {
@@ -310,25 +308,6 @@ fn main() {
                 println!("{}", t!("cli.run.time_up", summary = sum));
             } else {
                 show(&mut e, start, &opts);
-            }
-        }
-        "autoplay" => {
-            let seed = num(3, 0) as u64;
-            let (hours, every) = (num(4, 72), num(5, 4));
-            let mut e = textui::new_game(seed);
-            let mut h = 0;
-            while h < hours {
-                bot_policy::step(&mut e);
-                let now = e.state.time;
-                e.advance(now + every * 3600);
-                h += every;
-                textui::claim_tasks(&mut e);
-                if h % 24 == 0 || h >= hours {
-                    println!("seed {seed} {}", textui::summary(&mut e));
-                }
-            }
-            if !path.is_empty() && path != "-" {
-                save(&e, &path);
             }
         }
         _ => fail(t!("cli.run.usage")),

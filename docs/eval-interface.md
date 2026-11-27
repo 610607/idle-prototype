@@ -151,7 +151,7 @@ cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --session
 
 `eval session` 对每个会话目录：读 manifest 和命令日志，从同一个种子开局，按时刻重放命令，期间和 `eval run` 一样每 5 分钟记一次测量，算出同名的全部指标（`owned.h*`、`reach_h.*`、`payoff.*`……）；再从 visits.jsonl 算 `llm.*` 指标。结果是一个 RunFile，人格名 `llm:<player>`（`player` 本身是机器人人格名时就用人格名，如 `greedy`），可以直接 `eval check`、`eval compare`（和同种子的 `greedy` 比），也可以和机器人的结果一起交给 `eval review`。
 
-重放的细节（代码在 `engine/examples/eval/run.rs` 的 `measure` 和 `Replay`、`session.rs`）：
+重放的细节（代码在 `engine/evalkit/src/run.rs` 的 `measure` 和 `Replay`、`session.rs`）：
 
 - 机器人和重放走同一个测量循环，只是行动的一方不同。两者开局相同：`Engine::new(seed, T0, "agent")`，再加 `textui::setup` 的四条设定命令（选第 1 张地图、开三条规章）。日志开头是这四条时，重放先执行它们，不算玩家第 1 小时发出的命令（和机器人一样）。
 - 每 5 分钟一步。每条命令在自己的时刻执行：时刻落在一步中间，就先推进到那一刻、执行、再推进到这一步结束；同一秒的几条命令之间不推进时间（`sim::advance` 即使没有经过时间也会让空闲小队出发）。每小时交给爽点时间轴的“发出的命令”就是这一小时里日志中的命令，按名字计数。
@@ -195,7 +195,7 @@ cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --session
 - **菜单 id**：由命令内容算出，不随菜单顺序变化。
 - **测试**（`cargo test`）：
   - 会话本身（`engine/tests/session.rs`）：模拟玩家通过库接口和 `serve` 各玩一局，命令日志重放得到同一个终局存档；被拒绝的行动不改目录。
-  - 评估会话（`engine/examples/eval/session.rs`）：
+  - 评估会话（`engine/evalkit/src/session.rs`）：
     - 机器人（`greedy`，种子 0，12 小时）写出的会话重放后，存档指纹一致，指标逐位相同（重放多出的只有 `session.stale` = 0），命令计数相同，不判过期。
     - 脚本玩家通过 `textui::session` 的库接口玩一局（`every:3`，24 小时；每次选第一个菜单项，感受轮流记惊喜、平淡、不写，被问时各维度打 3 分），重放后不判过期，`llm.feel.d1.*` 之和不超过 1，`llm.score.*.d1` 都是 3，`llm.invalid` 为 0，`owned.h12` 等对局指标齐全，所有 id 都在注册表里。
     - 改掉 final.json 的 `save_sha`：判为过期，只剩 `llm.feel.*`、`llm.score.*` 和 `session.stale` = 1。

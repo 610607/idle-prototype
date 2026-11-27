@@ -5,7 +5,10 @@ use crate::stats::{self, Summary};
 use serde::Deserialize;
 use std::sync::OnceLock;
 
-pub const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/eval/metrics.json");
+/// The registry file (`engine/eval/metrics.json`).
+pub fn path() -> String {
+    crate::data("metrics.json")
+}
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Entry {
@@ -35,9 +38,10 @@ struct File {
 }
 
 pub fn load() -> Vec<Entry> {
-    let text = std::fs::read_to_string(PATH).unwrap_or_else(|e| panic!("{PATH}: {e}"));
+    let path = path();
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
     serde_json::from_str::<File>(&text)
-        .unwrap_or_else(|e| panic!("{PATH}: {e}"))
+        .unwrap_or_else(|e| panic!("{path}: {e}"))
         .metrics
 }
 

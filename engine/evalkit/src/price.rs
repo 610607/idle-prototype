@@ -29,7 +29,10 @@ pub struct Price {
     pub best: f64,
 }
 
-pub const PRICES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/eval/prices.json");
+/// The blessed price card (`engine/eval/prices.json`).
+pub fn prices_path() -> String {
+    crate::data("prices.json")
+}
 
 #[derive(Clone)]
 enum Item {
@@ -177,7 +180,7 @@ pub fn card() -> BTreeMap<String, Price> {
 }
 
 pub fn load() -> BTreeMap<String, Price> {
-    std::fs::read_to_string(PRICES)
+    std::fs::read_to_string(prices_path())
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_default()
@@ -217,6 +220,7 @@ pub fn print(card: &BTreeMap<String, Price>, old: &BTreeMap<String, Price>) {
 }
 
 pub fn bless(card: &BTreeMap<String, Price>) {
-    std::fs::write(PRICES, serde_json::to_string_pretty(card).unwrap() + "\n").unwrap();
-    println!("→ {PRICES}");
+    let p = prices_path();
+    std::fs::write(&p, serde_json::to_string_pretty(card).unwrap() + "\n").unwrap();
+    println!("→ {p}");
 }

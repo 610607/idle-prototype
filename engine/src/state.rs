@@ -434,9 +434,9 @@ pub struct GameState {
     /// When set, surges append forecasts here instead of only mutating state.
     #[serde(skip)]
     pub tide_log: Option<Vec<TideEntry>>,
-    /// Measurement hook for `examples/eval` (docs/balance-eval.md): when `Some`, every route
-    /// battle, every real surge and every event-log entry is appended here. Never saved; `None`
-    /// costs nothing.
+    /// Measurement hook for the evaluation kit (`engine/evalkit`, docs/balance-eval.md): when
+    /// `Some`, every route battle, every real surge and every event-log entry is appended here.
+    /// Never saved; `None` costs nothing.
     #[serde(skip)]
     pub trace: Option<Vec<Trace>>,
 }

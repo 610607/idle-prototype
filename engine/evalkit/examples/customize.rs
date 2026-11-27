@@ -7,8 +7,7 @@
 //!
 //! `cargo run --release --example customize`
 #[allow(dead_code)]
-#[path = "synergy.rs"]
-mod synergy;
+use evalkit::synergy;
 
 use idle_engine::content::{content, Stat};
 use idle_engine::rng::Rng;

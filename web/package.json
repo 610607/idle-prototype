@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "wasm": "cd ../engine && cargo build --target wasm32-unknown-unknown --release --features wasm && wasm-bindgen --target web --out-dir ../web/src/engine/pkg target/wasm32-unknown-unknown/release/idle_engine.wasm"
+    "wasm": "cd ../engine && cargo build -p idle_engine --target wasm32-unknown-unknown --release --features wasm && wasm-bindgen --target web --out-dir ../web/src/engine/pkg target/wasm32-unknown-unknown/release/idle_engine.wasm"
   },
   "dependencies": {
     "react": "^19.0.0",

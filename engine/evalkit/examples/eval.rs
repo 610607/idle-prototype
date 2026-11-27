@@ -20,46 +20,15 @@
 //! Personas: `greedy` (the reference bot: nearest ring first), `explorer` (deepest winnable target
 //! first); `@N` acts only every N hours (`greedy@4`).
 //! `--patch` overrides balance.json fields for this process (`content::patch_balance`).
-#[path = "../bot_policy.rs"]
-mod bot_policy;
-mod calib;
-mod model;
-mod payoff;
-mod power;
-mod price;
-mod registry;
-mod review;
-mod run;
-mod session;
-mod stats;
-mod strength;
-#[path = "../synergy.rs"]
-#[allow(dead_code)]
-mod synergy;
-
-use run::{Persona, RunFile};
+use evalkit::run::{self, Persona, RunFile};
+use evalkit::{
+    calib, fmt, model, payoff, price, read_run, registry, review, session, stats, synergy,
+};
 
 fn arg(args: &[String], name: &str) -> Option<String> {
     args.iter()
         .position(|a| a == name)
         .and_then(|i| args.get(i + 1).cloned())
-}
-
-fn fmt(x: f64) -> String {
-    if x.is_infinite() {
-        "-".into()
-    } else if x.abs() >= 100.0 || x.fract() == 0.0 {
-        format!("{x:.0}")
-    } else if x.abs() >= 10.0 {
-        format!("{x:.1}")
-    } else {
-        format!("{x:.2}")
-    }
-}
-
-fn read_run(path: &str) -> RunFile {
-    let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-    serde_json::from_str(&text).unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
 fn print_summary(f: &RunFile) {
@@ -218,7 +187,7 @@ fn main() {
         }
         Some("check") => {
             let f = read_run(args.get(1).expect("run file"));
-            let goals = args.get(2).cloned().unwrap_or(review::GOALS.into());
+            let goals = args.get(2).cloned().unwrap_or(review::goals_path());
             if !review::check(&f, &goals) {
                 std::process::exit(1);
             }
@@ -231,7 +200,7 @@ fn main() {
                 .collect();
             assert!(!files.is_empty(), "review: give one or more run files");
             if args.iter().any(|a| a == "--bless") {
-                std::fs::create_dir_all(review::BASELINE_DIR).unwrap();
+                std::fs::create_dir_all(review::baseline_dir()).unwrap();
                 for f in &files {
                     let p = review::baseline_path(&f.persona);
                     std::fs::write(&p, serde_json::to_string_pretty(f).unwrap()).unwrap();
@@ -240,7 +209,7 @@ fn main() {
                 return;
             }
             let base = arg(&args, "--base");
-            let (report, ok) = review::review(&files, base.as_deref(), review::GOALS);
+            let (report, ok) = review::review(&files, base.as_deref(), &review::goals_path());
             match arg(&args, "--out") {
                 Some(out) => {
                     std::fs::write(&out, &report).unwrap();
@@ -351,7 +320,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: eval run|session|check|review|compare|numbers|calibrate … (see the top of engine/examples/eval/main.rs)"
+                "usage: eval run|session|check|review|compare|numbers|calibrate … (see the top of engine/evalkit/examples/eval.rs)"
             );
             std::process::exit(2);
         }
