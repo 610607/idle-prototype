@@ -603,6 +603,7 @@ impl Engine {
         let mut copy = self.state.clone();
         copy.reports.clear();
         copy.tide_log = Some(Vec::new());
+        copy.trace = None;
         let attention_before = world::attention_level(&copy.cycle);
         let empty = |e: String| RoutePreview {
             ok: false,

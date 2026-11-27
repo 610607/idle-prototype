@@ -350,6 +350,13 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
         });
     }
     state.cycle.tiles[tile as usize].last_surge = Some(held);
+    if let Some(tr) = state.trace.as_mut() {
+        tr.push(crate::state::Trace::Surge {
+            t: state.time,
+            tile,
+            held,
+        });
+    }
 
     // Experience for the operative who stood here.
     if let Some(id) = setup.defender {

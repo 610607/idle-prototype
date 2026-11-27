@@ -3,9 +3,15 @@ use idle_engine::api::Engine;
 use idle_engine::commands::Command;
 use idle_engine::geom;
 
+thread_local! {
+    /// Explorer style for `eval`: route to the deepest target first instead of the nearest.
+    pub static DEEP_FIRST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 fn route_for(e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
     let v = e.view();
     // Nearest revealed unowned passable tile that is not yet claimable; try 1- and 2-step routes.
+    // (Deepest first in the explorer style.)
     let mut targets: Vec<_> = v
         .tiles
         .iter()
@@ -19,6 +25,9 @@ fn route_for(e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
         .map(|t| (t.ring, t.i))
         .collect();
     targets.sort();
+    if DEEP_FIRST.with(|d| d.get()) {
+        targets.sort_by_key(|&(r, i)| (std::cmp::Reverse(r), i));
+    }
     for (_, t) in targets.iter().take(12) {
         let p = e.preview_route(squad, &[*t]);
         if p.ok
@@ -43,6 +52,26 @@ fn route_for(e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
     targets.first().map(|(_, t)| vec![*t])
 }
 
+thread_local! {
+    /// Commands this policy issued that the engine accepted, by name: `eval` reads it to report
+    /// which systems no bot ever uses (its blind spots).
+    pub static USED: std::cell::RefCell<std::collections::BTreeMap<String, u32>> =
+        Default::default();
+}
+
+/// Issues a command and counts it in `USED` when accepted.
+pub fn act(e: &mut Engine, cmd: &Command) -> Result<(), String> {
+    let r = e.command(cmd);
+    if r.is_ok() {
+        USED.with(|u| {
+            *u.borrow_mut()
+                .entry(idle_engine::textui::cmd_name(cmd))
+                .or_insert(0) += 1
+        });
+    }
+    r
+}
+
 pub fn step(e: &mut Engine) {
     step_with(e, true)
 }
@@ -58,13 +87,13 @@ pub fn step_with(e: &mut Engine, staffing: bool) {
         .map(|t| t.i)
         .collect::<Vec<_>>()
     {
-        let _ = e.command(&Command::Claim { tile: i });
+        let _ = act(e, &Command::Claim { tile: i });
     }
     let v = e.view();
     // Hire anything affordable up to 8.
     for c in &v.candidates {
         if v.operatives.len() < 8 && v.resources.scrap >= c.cost + 40 {
-            let _ = e.command(&Command::Hire { candidate: c.id });
+            let _ = act(e, &Command::Hire { candidate: c.id });
         }
     }
     let v = e.view();
@@ -97,10 +126,13 @@ pub fn step_with(e: &mut Engine, staffing: bool) {
             .find(|o| o.held && o.op.map(|id| pool.contains(&id)).unwrap_or(false))
         {
             let id = o.op.unwrap();
-            if e.command(&Command::Garrison {
-                op: id,
-                tile: Some(*tile),
-            })
+            if act(
+                e,
+                &Command::Garrison {
+                    op: id,
+                    tile: Some(*tile),
+                },
+            )
             .is_ok()
             {
                 pool.retain(|x| *x != id);
@@ -117,10 +149,13 @@ pub fn step_with(e: &mut Engine, staffing: bool) {
             }
         }
         if members != s.members {
-            let _ = e.command(&Command::SetSquad {
-                squad: s.id,
-                members: members.clone(),
-            });
+            let _ = act(
+                e,
+                &Command::SetSquad {
+                    squad: s.id,
+                    members: members.clone(),
+                },
+            );
         }
         let v2 = e.view();
         let sq = v2.squads.iter().find(|x| x.id == s.id).unwrap();
@@ -131,10 +166,13 @@ pub fn step_with(e: &mut Engine, staffing: bool) {
                 .all(|t| v2.tiles[*t as usize].owned || v2.tiles[*t as usize].claimable);
         if !sq.members.is_empty() && stale {
             if let Some(r) = route_for(e, s.id) {
-                let _ = e.command(&Command::SetRoute {
-                    squad: s.id,
-                    route: r,
-                });
+                let _ = act(
+                    e,
+                    &Command::SetRoute {
+                        squad: s.id,
+                        route: r,
+                    },
+                );
             }
         }
     }
@@ -201,17 +239,20 @@ pub fn step_with(e: &mut Engine, staffing: bool) {
                     .ok
             });
         if let Some((i, _)) = spot {
-            let _ = e.command(&Command::Build {
-                tile: i,
-                facility: Some(f.into()),
-            });
+            let _ = act(
+                e,
+                &Command::Build {
+                    tile: i,
+                    facility: Some(f.into()),
+                },
+            );
             break;
         }
     }
     research(e);
     let v = e.view();
     for t in v.tiles.iter().filter(|t| t.alert) {
-        let _ = e.command(&Command::Counter { tile: t.i });
+        let _ = act(e, &Command::Counter { tile: t.i });
     }
 }
 
@@ -227,7 +268,7 @@ pub fn research(e: &mut Engine) {
         .map(|t| t.id.clone())
         .collect();
     for task in done {
-        let _ = e.command(&Command::ClaimTask { task });
+        let _ = act(e, &Command::ClaimTask { task });
     }
     if std::env::var("BOT_NORESEARCH").is_ok() {
         return;
@@ -238,7 +279,7 @@ pub fn research(e: &mut Engine) {
             if !v.research.affordable || v.research.left == 0 {
                 return;
             }
-            if e.command(&Command::Research).is_err() {
+            if act(e, &Command::Research).is_err() {
                 return;
             }
             continue;
@@ -251,9 +292,7 @@ pub fn research(e: &mut Engine) {
             .unwrap()
             .id
             .clone();
-        if e.command(&Command::PickDoctrine { doctrine: best })
-            .is_err()
-        {
+        if act(e, &Command::PickDoctrine { doctrine: best }).is_err() {
             return;
         }
     }

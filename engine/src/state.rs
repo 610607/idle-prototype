@@ -434,6 +434,17 @@ pub struct GameState {
     /// When set, surges append forecasts here instead of only mutating state.
     #[serde(skip)]
     pub tide_log: Option<Vec<TideEntry>>,
+    /// Measurement hook for `examples/eval` (docs/balance-eval.md): when `Some`, every route
+    /// battle and every real surge is appended here. Never saved; `None` costs nothing.
+    #[serde(skip)]
+    pub trace: Option<Vec<Trace>>,
+}
+
+/// One measured outcome (see `GameState::trace`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Trace {
+    Route { t: i64, tile: u16, won: bool },
+    Surge { t: i64, tile: u16, held: bool },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

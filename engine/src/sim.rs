@@ -154,6 +154,7 @@ pub fn new_game(seed: u64, now: i64, device: &str) -> GameState {
         events: vec![],
         reports: vec![],
         tide_log: None,
+        trace: None,
     }
 }
 
@@ -685,6 +686,7 @@ pub fn forecast(state: &GameState, secs: i64) -> Vec<TideEntry> {
     let mut copy = state.clone();
     copy.reports.clear();
     copy.tide_log = Some(Vec::new());
+    copy.trace = None;
     let target = copy.time + secs;
     advance(&mut copy, target);
     copy.tide_log.take().unwrap_or_default()

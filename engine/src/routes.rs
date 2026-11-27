@@ -389,6 +389,13 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             state.cycle.squads[si].rest_until = trip.end + b.rest_after_loss;
         }
     }
+    if let Some(tr) = state.trace.as_mut() {
+        tr.extend(trip.results.iter().map(|r| crate::state::Trace::Route {
+            t: trip.end,
+            tile: r.tile,
+            won: r.outcome == Outcome::Victory,
+        }));
+    }
     let sq = &mut state.cycle.squads[si];
     sq.trips += 1;
     sq.last = Some(trip);
