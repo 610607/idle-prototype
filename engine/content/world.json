@@ -1,55 +1,36 @@
 {
-  "district_names": [
-    "老商业街口", "旧变电站", "钟表匠巷", "市立档案馆", "裂隙边缘", "天桥下", "鱼市后街", "纺织厂宿舍",
-    "红砖小学", "电车总站", "染坊巷", "旧邮局", "水塔街", "夜市口", "铁道桥", "印刷厂", "灯笼坊",
-    "南门菜场", "洗衣房街", "防空洞口", "旧剧院", "粮站", "钟楼广场", "码头仓库", "煤球厂", "电报局",
-    "棚户区", "教会医院", "冷库", "汽修街", "旧书市", "澡堂巷", "货运站", "供销社", "体育场", "百货公司",
-    "灯泡厂", "玻璃厂", "糖厂", "自来水厂", "老公园", "米行街", "药铺巷", "火柴厂", "城隍庙"
-  ],
   "district_traits": ["street_smart", "night_market_voice", "electrician_roots", "archive_habit", "scavenger_eye", "precise", "rift_neighbor"],
   "rift_kinds": [
-    { "id": "mist", "name": "雾裂隙", "icon": "rift-mist", "resident": "雾行者族", "class": "mist_walker", "residents": [8, 14] },
-    { "id": "echo", "name": "回声裂隙", "icon": "rift-echo", "resident": "回声体", "class": "echo_body", "residents": [6, 12] },
-    { "id": "glass", "name": "玻璃裂隙", "icon": "rift-glass", "resident": "玻璃花匠", "class": "glass_gardener", "residents": [6, 10] }
+    { "id": "mist", "icon": "rift-mist", "class": "mist_walker", "residents": [8, 14] },
+    { "id": "echo", "icon": "rift-echo", "class": "echo_body", "residents": [6, 12] },
+    { "id": "glass", "icon": "rift-glass", "class": "glass_gardener", "residents": [6, 10] }
   ],
   "modifiers": [
-    { "id": "static_turbulence", "name": "静电紊流期", "desc": "来敌多带 [震荡]；我方开局身上带 1 层 [震荡]。",
-      "favored_tag": "shock", "ally_tags": [["shock", 1]], "enemy_tags": [], "core_enemy": "turbulence_eye", "core_name": "紊流之眼" },
-    { "id": "dense_fog", "name": "浓雾滞留期", "desc": "来敌多带 [侵蚀]；迷雾更浓，路线揭雾范围 -1（最少 1）。",
-      "favored_tag": "erosion", "ally_tags": [], "enemy_tags": [], "fog_penalty": 1, "core_enemy": "mist_heart", "core_name": "雾心" }
+    { "id": "static_turbulence", "favored_tag": "shock", "ally_tags": [["shock", 1]], "enemy_tags": [], "core_enemy": "turbulence_eye" },
+    { "id": "dense_fog", "favored_tag": "erosion", "ally_tags": [], "enemy_tags": [], "fog_penalty": 1, "core_enemy": "mist_heart" }
   ],
   "specials": [
-    { "id": "old_postman", "class": "old_postman", "name": "老邮差", "side": "城市侧", "condition": "trust_full", "need": 100,
-      "rule": "他所在的路线可以穿过天险。", "hint": "一轮内让一个街区信任满（100）" },
-    { "id": "fog_man", "class": "fog_man", "name": "雾中人", "side": "异界侧", "condition": "route_ring", "need": 6,
-      "rule": "他在路线上时多揭开两格迷雾，路线也能经过未揭开的格子。", "hint": "一轮内路线走到离总部 6 格" },
-    { "id": "operator", "class": "operator", "name": "接线员", "side": "守城侧", "condition": "surges_held", "need": 30,
-      "rule": "他驻扎的格子所在街区，所有边界格共用这一处守军。", "hint": "一轮内守住 30 次来潮" }
+    { "id": "old_postman", "class": "old_postman", "condition": "trust_full", "need": 100 },
+    { "id": "fog_man", "class": "fog_man", "condition": "route_ring", "need": 6 },
+    { "id": "operator", "class": "operator", "condition": "surges_held", "need": 30 }
   ],
   "policies": [
-    { "id": "night_watch_society", "name": "夜间互助会", "desc": "守军开局多 1 层 [固守]；本街区工坊产出减半（夜里停工）。",
-      "defender_tags": [["fortify", 1]], "facility_bp": { "workshop": -5000 } },
-    { "id": "market_day", "name": "集市日", "desc": "本街区废材 +20%；本街区来潮强度 +5%。",
-      "resource_bp": { "scrap": 2000 }, "surge_bp": 500 },
-    { "id": "apprenticeship", "name": "学徒制", "desc": "这里招到的人带「精密手艺」；人才积累 -25%。",
-      "recruit_trait": "precise", "talent_bp": -2500 },
-    { "id": "cohabitation", "name": "共居条例", "desc": "与裂隙相邻的民居不再降低信任，反而 +3；需要本街区与镇压的裂隙相邻。",
-      "cohabit": true }
+    { "id": "night_watch_society", "defender_tags": [["fortify", 1]], "facility_bp": { "workshop": -5000 } },
+    { "id": "market_day", "resource_bp": { "scrap": 2000 }, "surge_bp": 500 },
+    { "id": "apprenticeship", "recruit_trait": "precise", "talent_bp": -2500 },
+    { "id": "cohabitation", "cohabit": true }
   ],
   "equipment": [
-    { "id": "riot_shield", "name": "防暴盾", "icon": "equip-shield", "rarity": 1, "effects": [{ "type": "start_tag", "tag": "fortify", "stacks": 1 }, { "type": "stat", "def": 3 }], "desc": "开局 1 层 [固守]，防御 +3。" },
-    { "id": "tuning_fork", "name": "校音叉", "icon": "equip-fork", "rarity": 1, "effects": [{ "type": "on_hit_apply", "tag": "shock", "stacks": 1 }], "desc": "主动攻击附带 1 层 [震荡]。" },
-    { "id": "spotter_scope", "name": "观测镜", "icon": "equip-scope", "rarity": 2, "effects": [{ "type": "bonus_vs_tag", "tag": "mark", "bp": 2000 }], "desc": "对带 [标记] 的目标伤害 +20%。" },
-    { "id": "rift_ink", "name": "裂隙墨水瓶", "icon": "equip-ink", "rarity": 2, "effects": [{ "type": "on_hit_apply", "tag": "erosion", "stacks": 1 }], "desc": "主动攻击附带 1 层 [侵蚀]。" },
-    { "id": "capacitor", "name": "储能电容", "icon": "equip-capacitor", "rarity": 3, "effects": [{ "type": "absorb", "tag": "shock" }], "desc": "受到 [震荡] 时存下来，下次攻击全部转给目标。" },
-    { "id": "resonance_coil", "name": "共振线圈", "icon": "equip-coil", "rarity": 3, "effects": [{ "type": "resonance", "threshold": 3 }], "desc": "让目标任意标签叠到 3 层时额外行动一次。" }
+    { "id": "riot_shield", "icon": "equip-shield", "rarity": 1, "effects": [{ "type": "start_tag", "tag": "fortify", "stacks": 1 }, { "type": "stat", "def": 3 }] },
+    { "id": "tuning_fork", "icon": "equip-fork", "rarity": 1, "effects": [{ "type": "on_hit_apply", "tag": "shock", "stacks": 1 }] },
+    { "id": "spotter_scope", "icon": "equip-scope", "rarity": 2, "effects": [{ "type": "bonus_vs_tag", "tag": "mark", "bp": 2000 }] },
+    { "id": "rift_ink", "icon": "equip-ink", "rarity": 2, "effects": [{ "type": "on_hit_apply", "tag": "erosion", "stacks": 1 }] },
+    { "id": "capacitor", "icon": "equip-capacitor", "rarity": 3, "effects": [{ "type": "absorb", "tag": "shock" }] },
+    { "id": "resonance_coil", "icon": "equip-coil", "rarity": 3, "effects": [{ "type": "resonance", "threshold": 3 }] }
   ],
   "rules": [
-    { "id": "auto_claim", "name": "稳妥占领", "icon": "rule", "desc": "可占领的城市格，如果占下后边界格不变多，就自动占领。" },
-    { "id": "auto_recruit", "name": "择优招募", "icon": "rule", "desc": "稀有度 R 以上的候选，废材够就自动招募（队员上限内）。" },
-    { "id": "auto_counter", "name": "告急反击", "icon": "rule", "desc": "告急格的预演能守住时，自动反击。" }
-  ],
-  "given_names": ["阿秀", "建国", "小满", "春生", "桂兰", "海潮", "立夏", "秋实", "冬青", "向阳", "红梅", "铁柱", "玉珍", "明远", "晓光", "德胜", "丽华", "振东", "小雨", "长庚", "素云", "宝山", "青禾", "伟民", "雪松", "金凤", "宏图", "淑贞", "国庆", "晚霞"],
-  "family_names": ["王", "李", "张", "刘", "陈", "杨", "赵", "黄", "周", "吴", "徐", "孙", "胡", "朱", "高", "林", "何", "郭", "马", "罗", "梁", "宋", "郑", "谢", "韩", "唐", "冯", "于", "董", "萧"],
-  "otherworld_names": ["无声", "第七回响", "灰盐", "折光", "低语", "碎镜", "长雾", "空瓶", "回廊", "倒影", "细雨", "白噪"]
+    { "id": "auto_claim", "icon": "rule" },
+    { "id": "auto_recruit", "icon": "rule" },
+    { "id": "auto_counter", "icon": "rule" }
+  ]
 }

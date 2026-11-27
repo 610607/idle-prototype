@@ -1433,7 +1433,7 @@ pub struct ContentView {
     pub tags: Vec<crate::content::TagDef>,
     pub professions: Vec<crate::content::ProfessionDef>,
     pub facilities: Vec<crate::content::FacilityDef>,
-    pub stats: Vec<(&'static str, &'static str)>,
+    pub stats: Vec<(&'static str, String)>,
     pub skills: Vec<SkillView>,
     pub classes: Vec<(String, String, String)>,
     pub policies: Vec<crate::content::PolicyDef>,

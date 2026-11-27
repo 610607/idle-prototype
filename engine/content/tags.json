@@ -1,8 +1,8 @@
 [
-  { "id": "shock", "name": "震荡", "icon": "tag-shock", "max": 3, "desc": "受到的伤害每层 +10%。补枪类技能消耗它换取额外伤害。" },
-  { "id": "mark", "name": "标记", "icon": "tag-mark", "max": 2, "desc": "被精密类攻击消耗，每层大幅增伤。" },
-  { "id": "overload", "name": "过载", "icon": "tag-overload", "max": 3, "desc": "造成的伤害每层 +15%，受到的伤害每层 +8%。" },
-  { "id": "erosion", "name": "侵蚀", "icon": "tag-erosion", "max": 6, "desc": "回合开始时，每层受到 4% 最大生命的伤害，然后退去 1 层。" },
-  { "id": "shield", "name": "护盾", "icon": "tag-shield", "max": 1, "desc": "护盾值优先吸收伤害，吸收完就消失。" },
-  { "id": "fortify", "name": "固守", "icon": "tag-fortify", "max": 2, "desc": "受击时消耗一层，这一击伤害 -30%。" }
+  { "id": "shock", "icon": "tag-shock", "max": 3 },
+  { "id": "mark", "icon": "tag-mark", "max": 2 },
+  { "id": "overload", "icon": "tag-overload", "max": 3 },
+  { "id": "erosion", "icon": "tag-erosion", "max": 6 },
+  { "id": "shield", "icon": "tag-shield", "max": 1 },
+  { "id": "fortify", "icon": "tag-fortify", "max": 2 }
 ]

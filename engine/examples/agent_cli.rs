@@ -106,6 +106,27 @@ fn map(v: &View) -> String {
     o
 }
 
+/// Let `--json` take board labels ("H7") wherever a tile index goes.
+fn labels_to_index(j: &str) -> String {
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(j) else {
+        return j.to_string();
+    };
+    fn fix(x: &mut serde_json::Value) {
+        if let Some(t) = x.as_str().and_then(parse_label) {
+            *x = serde_json::json!(t);
+        }
+    }
+    if let Some(o) = v.as_object_mut() {
+        if let Some(t) = o.get_mut("tile") {
+            fix(t);
+        }
+        if let Some(serde_json::Value::Array(r)) = o.get_mut("route") {
+            r.iter_mut().for_each(fix);
+        }
+    }
+    v.to_string()
+}
+
 fn hour(e: &Engine, v: &View) -> i64 {
     (e.state.time - v.started_at) / 3600
 }
@@ -384,7 +405,9 @@ fn menu(e: &mut Engine) -> Vec<Item> {
     let mut m: Vec<Item> = vec![];
     // Research.
     let r = &v.research;
-    if r.offers.is_empty() {
+    let no_research = std::env::var("AGENT_NORESEARCH").is_ok();
+    if no_research {
+    } else if r.offers.is_empty() {
         if r.left > 0 && r.affordable {
             m.push(Item {
                 label: format!("研究：花 {} 情报抽三条条令（之后会出现三选一）", r.cost),
@@ -530,14 +553,20 @@ fn menu(e: &mut Engine) -> Vec<Item> {
             tile,
             facility: Some(f.id.clone()),
         };
-        if !e.dry_run(&cmd).ok {
+        let dry = e.dry_run(&cmd);
+        if !dry.ok {
             continue;
         }
+        let deltas: Vec<String> = dry
+            .deltas
+            .iter()
+            .map(|d| format!("{} {}→{}", d.label, d.before, d.after))
+            .collect();
         let cost = &f.cost;
         let built = v.tiles.iter().any(|t| t.usage == f.id);
         m.push(Item {
             label: format!(
-                "建「{}」于 {}（{}，闲置居民{}；岗位{}，耗电{}；花费 废材{} 零件{}）{}",
+                "建「{}」于 {}（{}，闲置居民{}；岗位{}，耗电{}；花费 废材{} 零件{}；会变化：{}）{}",
                 f.name,
                 geom::label(tile),
                 dname,
@@ -546,6 +575,11 @@ fn menu(e: &mut Engine) -> Vec<Item> {
                 f.power,
                 cost.scrap,
                 cost.parts,
+                if deltas.is_empty() {
+                    "无".into()
+                } else {
+                    deltas.join("，")
+                },
                 if built {
                     String::new()
                 } else {
@@ -649,7 +683,7 @@ fn board(e: &mut Engine, since: i64) -> String {
                 "{}（{}小时后，第{}/{}潮守不住，镇守度{}→{}）",
                 t.label,
                 (t.t - v.time + 3599) / 3600,
-                t.lost_wave.map(|w| w + 1).unwrap_or(0),
+                t.lost_wave.unwrap_or(0),
                 t.total_waves,
                 t.warden_before,
                 t.warden_after
@@ -673,6 +707,15 @@ fn board(e: &mut Engine, since: i64) -> String {
         "本轮成果（收束时换组织经验，越高越好）：{}（管理{} 防御{} 探索{}）\n",
         v.results.total, v.results.management, v.results.defense, v.results.exploration
     );
+    if !v.results.lines.is_empty() {
+        let l: Vec<String> = v
+            .results
+            .lines
+            .iter()
+            .map(|(k, n)| format!("{k}{n}"))
+            .collect();
+        o += &format!("  成果明细：{}\n", l.join("，"));
+    }
     o += "\n[地图]\n";
     o += &map(&v);
     // Squads.
@@ -689,7 +732,11 @@ fn board(e: &mut Engine, since: i64) -> String {
                     .iter()
                     .map(|x| format!("{}{}", x.label, outcome(Some(x.outcome))))
                     .collect();
-                format!("上一趟：{}（{}）", outcome(Some(t.outcome)), r.join(" "))
+                if r.is_empty() {
+                    format!("上一趟：{}（这趟没有打仗）", outcome(Some(t.outcome)))
+                } else {
+                    format!("上一趟：{}（{}）", outcome(Some(t.outcome)), r.join(" "))
+                }
             })
             .unwrap_or_else(|| "还没出过门".into());
         let state = if s.running.is_some() {
@@ -760,10 +807,11 @@ fn board(e: &mut Engine, since: i64) -> String {
     // Doctrines and codex.
     let r = &v.research;
     o += &format!(
-        "\n[条令] 已有 {} 条，研究池还剩 {} 条；下次研究 {} 情报\n",
+        "\n[条令] 已有 {} 条，研究池还剩 {} 条；下次研究 {} 情报（每研究一次贵 {}）\n",
         r.held.len(),
         r.left,
-        r.cost
+        r.cost,
+        r.step
     );
     for d in &r.held {
         o += &format!("  「{}」：{}\n", d.name, d.desc);
@@ -799,12 +847,17 @@ fn board(e: &mut Engine, since: i64) -> String {
         .filter(|d| d.owned > 0 && (d.population > 0 || d.housing > 0))
     {
         o += &format!(
-            "  {}：占{}/{}格，居民{}/住房{}，在岗{}，民兵{}，信任{}→{}{}\n",
+            "  {}：占{}/{}格，居民{}/住房{}{}，在岗{}，民兵{}，信任{}→{}{}\n",
             d.name,
             d.owned,
             d.total,
             d.population,
             d.housing,
+            if d.unhoused > 0 {
+                format!("（{} 人无处安置，会陆续离开）", d.unhoused)
+            } else {
+                String::new()
+            },
             d.employed,
             d.militia,
             d.trust,
@@ -1024,7 +1077,8 @@ fn main() {
                 }
             }
             for j in &json {
-                let r = match serde_json::from_str::<Command>(j) {
+                let fixed = labels_to_index(j);
+                let r = match serde_json::from_str::<Command>(&fixed) {
                     Ok(c) => e.command(&c),
                     Err(err) => Err(format!("命令格式不对：{err}")),
                 };

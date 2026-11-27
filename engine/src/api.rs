@@ -50,6 +50,7 @@ pub struct Metrics {
     pub lost_tiles: Vec<u16>,
     pub trust_targets: Vec<(String, i32)>,
     pub unhoused: i32,
+    pub housing: i32,
     pub talent_rate: i32,
     pub self_sufficient: bool,
     pub roster: usize,
@@ -236,6 +237,7 @@ impl Engine {
                 .map(|d| (cy.districts[d.id as usize].name.clone(), d.trust_target))
                 .collect(),
             unhoused: calc.districts.iter().map(|d| d.unhoused).sum(),
+            housing: calc.districts.iter().map(|d| d.housing).sum(),
             talent_rate: calc
                 .districts
                 .iter()
@@ -357,6 +359,15 @@ impl Engine {
                     better: true,
                 });
             }
+        }
+        // Building over a home: residents stay for now but have nowhere to live later.
+        if a.housing != b.housing {
+            out.push(Delta {
+                label: "住房".into(),
+                before: a.housing.to_string(),
+                after: b.housing.to_string(),
+                better: b.housing > a.housing,
+            });
         }
         if a.unhoused != b.unhoused {
             out.push(Delta {

@@ -1,0 +1,11 @@
+{
+  "stat.str.name": "力量",
+  "stat.con.name": "体质",
+  "stat.siz.name": "体型",
+  "stat.dex.name": "敏捷",
+  "stat.app.name": "外貌",
+  "stat.int.name": "智力",
+  "stat.pow.name": "意志",
+  "stat.edu.name": "教育",
+  "stat.luk.name": "幸运"
+}

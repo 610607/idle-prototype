@@ -11,6 +11,11 @@
 - [ideas.md](ideas.md)：想法记录——还没定的想法，定下来再挪进设计文档。
 - [concept-draft.md](concept-draft.md)：早期挂机游戏概念草案（世界、玩家身份、玩法结构、还开着的问题）。原文档：[挂机游戏概念草案](https://claude.ai/artifact/QbW6FXVhLp1hbj821vqK98)
 
+## 工程规范与测试
+
+- [i18n.md](i18n.md)：文字与图像资源规范——玩家看得到的文字只放在 `locales/`，内容数据只放 id，图标按 id 引用，存档不存成品句子；棘轮测试和迁移进度。本仓库直接写成。
+- [llm-playtest.md](llm-playtest.md)：LLM 试玩——文字版 `agent_cli` 让 Haiku 和脚本玩家并排玩 72 小时，研究组对照组、结果和新玩家看不懂的地方。本仓库直接写成。
+
 ## 调研
 
 - [research/open-source-implementations.md](research/open-source-implementations.md)：开源挂机游戏的实现做法（大数、主循环、离线收益、存档、许可证）。原文档：[开源挂机游戏实现调研](https://claude.ai/artifact/MDLAUDcQATRL8DD9FdooW4)

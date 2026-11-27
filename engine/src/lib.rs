@@ -14,6 +14,7 @@ pub mod defense;
 pub mod doctrine;
 pub mod economy;
 pub mod geom;
+pub mod i18n;
 pub mod mapgen;
 pub mod operative;
 pub mod rng;

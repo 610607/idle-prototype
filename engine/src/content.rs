@@ -50,15 +50,8 @@ impl Tag {
         content().tag_max[self.idx()]
     }
 
-    pub fn name(self) -> &'static str {
-        match self {
-            Tag::Shock => "震荡",
-            Tag::Mark => "标记",
-            Tag::Overload => "过载",
-            Tag::Erosion => "侵蚀",
-            Tag::Shield => "护盾",
-            Tag::Fortify => "固守",
-        }
+    pub fn name(self) -> String {
+        crate::i18n::tr(&format!("tag.{}.name", self.id()))
     }
 }
 
@@ -92,18 +85,21 @@ impl Stat {
     pub fn idx(self) -> usize {
         self as usize
     }
-    pub fn name(self) -> &'static str {
+    pub fn id(self) -> &'static str {
         match self {
-            Stat::Str => "力量",
-            Stat::Con => "体质",
-            Stat::Siz => "体型",
-            Stat::Dex => "敏捷",
-            Stat::App => "外貌",
-            Stat::Int => "智力",
-            Stat::Pow => "意志",
-            Stat::Edu => "教育",
-            Stat::Luk => "幸运",
+            Stat::Str => "str",
+            Stat::Con => "con",
+            Stat::Siz => "siz",
+            Stat::Dex => "dex",
+            Stat::App => "app",
+            Stat::Int => "int",
+            Stat::Pow => "pow",
+            Stat::Edu => "edu",
+            Stat::Luk => "luk",
         }
+    }
+    pub fn name(self) -> String {
+        crate::i18n::tr(&format!("stat.{}.name", self.id()))
     }
 }
 
@@ -272,6 +268,7 @@ pub enum Effect {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SkillDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
     pub kind: SkillKind,
@@ -291,6 +288,7 @@ pub struct SkillDef {
     #[serde(default)]
     pub target_ally: bool,
     pub effects: Vec<Effect>,
+    #[serde(default)]
     pub desc: String,
 }
 
@@ -480,11 +478,13 @@ impl TraitEffect {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TraitDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
     #[serde(default)]
     pub flavor: String,
     pub effects: Vec<TraitEffect>,
+    #[serde(default)]
     pub desc: String,
 }
 
@@ -503,6 +503,7 @@ pub struct ExpTraitDef {
     pub trait_id: String,
     pub counter: String,
     pub need: i32,
+    #[serde(default)]
     pub hint: String,
 }
 
@@ -523,6 +524,7 @@ pub struct BaseStats {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ClassDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
     pub side: String,
@@ -542,6 +544,7 @@ pub struct ClassDef {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnemyDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
     pub terrain: String,
@@ -643,6 +646,7 @@ pub enum FacilityKind {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FacilityDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
     pub kind: FacilityKind,
@@ -676,6 +680,7 @@ pub struct FacilityDef {
     /// Stands with the defenders of surges within `radius` (one per facility kind per battle).
     #[serde(default)]
     pub fixture: Option<FixtureDef>,
+    #[serde(default)]
     pub desc: String,
 }
 
@@ -692,15 +697,18 @@ pub struct FixtureDef {
     #[serde(default)]
     pub defender_effects: Vec<TraitEffect>,
     /// What it does in battle, for the facility card.
+    #[serde(default)]
     pub desc: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProfessionDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
     pub class: String,
+    #[serde(default)]
     pub contribution: String,
 }
 
@@ -709,6 +717,7 @@ pub struct MixedDef {
     pub a: String,
     pub b: String,
     pub class: String,
+    #[serde(default)]
     pub name: String,
 }
 
@@ -725,8 +734,10 @@ struct ProfessionsFile {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RiftKindDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
+    #[serde(default)]
     pub resident: String,
     pub class: String,
     pub residents: [i32; 2],
@@ -735,7 +746,9 @@ pub struct RiftKindDef {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModifierDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub desc: String,
     pub favored_tag: Tag,
     #[serde(default)]
@@ -745,6 +758,7 @@ pub struct ModifierDef {
     #[serde(default)]
     pub fog_penalty: i32,
     pub core_enemy: String,
+    #[serde(default)]
     pub core_name: String,
 }
 
@@ -752,18 +766,24 @@ pub struct ModifierDef {
 pub struct SpecialDef {
     pub id: String,
     pub class: String,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub side: String,
     pub condition: String,
     pub need: i32,
+    #[serde(default)]
     pub rule: String,
+    #[serde(default)]
     pub hint: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct PolicyDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub desc: String,
     #[serde(default)]
     pub defender_tags: Vec<(Tag, i32)>,
@@ -784,10 +804,12 @@ pub struct PolicyDef {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EquipDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
     pub rarity: i32,
     pub effects: Vec<TraitEffect>,
+    #[serde(default)]
     pub desc: String,
 }
 
@@ -797,6 +819,7 @@ pub struct EquipDef {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DoctrineDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
     pub rarity: i32,
@@ -807,6 +830,7 @@ pub struct DoctrineDef {
     #[serde(default)]
     pub links: Vec<String>,
     pub effects: Vec<TraitEffect>,
+    #[serde(default)]
     pub desc: String,
 }
 
@@ -814,8 +838,11 @@ pub struct DoctrineDef {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskDef {
     pub id: String,
+    #[serde(default)]
     pub group: String,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub desc: String,
     /// Which state check marks it done (see `tasks::done`).
     pub check: String,
@@ -828,13 +855,16 @@ pub struct TaskDef {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RuleDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
+    #[serde(default)]
     pub desc: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct WorldFile {
+    #[serde(default)]
     district_names: Vec<String>,
     district_traits: Vec<String>,
     rift_kinds: Vec<RiftKindDef>,
@@ -843,8 +873,11 @@ struct WorldFile {
     policies: Vec<PolicyDef>,
     equipment: Vec<EquipDef>,
     rules: Vec<RuleDef>,
+    #[serde(default)]
     given_names: Vec<String>,
+    #[serde(default)]
     family_names: Vec<String>,
+    #[serde(default)]
     otherworld_names: Vec<String>,
 }
 
@@ -964,12 +997,14 @@ fn default_score_pop_div() -> i32 {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ReactionDef {
     pub id: String,
+    #[serde(default)]
     pub name: String,
     pub a: Tag,
     pub b: Tag,
     /// Tags whose stacks are all used up by the reaction.
     pub consume: Vec<Tag>,
     pub effects: Vec<ReactionEffect>,
+    #[serde(default)]
     pub desc: String,
     /// Codex hint shown before the reaction has ever gone off.
     #[serde(default)]
@@ -999,9 +1034,11 @@ pub enum ReactionEffect {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TagDef {
     pub id: Tag,
+    #[serde(default)]
     pub name: String,
     pub icon: String,
     pub max: i32,
+    #[serde(default)]
     pub desc: String,
 }
 
@@ -1115,8 +1152,7 @@ fn load() -> Content {
     let doctrines: Vec<DoctrineDef> =
         parse("doctrines.json", include_str!("../content/doctrines.json"));
     let tasks: Vec<TaskDef> = parse("tasks.json", include_str!("../content/tasks.json"));
-
-    Content {
+    let mut c = Content {
         tags,
         tag_max,
         skills: skills.into_iter().map(|s| (s.id.clone(), s)).collect(),
@@ -1142,7 +1178,102 @@ fn load() -> Content {
         family_names: world.family_names,
         otherworld_names: world.otherworld_names,
         balance,
+    };
+    localize(&mut c);
+    c
+}
+
+/// Content data holds ids and numbers only; names and descriptions come from the active locale's
+/// catalog (`locales/<lang>/content.json`, keys `<kind>.<id>.<field>`).
+fn localize(c: &mut Content) {
+    fn text(kind: &str, id: &str, field: &str) -> String {
+        let key = format!("{kind}.{id}.{field}");
+        if !crate::i18n::has(&key) {
+            panic!("locales: missing {key}");
+        }
+        crate::i18n::tr(&key)
     }
+    for t in &mut c.tags {
+        t.name = text("tag", t.id.id(), "name");
+        t.desc = text("tag", t.id.id(), "desc");
+    }
+    for s in c.skills.values_mut() {
+        s.name = text("skill", &s.id, "name");
+        s.desc = text("skill", &s.id, "desc");
+    }
+    for t in c.traits.values_mut() {
+        t.name = text("trait", &t.id, "name");
+        t.flavor = text("trait", &t.id, "flavor");
+        t.desc = text("trait", &t.id, "desc");
+    }
+    for x in &mut c.exp_traits {
+        x.hint = text("exp_trait", &x.trait_id, "hint");
+    }
+    for k in c.classes.values_mut() {
+        k.name = text("class", &k.id, "name");
+    }
+    for e in c.enemies.values_mut() {
+        e.name = text("enemy", &e.id, "name");
+    }
+    for f in &mut c.facilities {
+        f.name = text("facility", &f.id, "name");
+        f.desc = text("facility", &f.id, "desc");
+        if let Some(fx) = &mut f.fixture {
+            fx.desc = text("facility", &f.id, "fixture_desc");
+        }
+    }
+    for p in &mut c.professions {
+        p.name = text("profession", &p.id, "name");
+        p.contribution = text("profession", &p.id, "contribution");
+    }
+    for m in &mut c.mixed {
+        m.name = text("mixed", &m.class, "name");
+    }
+    for r in &mut c.rift_kinds {
+        r.name = text("rift", &r.id, "name");
+        r.resident = text("rift", &r.id, "resident");
+    }
+    for m in &mut c.modifiers {
+        m.name = text("modifier", &m.id, "name");
+        m.desc = text("modifier", &m.id, "desc");
+        m.core_name = text("modifier", &m.id, "core_name");
+    }
+    for s in &mut c.specials {
+        s.name = text("special", &s.id, "name");
+        s.side = text("special", &s.id, "side");
+        s.rule = text("special", &s.id, "rule");
+        s.hint = text("special", &s.id, "hint");
+    }
+    for p in &mut c.policies {
+        p.name = text("policy", &p.id, "name");
+        p.desc = text("policy", &p.id, "desc");
+    }
+    for e in &mut c.equipment {
+        e.name = text("equip", &e.id, "name");
+        e.desc = text("equip", &e.id, "desc");
+    }
+    for r in &mut c.rules {
+        r.name = text("rule", &r.id, "name");
+        r.desc = text("rule", &r.id, "desc");
+    }
+    for r in &mut c.reactions {
+        r.name = text("reaction", &r.id, "name");
+        r.desc = text("reaction", &r.id, "desc");
+        r.hint = text("reaction", &r.id, "hint");
+    }
+    for d in &mut c.doctrines {
+        d.name = text("doctrine", &d.id, "name");
+        d.desc = text("doctrine", &d.id, "desc");
+    }
+    for t in &mut c.tasks {
+        t.group = text("task", &t.id, "group");
+        t.name = text("task", &t.id, "name");
+        t.desc = text("task", &t.id, "desc");
+    }
+    c.district_names = crate::i18n::list("names.district");
+    c.given_names = crate::i18n::list("names.given");
+    c.family_names = crate::i18n::list("names.family");
+    c.otherworld_names = crate::i18n::list("names.otherworld");
 }
 
 static CONTENT: OnceLock<Content> = OnceLock::new();
@@ -1159,6 +1290,10 @@ pub fn patch_balance(json: &str) -> Result<(), String> {
     BALANCE_PATCH
         .set(map)
         .map_err(|_| "balance already patched".to_string())
+}
+
+pub fn loaded() -> bool {
+    CONTENT.get().is_some()
 }
 
 pub fn content() -> &'static Content {
