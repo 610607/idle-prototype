@@ -16,6 +16,13 @@
 - [i18n.md](i18n.md)：文字与图像资源规范——玩家看得到的文字只放在 `locales/`，内容数据只放 id，图标按 id 引用，存档不存成品句子；棘轮测试和迁移进度。本仓库直接写成。
 - [llm-playtest.md](llm-playtest.md)：LLM 试玩——文字版 `agent_cli` 让 Haiku 和脚本玩家并排玩 72 小时，研究组对照组、结果和新玩家看不懂的地方。本仓库直接写成。
 
+## 数值
+
+- [balance-eval.md](balance-eval.md)：数值评估框架——评估工具 `eval` 的分层、指标、区间、人格、对照与新系统接入清单，以及已定和待讨论的事项。本仓库直接写成。
+- [balance-model.md](balance-model.md)：数值数学模型——战斗“两道检查”和节奏模型（每格耗时 × 格数），用机器人实测检验。本仓库直接写成。
+- [balance-curves-research.md](balance-curves-research.md)：数值曲线调研——其他游戏怎么用主曲线给数值定价，拿来量本仓库。本仓库直接写成。
+- [payoff-pacing-research.md](payoff-pacing-research.md)：爽点节奏调研——其他游戏怎么设计和量化爽点（里程碑倍率、新系统、自动化、墙与突破、轮回），以及爽点事件时间轴的模型和指标提议、一周骨架草案。本仓库直接写成。
+
 ## 调研
 
 - [research/open-source-implementations.md](research/open-source-implementations.md)：开源挂机游戏的实现做法（大数、主循环、离线收益、存档、许可证）。原文档：[开源挂机游戏实现调研](https://claude.ai/artifact/MDLAUDcQATRL8DD9FdooW4)
