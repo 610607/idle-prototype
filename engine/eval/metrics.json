@@ -48,10 +48,12 @@
     { "pattern": "payoff.frontier.margin.h{N}", "class": "probe", "doc": "最强小队对前线各格的最佳模型强度" },
     { "pattern": "payoff.model_ratio.research", "class": "model", "doc": "研究时刻：实测 ÷ 模型（情报一够就研究），中位数" },
 
-    { "pattern": "llm.feel.{stage}.{label}", "class": "llm", "doc": "该阶段回访里各种感受（惊喜 / 平淡 / 失望）的占比" },
+    { "pattern": "llm.feel.{stage}.{label}", "class": "llm", "doc": "该阶段回访里各种感受（惊喜 / 平淡 / 失望）的占比；没写感受的回访也算在分母里" },
     { "pattern": "llm.score.{dim}.{stage}", "class": "llm", "doc": "阶段打分（1～5）" },
-    { "pattern": "llm.delight_given_felt", "class": "llm", "doc": "回访窗口里有可感爽点时记“惊喜”的比例" },
-    { "pattern": "llm.delight_given_none", "class": "llm", "doc": "回访窗口里没有可感爽点时记“惊喜”的比例" },
-    { "pattern": "llm.invalid", "class": "llm", "doc": "行动里失败项的占比" }
+    { "pattern": "llm.delight_given_felt", "class": "llm", "doc": "回访窗口（上次回访，这次回访]里有可感爽点（tier ≥ 1）时记“惊喜”的比例；会话过期时不输出" },
+    { "pattern": "llm.delight_given_none", "class": "llm", "doc": "回访窗口里没有可感爽点时记“惊喜”的比例；会话过期时不输出" },
+    { "pattern": "llm.invalid", "class": "llm", "doc": "行动里失败项的占比（失败项 ÷ 全部行动项）；会话过期时不输出" },
+    { "pattern": "llm.delight_lift", "class": "result", "doc": "有可感爽点的回访比没有的回访多出的惊喜率；越大说明爽点分级越贴近玩家感觉" },
+    { "pattern": "session.stale", "class": "result", "doc": "会话重放后存档指纹对不上（游戏在会话之后改过）：1 是，0 否" }
   ]
 }

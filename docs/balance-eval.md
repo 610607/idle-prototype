@@ -17,7 +17,7 @@
 | L3 多轮回 | 轮回前后的节奏、何时轮回最划算 | — | 未做：没有机器人会轮回 |
 | L4 敏感度 | 一次改一个参数（OAT），再到 Morris、Sobol，找出最影响结果的参数 | `eval run --patch '{…}'` | 只有补丁入口；每个变体一个进程 |
 | L5 配对比较 | 两个版本按种子配对，给中位差和 90% 置信区间 | `eval compare A B` | 已做 |
-| 手感 | LLM 或真人按会话协议试玩，事后重放算出同名指标和 `llm.*` 反馈（`docs/eval-interface.md`） | `agent_cli session`、`eval session` | 会话协议在做；只看手感，不作为数值门槛 |
+| 手感 | LLM 或真人按会话协议试玩，事后重放算出同名指标和 `llm.*` 反馈（`docs/eval-interface.md`） | `agent_cli session`、`eval session`、`eval run --sessions` | 已做：重放、过期判定、`llm.*`；只看手感，不作为数值门槛 |
 
 所有输出只有指标 id 和数字，便于 diff，也便于 LLM 读。
 
@@ -33,9 +33,11 @@ cargo run --release --example eval -- model
 cargo run --release --example eval -- pace --vs /tmp/a.json
 cargo run --release --example eval -- price
 cargo run --release --example eval -- timeline 0 --hours 48
+cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --sessions /tmp/sess   # 每局也写成会话目录 /tmp/sess/greedy-s<种子>/
+cargo run --release --example eval -- session /tmp/llm/s0 /tmp/llm/s1 --out /tmp/llm.json     # 重放会话：同名指标 + llm.*
 ```
 
-在 4 核上：20 个种子 × 24 小时约 9 秒，× 72 小时约 55 秒（越往后机器人每小时要预演的路线越多）；`calibrate` 全套约 10 秒。每个人格都从第 1 张地图开局（`ChooseMap 0`）。
+在 4 核上：20 个种子 × 24 小时约 9 秒，× 72 小时约 55 秒（越往后机器人每小时要预演的路线越多）；`calibrate` 全套约 10 秒。每个人格都和文字版、试玩会话用同一个开局：第 1 张地图（`ChooseMap 0`），开三条规章（`textui::setup`）。
 
 ## 机器人人格
 
