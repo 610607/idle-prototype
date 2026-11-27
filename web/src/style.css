@@ -295,13 +295,12 @@ h1, h2, h3, h4 { font-family: var(--font-head); margin: 0; font-weight: 400; let
   background: linear-gradient(var(--panel-2), var(--plate-head)); border-bottom: 1px solid var(--sunk);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 0 rgba(255, 255, 255, 0.025);
 }
-/* the enamel badge: a painted square plate carrying the section's icon */
+/* the enamel badge: a dark inset plate in a painted frame, carrying the section's colour icon */
 .section-badge {
   width: 26px; height: 26px; flex: none; display: grid; place-items: center;
-  background: var(--tone); color: var(--hazard-ink);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -2px 0 rgba(0, 0, 0, 0.28), 0 0 0 1px var(--sunk);
+  background: var(--sunk); color: var(--tone);
+  box-shadow: inset 0 0 0 2px var(--tone), inset 0 3px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px var(--sunk);
 }
-.section-badge .icon { --px-accent: var(--hazard-ink); }
 .section-title h3 { font-size: 17px; line-height: 1.2; text-shadow: 0 1px 0 var(--sunk); }
 .section-title .hint { color: var(--ink-3); font-size: 12px; margin-left: auto; text-align: right; }
 .section-body { padding: 10px 12px 12px; }
