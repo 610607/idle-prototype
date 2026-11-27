@@ -17,6 +17,8 @@ const BUNDLED: &[(&str, &[&str])] = &[(
     &[
         include_str!("../../locales/zh-CN/content.json"),
         include_str!("../../locales/zh-CN/engine.json"),
+        include_str!("../../locales/zh-CN/events.json"),
+        include_str!("../../locales/zh-CN/battle.json"),
         include_str!("../../locales/zh-CN/cli.json"),
     ],
 )];

@@ -425,7 +425,9 @@ impl Engine {
     /// Apply a command to a copy and say what changes, including the next 12 hours of tides.
     pub fn dry_run(&mut self, cmd: &Command) -> DryRun {
         let before_tide = self.tide().to_vec();
-        let before = Self::metrics(&self.state, &before_tide);
+        // Between cycles there is no map to measure (and `collapse` clears it).
+        let active = |s: &GameState| s.cycle.phase == Phase::Active;
+        let before = active(&self.state).then(|| Self::metrics(&self.state, &before_tide));
         let mut copy = self.state.clone();
         copy.reports.clear();
         let r = commands::apply(&mut copy, cmd);
@@ -444,12 +446,15 @@ impl Engine {
                 } else {
                     vec![]
                 };
-                let after = Self::metrics(&copy, &after_tide);
+                let after = active(&copy).then(|| Self::metrics(&copy, &after_tide));
                 DryRun {
                     ok: true,
                     error: None,
                     irreversible: cmd.changes_shape(),
-                    deltas: Self::deltas(&before, &after),
+                    deltas: match (&before, &after) {
+                        (Some(b), Some(a)) => Self::deltas(b, a),
+                        _ => vec![],
+                    },
                     tide_before: view::tide_view(&before_tide),
                     tide_after: view::tide_view(&after_tide),
                 }
@@ -668,6 +673,16 @@ mod tests {
         let v = e.view_json();
         assert!(v.len() > 1000);
         assert!(!e.view().tide.is_empty() || e.view().border_count == 0);
+    }
+
+    /// `collapse` clears the map and the screen between cycles has none; previews must not panic.
+    #[test]
+    fn dry_run_without_a_map() {
+        let mut e = started();
+        assert!(e.dry_run(&Command::Collapse).ok);
+        e.command(&Command::Collapse).unwrap();
+        let d = e.dry_run(&Command::ChooseMap { index: 0 });
+        assert!(d.ok && d.deltas.is_empty());
     }
 
     #[test]
