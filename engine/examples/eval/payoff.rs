@@ -10,11 +10,11 @@
 //!
 //! Event classes (`Ev::class`):
 //! - felt (tier ≥ 1 unless a measured size says otherwise): `ring` (first tile of ring r owned,
-//!   m = board area ratio), `research` (a doctrine picked; size and flips from the matching
-//!   "research" `Mag`, a category event without one), `contiguous` (m = the district's output
-//!   bonus), `core`, `self_sufficient` (each false → true transition, polled hourly), the gifts
-//!   `special`, `drop`, `trait`, `codex`, `rift`, every other `Mag` class (e.g. `frontier_open`),
-//!   and `novelty` (see below);
+//!   m = board area ratio), `research` (a doctrine picked; size, flips and ladder gain from the
+//!   matching "research" `Mag`, a category event without one), `contiguous` (m = the district's
+//!   output bonus), `core`, `self_sufficient` (each false → true transition, polled hourly), the
+//!   gifts `special`, `drop`, `trait`, `codex`, `rift`, every other `Mag` class (e.g.
+//!   `frontier_open`), and `novelty` (see below);
 //! - trickle (tier 0, kept for `print`, never felt): `candidate`, `cache`, `clue`, `claimable`,
 //!   `task`, `trip`, `surge`, `claimed`, `hired`, `counter`, `salvage`, `retired`, `abandoned`,
 //!   `cycle`, `other`, and `auto` (an automated act: an `EventKind::Rule` entry, also counted per
@@ -106,10 +106,11 @@ fn tier_of(m: f64) -> u8 {
 }
 
 /// Tier of a size from `strength`: by m, 1 for a category payoff, and at least 1 when it turned a
-/// frontier tile from loss to win (the player sees a preview go green, whatever the size).
-fn mag_tier(m: Option<f64>, flips: Option<u32>) -> u8 {
-    let t = m.map_or(1, tier_of);
-    if flips.unwrap_or(0) > 0 {
+/// frontier tile from loss to win (the player sees a preview go green, whatever the size) or, for
+/// a doctrine, a ladder encounter (the simulated yardstick sees what the model cannot).
+fn mag_tier(g: &Mag) -> u8 {
+    let t = g.m.map_or(1, tier_of);
+    if g.flips.unwrap_or(0) > 0 || g.ladder.unwrap_or(0) >= 1 {
         t.max(1)
     } else {
         t
@@ -403,9 +404,15 @@ impl Timeline {
             let flips = g.and_then(|g| g.flips);
             if let Some(g) = g {
                 ev.m = g.m;
-                ev.tier = mag_tier(g.m, g.flips);
+                ev.tier = mag_tier(g);
+                if let Some(id) = &g.id {
+                    ev.note.push_str(&format!(" {id}"));
+                }
                 if let Some(f) = g.flips {
                     ev.note.push_str(&format!(" flips={f}"));
+                }
+                if let Some(l) = g.ladder {
+                    ev.note.push_str(&format!(" ladder={l:+}"));
                 }
             }
             rows.push((ev.t_h, ev.m, flips));
@@ -415,7 +422,7 @@ impl Timeline {
                 g.t_h,
                 g.class,
                 g.m,
-                mag_tier(g.m, g.flips),
+                mag_tier(g),
                 g.flips.map_or("flips=-".into(), |f| format!("flips={f}")),
             );
         }

@@ -13,9 +13,16 @@
 //!   ladder, as it does for today's squads. Flips, simulated, still see both. The ladder is
 //!   built with the process's balance, so a `--patch` that changes enemy numbers moves the
 //!   yardstick too: compare S across runs only under the same enemies.
-//! - Research size: at each research pick, m = log2(S after ÷ S before) and the fightable tiles up
+//! - Simulated ladder count L(state) (`ladder_won`): how many of the same 56 ladder encounters the
+//!   best squad wins in `combat::simulate`, doctrines applied as for S. It sees what the model
+//!   cannot (effect-only doctrines); it costs 56 battles per squad, so it is read only at the
+//!   checkpoints (and hour 1 and the last hour) and at research picks → `payoff.ladder.h<N>`,
+//!   `payoff.growth.ladder`.
+//! - Research size: at each research pick, m = log2(S after ÷ S before), the net ladder wins it
+//!   adds (L after − L before, negative when a doctrine costs wins;
+//!   `payoff.ladder_gain.research.<k>`, `payoff.research.ladder_gain`) and the fightable tiles up
 //!   to two rings past the territory that the best squad turns from loss to win in a simulated
-//!   one-tile battle.
+//!   one-tile battle. L tops out at 56: once the squad wins the whole ladder, a pick reads 0.
 //! - Hourly series: S at the end of every hour → `payoff.power.h<N>`, `payoff.growth.power`,
 //!   `payoff.sawtooth.power` (share of the growth that came in felt hourly jumps).
 //! - Combat walls: the frontier (fightable ring M + 1 tiles next to the territory) is open when
@@ -47,6 +54,11 @@ pub struct Mag {
     pub m: Option<f64>,
     /// Frontier tiles turned from loss to win, when measured.
     pub flips: Option<u32>,
+    /// The doctrine picked (research only).
+    pub id: Option<String>,
+    /// Ladder encounters won after minus before, negative when the pick costs wins (research
+    /// only; see `ladder_won`).
+    pub ladder: Option<i32>,
 }
 
 /// The fixed yardstick: unit rates and the ladder encounters of rungs 1..=7. Measured once per
@@ -104,12 +116,10 @@ fn squads(st: &GameState) -> Vec<Squad> {
         .collect()
 }
 
-/// A squad's yardstick strength with `doctrines` held: geometric mean of the model strength over
-/// the ladder encounters (non-finite values skipped). Doctrines only change the allies
+/// The squad's battle units with `doctrines` held. Doctrines only change the allies
 /// (`doctrine::apply`), so they are applied once rather than on every ladder battle.
-fn yard(sq: &Squad, doctrines: &[String]) -> Option<f64> {
-    let y = yardstick();
-    let mut base = BattleInput {
+fn armed(sq: &Squad, doctrines: &[String]) -> Vec<UnitSpec> {
+    let mut input = BattleInput {
         kind: BattleKind::Route,
         allies: sq.specs.clone(),
         waves: vec![],
@@ -119,11 +129,19 @@ fn yard(sq: &Squad, doctrines: &[String]) -> Option<f64> {
         defense: false,
         record: false,
     };
-    doctrine::apply(doctrines, &mut base);
+    doctrine::apply(doctrines, &mut input);
+    input.allies
+}
+
+/// A squad's yardstick strength with `doctrines` held: geometric mean of the model strength over
+/// the ladder encounters (non-finite values skipped).
+fn yard(sq: &Squad, doctrines: &[String]) -> Option<f64> {
+    let y = yardstick();
+    let allies = armed(sq, doctrines);
     let cls = |u: &UnitSpec| sq.class(u);
     let (mut sum, mut n) = (0.0, 0.0);
     for e in &y.encs {
-        let s = model::margins(&y.profile, &model::battle(&base.allies, e), &cls).strength();
+        let s = model::margins(&y.profile, &model::battle(&allies, e), &cls).strength();
         if s.is_finite() && s > 0.0 {
             sum += s.ln();
             n += 1.0;
@@ -138,6 +156,29 @@ fn best(sqs: &[Squad], doctrines: &[String]) -> Option<(usize, f64)> {
         .enumerate()
         .filter_map(|(i, sq)| yard(sq, doctrines).map(|s| (i, s)))
         .max_by(|a, b| a.1.total_cmp(&b.1))
+}
+
+/// Ladder encounters (rungs 1..=7) one squad wins in simulation with `doctrines` held, applied
+/// the same way as for `yard`.
+fn ladder_of(sq: &Squad, doctrines: &[String]) -> i32 {
+    let allies = armed(sq, doctrines);
+    yardstick()
+        .encs
+        .iter()
+        .filter(|e| combat::simulate(&model::battle(&allies, e)).won())
+        .count() as i32
+}
+
+/// L(state) under `doctrines`: the most ladder encounters any squad wins (`None` without a squad).
+fn ladder_best(sqs: &[Squad], doctrines: &[String]) -> Option<i32> {
+    sqs.iter().map(|sq| ladder_of(sq, doctrines)).max()
+}
+
+/// L(state): how many of the 56 ladder encounters the best squad wins in simulation, the state's
+/// doctrines applied (`None` without a squad with members). 56 battles per squad.
+#[allow(dead_code)]
+pub fn ladder_won(st: &GameState) -> Option<i32> {
+    ladder_best(&squads(st), &st.cycle.doctrines)
 }
 
 /// S(state): the strongest squad's yardstick strength with the state's doctrines (`None` without
@@ -221,6 +262,11 @@ pub struct Series {
     hours: Vec<Hour>,
     /// Best model strength on the frontier at the checkpoints.
     margin: Vec<(i64, Option<f64>)>,
+    /// L at hour 1 and the checkpoints.
+    ladder: Vec<(i64, Option<i32>)>,
+    /// The latest hour's squads and doctrines, to read L at the end of the run when the last hour
+    /// is not a checkpoint.
+    last: Option<(i64, Vec<Squad>, Vec<String>)>,
     mags: Vec<Mag>,
 }
 
@@ -231,7 +277,8 @@ impl Series {
 
     /// After each 5-minute step: the traces of that step and the state after it. Each research
     /// pick (`event.research.*`) is sized: the k picks of a step are the last k held doctrines,
-    /// in order, so "before" holds the ones up to the pick and "after" adds it.
+    /// in order, so "before" holds the ones up to the pick and "after" adds it. L is read once
+    /// per doctrine set (k + 1 times for k picks).
     pub fn on_step(&mut self, e: &Engine, _t_h: f64, traces: &[Trace]) {
         let picks: Vec<i64> = traces
             .iter()
@@ -249,8 +296,12 @@ impl Series {
         let reach = deepest_owned(st) + 2;
         let tiles: Vec<u16> = fightable(st).filter(|&i| ring(i) <= reach).collect();
         let mut scratch = st.clone();
+        let first = held.len() - picks.len();
+        let ladder: Vec<Option<i32>> = (first..=held.len())
+            .map(|n| ladder_best(&sqs, &held[..n]))
+            .collect();
         for (j, t) in picks.iter().enumerate() {
-            let n = held.len() - picks.len() + j;
+            let n = first + j;
             let (before, after) = (&held[..n], &held[..=n]);
             let (Some((_, s0)), Some((i, s1))) = (best(&sqs, before), best(&sqs, after)) else {
                 continue;
@@ -270,6 +321,8 @@ impl Series {
                 class: "research",
                 m: Some((s1 / s0).log2()),
                 flips: Some(flips),
+                id: Some(held[n].clone()),
+                ladder: ladder[j + 1].zip(ladder[j]).map(|(a, b)| a - b),
             });
         }
     }
@@ -306,11 +359,17 @@ impl Series {
                     class: "frontier_open",
                     m: None,
                     flips: Some(1 + more as u32),
+                    id: None,
+                    ladder: None,
                 });
             }
         }
         if CHECKPOINTS.contains(&h) {
             self.margin.push((h, margin));
+        }
+        if h == 1 || CHECKPOINTS.contains(&h) {
+            self.ladder
+                .push((h, ladder_best(&sqs, &st.cycle.doctrines)));
         }
         self.hours.push(Hour {
             h,
@@ -318,6 +377,7 @@ impl Series {
             open,
             manual,
         });
+        self.last = Some((h, sqs, st.cycle.doctrines.clone()));
     }
 
     fn walls(&self) -> Vec<Wall> {
@@ -357,6 +417,24 @@ impl Series {
         m.insert(
             "payoff.growth.power".into(),
             power(1).zip(power(hours)).map(|(a, b)| (b / a).log2()),
+        );
+        // The ladder count at the checkpoints, and its change over the run.
+        let ladder_at = |h: i64| self.ladder.iter().find(|x| x.0 == h).map(|x| x.1);
+        for h in CHECKPOINTS.into_iter().filter(|&h| h <= hours) {
+            m.insert(
+                format!("payoff.ladder.h{h}"),
+                ladder_at(h).flatten().map(f64::from),
+            );
+        }
+        let end = match (ladder_at(hours), &self.last) {
+            (Some(x), _) => x,
+            (None, Some((h, sqs, held))) if *h == hours => ladder_best(sqs, held),
+            _ => None,
+        };
+        m.insert(
+            "payoff.growth.ladder".into(),
+            end.zip(ladder_at(1).flatten())
+                .map(|(b, a)| f64::from(b - a)),
         );
         // Sawtooth: share of the hourly log growth that came in felt jumps.
         let steps: Vec<f64> = self
@@ -421,6 +499,17 @@ impl Series {
         m.insert(
             "payoff.research.flips".into(),
             (!sizes.is_empty()).then(|| sizes.iter().filter_map(|x| x.flips).sum::<u32>() as f64),
+        );
+        // Net ladder wins each pick added (k as in `payoff.m.research.<k>`).
+        for k in 1..=10 {
+            m.insert(
+                format!("payoff.ladder_gain.research.{k}"),
+                sizes.get(k - 1).and_then(|x| x.ladder).map(f64::from),
+            );
+        }
+        m.insert(
+            "payoff.research.ladder_gain".into(),
+            (!sizes.is_empty()).then(|| sizes.iter().filter_map(|x| x.ladder).sum::<i32>() as f64),
         );
         self.mags.sort_by(|a, b| a.t_h.total_cmp(&b.t_h));
         self.mags
