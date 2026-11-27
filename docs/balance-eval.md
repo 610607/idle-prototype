@@ -13,10 +13,11 @@
 | L1 战斗校准 | 战力指数 ρ 预测真实战斗胜负的能力；各职业、特质、学说实际值多少 | `eval calibrate [lab\|field]` | 已做 |
 | L1 词条测价 | 每个特质、装备、学说开 vs 关，值多少环当量；离群的标出来 | `eval price [--bless]` | 已做，`cargo test` 检查有没有漏测价 |
 | L2 多种子对局 | 机器人人格各跑 N 个种子，记录按 id 命名的指标，和合格区间比 | `eval run`、`eval check` | 已做，72 小时一局 |
+| 爽点时间轴 | 玩家能感觉到的收获的时刻和幅度，间隔、峰值、新奇、战斗墙（见“爽点时间轴”） | `eval run`（自带）、`eval payoff` | 已做；分级阈值待 LLM 试玩校准 |
 | L3 多轮回 | 轮回前后的节奏、何时轮回最划算 | — | 未做：没有机器人会轮回 |
 | L4 敏感度 | 一次改一个参数（OAT），再到 Morris、Sobol，找出最影响结果的参数 | `eval run --patch '{…}'` | 只有补丁入口；每个变体一个进程 |
 | L5 配对比较 | 两个版本按种子配对，给中位差和 90% 置信区间 | `eval compare A B` | 已做 |
-| 手感 | LLM 试玩（`docs/llm-playtest.md`） | `agent_cli` | 已有；只看手感，不作为数值门槛 |
+| 手感 | LLM 或真人按会话协议试玩，事后重放算出同名指标和 `llm.*` 反馈（`docs/eval-interface.md`） | `agent_cli session`、`eval session` | 会话协议在做；只看手感，不作为数值门槛 |
 
 所有输出只有指标 id 和数字，便于 diff，也便于 LLM 读。
 
@@ -88,6 +89,67 @@ L1 指标（`calibrate` 输出）：
 
 战力指数的定义沿用 `docs/balance-curves-research.md` §三：一方 S = √(ΣEHP × Σatk)，EHP = hp × (1 + def / k)，k 取 `combat` 里的减伤常数（伤害 × 1000 / (1000 + def × 22)，k ≈ 45.5）；遭遇 D = √(Σ 各波 S²)，ρ = (S / D)²。技能、标签、治疗、特质都故意不算，L1 的任务就是量出它们值多少。
 
+所有指标 id 登记在 `engine/eval/metrics.json`（模式、类别、一句说明）。`eval run` 产出的 id 和 `bands.json` 里的 id 都必须在注册表里，`cargo test` 会拦；`eval metrics [RUN.json]` 打印注册表，带上结果文件时还会列出没登记的 id。
+
+## 爽点时间轴
+
+到达时间只回答“多久进下一环”，回答不了“这一周玩起来爽不爽”。爽点时间轴把一局里玩家能感觉到的每一次收获记成带时刻和幅度的事件，再从整条时间轴算形状指标（`payoff.*`）。依据和取舍见 `docs/payoff-pacing-research.md`。
+
+代码在 `examples/eval/payoff.rs`（事件和指标）和 `examples/eval/strength.rs`（需要战斗模型的幅度）。`eval run` 每 5 分钟把引擎的测量钩子（事件日志条目、战斗、来潮、被接受的命令）交给时间轴，跑完算指标；不需要单独开关。
+
+**事件类别**（`Ev::class`）：
+
+| 类别 | 什么时候 | 幅度 m |
+|---|---|---|
+| `ring` | 第一次占到第 r 环 | 棋盘面积比：2·log2((2r+1)/(2r−1)) |
+| `research` | 选了一个学说 | 参考小队模型强度的 log2 倍数（来自 `strength`）；让前线有格子由输转赢的至少记“小” |
+| `contiguous` | 街区连成片 | log2(1.25) |
+| `core`、`self_sufficient` | 核心成形；防线第一次自给（每小时查，假变真才算） | 无，记“小” |
+| `special`、`drop`、`trait`、`codex`、`rift` | 特殊来客、掉落、特质长成、图鉴点亮、占到裂隙格 | 无，记“小” |
+| `frontier_open` 等 | `strength` 给出的其他跳变 | 同 `research` |
+| `novelty` | 第一次出现的命令或事件 | 无，记“小” |
+| 涓流 | 候选、补给、线索、任务、出征、来潮、招募、反击、规章代做（`auto`）…… | 不算爽点，只在 `eval payoff` 里按小时汇总 |
+
+**分级**：m = log2(之后 ÷ 之前)。“小” ≥ log2 1.2，“大” ≥ 1（翻倍），“巨大” ≥ log2 10。三个阈值都是待校准的常数（`payoff::SMALL/BIG/HUGE`），校准靠 LLM 试玩的 `llm.delight_given_felt` 和 `llm.delight_given_none`（`docs/eval-interface.md`）。
+
+**新奇去重**：命令第一次使用算一次新奇，但第 1 小时用的命令是开局套装，不算（否则 `hook_h` 恒为 0）；事件 key 第一次出现算新奇，除非它本身已经是别的爽点类别、是挫折（失守、团灭、反击失败、放弃、离队）、是轮回记账，或者是同一小时新命令的回声（第一次 `hire` 算，随之而来的第一条“招到了人”不再算）。规章的第一次代做算新奇，之后都是涓流。
+
+**指标**：
+
+| id | 含义 |
+|---|---|
+| `payoff.hook_h` | 第一个可感爽点的时刻 |
+| `payoff.count.<类别>`、`payoff.t.<类别>.<k>` | 各类爽点次数；第 k 次的时刻（研究、连片、自给、核心） |
+| `payoff.m.research.<k>`、`payoff.flip.research.<k>` | 第 k 次研究的强度幅度；让几格前线由输转赢 |
+| `payoff.gap_max_h.<时段>`、`payoff.gap_p90_h.<时段>` | 相邻可感爽点的最长间隔、90 分位；时段 `d1`、`d2_3`、`d4_7`，间隔按起点归属，时段里没有间隔起点就报覆盖它的那一段 |
+| `payoff.gap_max_h.big.<时段>` | 同上，只算“大”以上 |
+| `payoff.visit_hit.h<N>` | 每 N 小时回访一次（1/4/8），回访窗口里有可感爽点的比例 |
+| `payoff.peak_rank` | 每天最大爽点幅度和天序的秩相关，≥ 0 表示峰值不递减 |
+| `payoff.finale` | 最后一天有没有全轮最大或次大的爽点 |
+| `payoff.rate_drop.max` | 相邻 6 小时窗口成果增量的最大降幅 |
+| `payoff.novelty.d<k>`、`payoff.lines.<时段>` | 第 k 天的新奇数；该时段给出爽点的成长线数 |
+| `payoff.auto_share.d<k>`、`payoff.self_sufficient.share` | 规章代做占全部操作的比例；防线自给的小时占比 |
+| `payoff.power.h<N>`、`payoff.growth.power`、`payoff.sawtooth.power` | 最强小队对固定标尺（第 1～7 环遭遇）的模型强度；一轮总增长；增长里来自单次可感跳变的比例 |
+| `payoff.wall.*` | 战斗墙：前线一格都打不赢的连续小时（次数、最长、占比、墙内无操作的占比、靠研究破墙的比例） |
+| `payoff.frontier.margin.h<N>` | 最强小队对前线各格的最佳模型强度 |
+| `payoff.model_ratio.research` | 研究时刻：实测 ÷ 模型（`docs/balance-model.md`），中位数 |
+
+单局逐条看：
+
+```bash
+cargo run --release --example eval -- payoff 0 --hours 168          # 可感爽点一行一条，涓流按小时汇总，最后是本局的 payoff.* 指标
+cargo run --release --example eval -- payoff 0 greedy@4 --patch '{…}'
+```
+
+**首次读数**（`greedy`，8 个种子 × 168 小时，p50）：
+
+- 第 9 小时以后没有“大”爽点：只有进第 1、2 环够“大”，`gap_max_h.big` 三个时段都是 159 小时。
+- 峰值逐天下降：`peak_rank` −0.63，`finale` 0。
+- 新东西几乎都在第一天：`novelty.d1` 9.5，第 2 天 2，第 3 天起 0。
+- 最长间隔：第一天 7.2 小时，第 2～3 天 10.9，第 4～7 天 18.5；每 4 小时回访一次，只有 62% 的回访有东西可看。
+- 研究：第 1～6 次在第 2、4.5、30、55、62、66 小时，之后 8 个种子里只有 3 个做到第 7 次。
+- 规章代做的比例从第一天 11% 升到第七天 36%。
+
 ## 合格区间
 
 `engine/eval/bands.json` 的格式：
@@ -100,6 +162,7 @@ L1 指标（`calibrate` 输出）：
 - `personas` 为空表示对所有人格都适用。
 - `missing_fails`：缺值当 +∞ 算并判失败，适合到达时间这类指标。不设时，统计量落在缺值上就显示 `n/a`，不判失败（比如地图边缘外没有“下一环”）。
 - `check` 有一项失败就以退出码 1 结束。
+- `"watch": true`：只观察，不过也只显示 `watch`、不判失败。给还在校准的指标（如爽点间隔）先挂一条区间看走势。
 - **读法**：同一条区间，所有人格都不过，问题在数值；只有部分人格不过，问题在策略，或者区间设在了不该设的指标上（思路同 Riot 的“任一玩家群体超上限就算过强，所有群体都低于下限才算过弱”）。
 
 当前的区间全部是**提议**，来自 `docs/balance-curves-research.md` 的目标表，还没确认：
@@ -201,6 +264,8 @@ L1 实战（`calibrate field greedy`，机器人第 6/12/24/48 小时的真实�
 6. **战斗相关的**：在 `calibrate` 里加一个开关对照（像 `no_doctrines`），用“开 vs 关”的胜率差给它定价；如果它改变了 AUC 或 ρ50，说明指数需要加项。
 7. **模型**：新职业、新敌人跑 `eval model` 量出系数；改了战斗或节奏规则，先用 `eval pace --patch` 算预期，再用机器人验证，模型和实测差超过两成就要补模型。
 8. **玩家看得到的**：按 `CLAUDE.md` 同步文字版。
+9. **爽点声明**：新的事件 key 在 `engine/eval/payoff_classes.json` 里归类（爽点类别和级别，或明确记为不算），`cargo test` 会拦没归类的；新的成长线要能在时间轴上出现（`payoff.lines.*`）。
+10. **指标登记**：新指标 id 写进 `engine/eval/metrics.json`。
 
 ## 已定
 
