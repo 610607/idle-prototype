@@ -22,6 +22,9 @@
 - [balance-model.md](balance-model.md)：数值数学模型——战斗“两道检查”和节奏模型（每格耗时 × 格数），用机器人实测检验。本仓库直接写成。
 - [balance-curves-research.md](balance-curves-research.md)：数值曲线调研——其他游戏怎么用主曲线给数值定价，拿来量本仓库。本仓库直接写成。
 - [payoff-pacing-research.md](payoff-pacing-research.md)：爽点节奏调研——其他游戏怎么设计和量化爽点（里程碑倍率、新系统、自动化、墙与突破、轮回），以及爽点事件时间轴的模型和指标提议、一周骨架草案。本仓库直接写成。
+- [eval-interface.md](eval-interface.md)：评估接口——试玩会话协议（观察、行动、日程、打分维度）、会话目录格式、`eval session` 重放和 `llm.*` 指标、协议版本和稳健性测试；其他模型由各自的 harness 接入。本仓库直接写成。
+- [prompts/](prompts/README.md)：提示词模板——试玩玩家、读评估报告的分析员、新系统的声明起草；各模型的 harness 读模板填变量，仓库不放调用模型的代码。本仓库直接写成。
+- [game-issues.md](game-issues.md)：游戏本体问题记录——评估工具和试玩查出来、还没改的问题（节奏、成长、爽点分布、防守、规则漏洞），附数据来源。本仓库直接写成。
 
 ## 调研
 

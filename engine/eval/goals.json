@@ -1,0 +1,180 @@
+{
+  "_doc": "设计目标（docs/balance-eval.md §评估者）。每条目标用一句话写体验，绑定几项指标的区间。kind：experience 是游戏该有的样子，selfcheck 是评估工具自己还可信。level：gate 不过就让 check / review 以退出码 1 结束；watch 只报告。checks 的格式同旧 bands.json：{指标 id: [{stat, min, max, personas, missing_fails, watch}]}；personas 为空表示所有人格，以 * 结尾表示前缀（如 llm:*）。全部是草案，区间要逐条确认。",
+  "goals": [
+    {
+      "id": "week_cycle",
+      "kind": "experience",
+      "level": "gate",
+      "text": "一轮约一周：参考玩家进第 r 环的时间接近 τ_r = 4r(r−1)+1 小时（±20%）",
+      "doc": "docs/balance-eval.md 已定；docs/balance-model.md 节奏",
+      "checks": {
+        "reach_h.r1": [{ "stat": "p50", "min": 0.8, "max": 1.2, "missing_fails": true, "personas": ["greedy"] }],
+        "reach_h.r2": [{ "stat": "p50", "min": 7.2, "max": 10.8, "missing_fails": true, "personas": ["greedy"] }],
+        "reach_h.r3": [{ "stat": "p50", "min": 20, "max": 30, "missing_fails": true, "personas": ["greedy"] }],
+        "reach_h.r4": [{ "stat": "p50", "min": 39.2, "max": 58.8, "missing_fails": true, "personas": ["greedy"] }],
+        "reach_h.r5": [{ "stat": "p50", "min": 64.8, "max": 97.2, "missing_fails": true, "personas": ["greedy"] }],
+        "reach_h.r6": [{ "stat": "p50", "min": 96.8, "max": 145.2, "missing_fails": true, "personas": ["greedy"] }],
+        "reach_h.r7": [{ "stat": "p50", "min": 135.2, "max": 202.8, "personas": ["greedy"], "watch": true }]
+      }
+    },
+    {
+      "id": "combat_gate",
+      "kind": "experience",
+      "level": "gate",
+      "text": "扩张由战斗强度卡：下一环有一部分打得过、再下一环大多打不过，一轮里有墙要破",
+      "doc": "docs/balance-eval.md 已定；docs/balance-model.md 反推",
+      "checks": {
+        "frontier_win.h24": [{ "stat": "p50", "min": 0.3, "max": 0.8 }],
+        "deep_win.h24": [{ "stat": "p50", "max": 0.3 }],
+        "payoff.wall.count": [{ "stat": "p50", "min": 1, "watch": true }],
+        "payoff.frontier.margin.h72": [{ "stat": "p50", "max": 1.5, "watch": true }],
+        "payoff.frontier.margin.h120": [{ "stat": "p50", "max": 1.5, "watch": true }]
+      }
+    },
+    {
+      "id": "growth_in_cycle",
+      "kind": "experience",
+      "level": "watch",
+      "text": "局内有成长：研究是主线，一周能研究约 9 次，小队强度在一轮里明显变强",
+      "doc": "docs/payoff-pacing-research.md 八、一周骨架；docs/balance-model.md 研究时刻",
+      "checks": {
+        "research.draws": [{ "stat": "p50", "min": 9 }],
+        "payoff.growth.power": [{ "stat": "p50", "min": 1 }],
+        "payoff.research.ladder_gain": [{ "stat": "p50", "min": 1 }]
+      }
+    },
+    {
+      "id": "hook",
+      "kind": "experience",
+      "level": "watch",
+      "text": "开局 1 小时内就有可感的收获",
+      "doc": "docs/payoff-pacing-research.md 七、指标和候选区间",
+      "checks": {
+        "payoff.hook_h": [{ "stat": "p50", "max": 1, "missing_fails": true }]
+      }
+    },
+    {
+      "id": "every_visit",
+      "kind": "experience",
+      "level": "watch",
+      "text": "每次回来都有东西可看：每 4 小时、每 8 小时回访一次，大多数回访窗口里有可感爽点",
+      "doc": "docs/payoff-pacing-research.md 七、指标和候选区间",
+      "checks": {
+        "payoff.visit_hit.h4": [{ "stat": "p50", "min": 0.8 }],
+        "payoff.visit_hit.h8": [{ "stat": "p50", "min": 0.9 }]
+      }
+    },
+    {
+      "id": "peaks_rise",
+      "kind": "experience",
+      "level": "watch",
+      "text": "爽点峰值不递减：后几天每天都有“大”爽点，最后一天有全轮的高潮",
+      "doc": "docs/payoff-pacing-research.md 七、八",
+      "checks": {
+        "payoff.peak_rank": [{ "stat": "p50", "min": 0 }],
+        "payoff.finale": [{ "stat": "p50", "min": 0.5 }],
+        "payoff.gap_max_h.big.d4_7": [{ "stat": "p50", "max": 24 }]
+      }
+    },
+    {
+      "id": "novelty_paced",
+      "kind": "experience",
+      "level": "watch",
+      "text": "新东西先密后疏但不断档：第 2、3 天还有新系统，后几天至少两条成长线在给爽点",
+      "doc": "docs/payoff-pacing-research.md 三、七",
+      "checks": {
+        "payoff.novelty.d2": [{ "stat": "p50", "min": 1 }],
+        "payoff.novelty.d3": [{ "stat": "p50", "min": 1 }],
+        "payoff.lines.d4_7": [{ "stat": "p50", "min": 2 }]
+      }
+    },
+    {
+      "id": "defense",
+      "kind": "experience",
+      "level": "gate",
+      "text": "防线大体守得住：来潮偶尔失守，内圈几乎不丢",
+      "doc": "docs/balance-curves-research.md 目标表",
+      "checks": {
+        "surge_lost.all": [{ "stat": "p50", "min": 0.10, "max": 0.25 }],
+        "surge_lost.inside": [{ "stat": "p50", "max": 0.05 }]
+      }
+    },
+    {
+      "id": "economy_flow",
+      "kind": "experience",
+      "level": "gate",
+      "text": "资源有处花、不堆积：库存折合几小时收入，最长的“无事可花”不超过 4 小时",
+      "doc": "docs/balance-curves-research.md 目标表",
+      "checks": {
+        "stock_h.scrap.h72": [{ "stat": "p50", "min": 2, "max": 10 }],
+        "spend_gap.max_h": [{ "stat": "p50", "max": 4 }]
+      }
+    },
+    {
+      "id": "three_lines",
+      "kind": "experience",
+      "level": "gate",
+      "text": "管理、防守、探索三项成果都有分量",
+      "doc": "docs/balance-curves-research.md 目标表",
+      "checks": {
+        "share.management": [{ "stat": "p50", "min": 0.20, "max": 0.45 }],
+        "share.defense": [{ "stat": "p50", "min": 0.20, "max": 0.45 }],
+        "share.exploration": [{ "stat": "p50", "min": 0.20, "max": 0.45 }]
+      }
+    },
+    {
+      "id": "score_curve",
+      "kind": "experience",
+      "level": "watch",
+      "text": "成果速率的峰值落在一轮中段，开头不是最快的时候（区间按 72 小时一轮定，一周一轮要重定）",
+      "doc": "docs/balance-curves-research.md 目标表",
+      "checks": {
+        "score_rate.peak_h": [{ "stat": "p50", "min": 48, "max": 96 }],
+        "score_rate.h24_vs_peak": [{ "stat": "p50", "max": 0.7 }]
+      }
+    },
+    {
+      "id": "llm_feel",
+      "kind": "experience",
+      "level": "watch",
+      "text": "试玩玩家每个阶段都有惊喜，后几天也觉得在变强",
+      "doc": "docs/eval-interface.md；docs/llm-playtest.md",
+      "checks": {
+        "llm.feel.d1.delight": [{ "stat": "p50", "min": 0.2, "personas": ["llm:*"] }],
+        "llm.feel.d2_3.delight": [{ "stat": "p50", "min": 0.2, "personas": ["llm:*"] }],
+        "llm.feel.d4_7.delight": [{ "stat": "p50", "min": 0.2, "personas": ["llm:*"] }],
+        "llm.score.growth.d4_7": [{ "stat": "p50", "min": 3, "personas": ["llm:*"] }]
+      }
+    },
+    {
+      "id": "model_agrees",
+      "kind": "selfcheck",
+      "level": "gate",
+      "text": "数学模型和机器人实测差不超过两成（超了要补模型或写明原因）",
+      "doc": "CLAUDE.md 数值评估；docs/balance-model.md",
+      "checks": {
+        "payoff.model_ratio.research": [{ "stat": "p50", "min": 0.8, "max": 1.2, "personas": ["greedy"] }]
+      }
+    },
+    {
+      "id": "payoff_calibrated",
+      "kind": "selfcheck",
+      "level": "watch",
+      "text": "爽点分级贴近玩家感觉：有可感爽点的回访比没有的更常被记为惊喜",
+      "doc": "docs/eval-interface.md llm.* 指标",
+      "checks": {
+        "llm.delight_lift": [{ "stat": "p50", "min": 0.1, "personas": ["llm:*"] }]
+      }
+    },
+    {
+      "id": "interface_usable",
+      "kind": "selfcheck",
+      "level": "watch",
+      "text": "试玩接口好用：玩家提交的行动很少失败",
+      "doc": "docs/eval-interface.md llm.invalid",
+      "checks": {
+        "llm.invalid": [{ "stat": "p50", "max": 0.2, "personas": ["llm:*"] }]
+      }
+    }
+  ]
+}

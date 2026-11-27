@@ -386,10 +386,10 @@ pub fn replay_dirs(dirs: &[PathBuf], threads: usize) -> Result<(RunFile, Vec<Out
         });
         results.push((r.seed, r.metrics, r.commands));
     }
-    Ok((
-        RunFile::collect(persona_of(&player), end / 3600, results),
-        outcomes,
-    ))
+    let mut f = RunFile::collect(persona_of(&player), end / 3600, results);
+    // The build the replays ran on (a stale session was played on another one).
+    f.build = Some(idle_engine::content::fingerprint());
+    Ok((f, outcomes))
 }
 
 #[cfg(test)]
@@ -434,6 +434,7 @@ mod tests {
         assert_eq!(out[0].digest, proto::save_digest(&g.e.save()));
         assert_eq!(f.persona, "greedy");
         assert_eq!(f.hours, hours);
+        assert_eq!(f.build, Some(idle_engine::content::fingerprint()));
         assert!(f.metrics.contains_key("owned.h12"));
         assert!(!f.metrics.keys().any(|k| k.starts_with("llm.")));
         // The one id a replay adds.

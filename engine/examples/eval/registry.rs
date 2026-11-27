@@ -88,19 +88,6 @@ mod tests {
     }
 
     #[test]
-    fn bands_use_registered_ids() {
-        let reg = load();
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/eval/bands.json");
-        let bands: std::collections::BTreeMap<String, serde_json::Value> =
-            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        let bad: Vec<&String> = bands.keys().filter(|id| find(&reg, id).is_none()).collect();
-        assert!(
-            bad.is_empty(),
-            "bands.json ids not in eval/metrics.json: {bad:?}"
-        );
-    }
-
-    #[test]
     fn a_short_run_writes_only_registered_ids() {
         let reg = load();
         let m = crate::run::play_full(0, crate::run::Persona::REFERENCE, 6).0;

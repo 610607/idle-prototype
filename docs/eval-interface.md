@@ -149,7 +149,7 @@ cargo run --release --example eval -- session DIR… [--out RUN.json]
 cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --sessions OUTDIR   # 机器人也写会话目录：OUTDIR/<人格>-s<种子>/
 ```
 
-`eval session` 对每个会话目录：读 manifest 和命令日志，从同一个种子开局，按时刻重放命令，期间和 `eval run` 一样每 5 分钟记一次测量，算出同名的全部指标（`owned.h*`、`reach_h.*`、`payoff.*`……）；再从 visits.jsonl 算 `llm.*` 指标。结果是一个 RunFile，人格名 `llm:<player>`（`player` 本身是机器人人格名时就用人格名，如 `greedy`），可以直接 `eval check`、`eval compare`（和同种子的 `greedy` 比）。
+`eval session` 对每个会话目录：读 manifest 和命令日志，从同一个种子开局，按时刻重放命令，期间和 `eval run` 一样每 5 分钟记一次测量，算出同名的全部指标（`owned.h*`、`reach_h.*`、`payoff.*`……）；再从 visits.jsonl 算 `llm.*` 指标。结果是一个 RunFile，人格名 `llm:<player>`（`player` 本身是机器人人格名时就用人格名，如 `greedy`），可以直接 `eval check`、`eval compare`（和同种子的 `greedy` 比），也可以和机器人的结果一起交给 `eval review`。
 
 重放的细节（代码在 `engine/examples/eval/run.rs` 的 `measure` 和 `Replay`、`session.rs`）：
 
@@ -201,9 +201,11 @@ cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --session
     - 改掉 final.json 的 `save_sha`：判为过期，只剩 `llm.feel.*`、`llm.score.*` 和 `session.stale` = 1。
     - `protocol` 为 2 的 manifest 报错；没有 final.json 的目录跳过；不同玩家、同一种子两次都报错。
   - 事件分类棘轮：`locales/zh-CN/events.json` 里每个事件 key 都要在 `engine/eval/payoff_classes.json` 里有归类（爽点类别和级别，或明确记为“不算”）。新事件不归类，测试就失败，这就是“新系统怎么接入”清单里的爽点声明。
-  - 指标注册表：`engine/eval/metrics.json` 登记每个指标 id 的模式、类别（局面探针 / 结果量 / 自选样本）和一句说明。`eval run` 产出的 id、`bands.json` 里的 id 都必须能在注册表里找到；改名或拼错立刻失败。`eval metrics` 打印注册表，给人和模型读结果时查。
+  - 指标注册表：`engine/eval/metrics.json` 登记每个指标 id 的模式、类别（局面探针 / 结果量 / 自选样本）和一句说明。`eval run` 产出的 id、`goals.json` 里引用的 id 都必须能在注册表里找到；改名或拼错立刻失败。`eval metrics` 打印注册表，给人和模型读结果时查。
 
 ## 附录：试玩提示要点
+
+完整的玩家提示词模板见 `docs/prompts/player.md`，下面是要点。
 
 - 只许用 `agent_cli session` 这几条命令，不读仓库。
 - 每次：`obs` 看局面 → 决定 → `act`（带 `--feel` 和 `--why`）。`need` 为 `scores` 时先打分。

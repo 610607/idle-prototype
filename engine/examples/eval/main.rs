@@ -4,7 +4,8 @@
 //! ```text
 //! cargo run --release --example eval -- run [persona] [--seeds N] [--hours H] [--patch JSON] [--out FILE] [--sessions OUTDIR]
 //! cargo run --release --example eval -- session DIR… [--out FILE]   # replay play sessions (docs/eval-interface.md)
-//! cargo run --release --example eval -- check FILE [BANDS]       # bands default: eval/bands.json
+//! cargo run --release --example eval -- check FILE [GOALS]       # goal checks (eval/goals.json)
+//! cargo run --release --example eval -- review RUN… [--base FILE] [--out REPORT.md] [--bless]   # the evaluator
 //! cargo run --release --example eval -- compare A B              # paired by seed, 90% bootstrap CI
 //! cargo run --release --example eval -- numbers                  # L0: encounter curve D(r)
 //! cargo run --release --example eval -- calibrate [lab|field] [persona] [--seeds N]   # L1
@@ -27,6 +28,7 @@ mod payoff;
 mod power;
 mod price;
 mod registry;
+mod review;
 mod run;
 mod session;
 mod stats;
@@ -36,8 +38,6 @@ mod strength;
 mod synergy;
 
 use run::{Persona, RunFile};
-use serde::Deserialize;
-use std::collections::BTreeMap;
 
 fn arg(args: &[String], name: &str) -> Option<String> {
     args.iter()
@@ -101,77 +101,6 @@ fn print_summary(f: &RunFile) {
     println!("commands.never {unused:?}");
 }
 
-/// A pass band on one statistic of one metric across seeds.
-#[derive(Deserialize)]
-struct Band {
-    /// "p10", "p50" or "p90".
-    stat: String,
-    #[serde(default)]
-    min: Option<f64>,
-    #[serde(default)]
-    max: Option<f64>,
-    /// Personas this band applies to; empty = all.
-    #[serde(default)]
-    personas: Vec<String>,
-    /// A seed without a value (`None`) counts as +∞ and fails the band: right for time-to-event
-    /// metrics (never reached). Without it, a statistic that lands on a missing value reads `n/a`
-    /// (nothing to measure, e.g. no ring past the map's edge) and does not fail.
-    #[serde(default)]
-    missing_fails: bool,
-    /// Observation only: reported (`watch` when outside the band) but never fails the check. For
-    /// metrics whose band is a candidate still to calibrate (the `payoff.*` shape checks).
-    #[serde(default)]
-    watch: bool,
-}
-
-fn check(f: &RunFile, bands_path: &str) -> bool {
-    let text = std::fs::read_to_string(bands_path).unwrap_or_else(|e| panic!("{bands_path}: {e}"));
-    let bands: BTreeMap<String, Vec<Band>> =
-        serde_json::from_str(&text).unwrap_or_else(|e| panic!("{bands_path}: {e}"));
-    let mut ok = true;
-    println!("# check {} against {bands_path}", f.persona);
-    for (id, list) in &bands {
-        for b in list {
-            if !b.personas.is_empty() && !b.personas.contains(&f.persona) {
-                continue;
-            }
-            let Some(v) = f.metrics.get(id) else {
-                println!("{:<5} {id} (no such metric)", "n/a");
-                continue;
-            };
-            let s = stats::summary(v);
-            let x = match b.stat.as_str() {
-                "p10" => s.p10,
-                "p50" => s.p50,
-                "p90" => s.p90,
-                other => panic!("{bands_path}: {id}: unknown stat {other}"),
-            };
-            let pass = b.min.is_none_or(|lo| x >= lo) && b.max.is_none_or(|hi| x <= hi);
-            let na = x.is_infinite() && !b.missing_fails;
-            ok &= pass || na || b.watch;
-            println!(
-                "{:<5} {id} {} = {} in [{}, {}]  ({}/{} seeds)",
-                if na {
-                    "n/a"
-                } else if pass {
-                    "pass"
-                } else if b.watch {
-                    "watch"
-                } else {
-                    "FAIL"
-                },
-                b.stat,
-                fmt(x),
-                b.min.map(fmt).unwrap_or("-".into()),
-                b.max.map(fmt).unwrap_or("-".into()),
-                s.reached,
-                s.n,
-            );
-        }
-    }
-    ok
-}
-
 /// Seed-by-seed differences B − A for every metric both runs have on both sides.
 fn compare(a: &RunFile, b: &RunFile) {
     println!(
@@ -189,29 +118,20 @@ fn compare(a: &RunFile, b: &RunFile) {
         let Some(vb) = b.metrics.get(id) else {
             continue;
         };
-        let diffs: Vec<f64> = a
-            .seeds
-            .iter()
-            .zip(va)
-            .filter_map(|(seed, x)| {
-                let j = b.seeds.iter().position(|s| s == seed)?;
-                Some(vb[j]? - (*x)?)
-            })
-            .collect();
         let (sa, sb) = (stats::summary(va), stats::summary(vb));
         // Seeds with a value on each side: a change in how often something happens at all (first
         // reach of a ring) shows here even though those seeds cannot be paired.
         let has = |s: &stats::Summary| format!("{}/{}", s.reached, s.n);
-        let (med, ci, moved) = if diffs.len() < 3 {
-            ("-".to_string(), "-".to_string(), false)
-        } else {
-            let (med, lo, hi) = stats::paired(&diffs);
-            (
-                fmt(med),
-                format!("[{}, {}]", fmt(lo), fmt(hi)),
-                lo > 0.0 || hi < 0.0,
-            )
+        let d = review::delta(a, b, id);
+        let (med, ci, pairs) = match &d {
+            None => ("-".to_string(), "-".to_string(), 0),
+            Some(d) => (
+                fmt(d.med),
+                format!("[{}, {}]", fmt(d.lo), fmt(d.hi)),
+                d.pairs,
+            ),
         };
+        let moved = d.as_ref().is_some_and(review::Delta::moved);
         println!(
             "{:<28} {:>8} {:>8} {:>9} {:>17}  {:>5} {:>7} {:>7}{}",
             id,
@@ -219,7 +139,7 @@ fn compare(a: &RunFile, b: &RunFile) {
             fmt(sb.p50),
             med,
             ci,
-            diffs.len(),
+            pairs,
             has(&sa),
             has(&sb),
             if moved || sa.reached != sb.reached {
@@ -251,6 +171,7 @@ fn main() {
             let sessions = arg(&args, "--sessions").map(std::path::PathBuf::from);
             let mut f = run::run(persona, &seeds, hours, threads, sessions.as_deref());
             f.patch = patch;
+            f.build = Some(idle_engine::content::fingerprint());
             print_summary(&f);
             if let Some(out) = arg(&args, "--out") {
                 std::fs::write(&out, serde_json::to_string_pretty(&f).unwrap()).unwrap();
@@ -297,11 +218,37 @@ fn main() {
         }
         Some("check") => {
             let f = read_run(args.get(1).expect("run file"));
-            let bands = args
-                .get(2)
-                .cloned()
-                .unwrap_or_else(|| concat!(env!("CARGO_MANIFEST_DIR"), "/eval/bands.json").into());
-            if !check(&f, &bands) {
+            let goals = args.get(2).cloned().unwrap_or(review::GOALS.into());
+            if !review::check(&f, &goals) {
+                std::process::exit(1);
+            }
+        }
+        Some("review") => {
+            let files: Vec<RunFile> = args[1..]
+                .iter()
+                .take_while(|a| !a.starts_with("--"))
+                .map(|p| read_run(p))
+                .collect();
+            assert!(!files.is_empty(), "review: give one or more run files");
+            if args.iter().any(|a| a == "--bless") {
+                std::fs::create_dir_all(review::BASELINE_DIR).unwrap();
+                for f in &files {
+                    let p = review::baseline_path(&f.persona);
+                    std::fs::write(&p, serde_json::to_string_pretty(f).unwrap()).unwrap();
+                    println!("baseline {} → {p}", f.persona);
+                }
+                return;
+            }
+            let base = arg(&args, "--base");
+            let (report, ok) = review::review(&files, base.as_deref(), review::GOALS);
+            match arg(&args, "--out") {
+                Some(out) => {
+                    std::fs::write(&out, &report).unwrap();
+                    println!("→ {out}");
+                }
+                None => print!("{report}"),
+            }
+            if !ok {
                 std::process::exit(1);
             }
         }
@@ -404,7 +351,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: eval run|session|check|compare|numbers|calibrate … (see the top of engine/examples/eval/main.rs)"
+                "usage: eval run|session|check|review|compare|numbers|calibrate … (see the top of engine/examples/eval/main.rs)"
             );
             std::process::exit(2);
         }

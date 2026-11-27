@@ -30,6 +30,8 @@
     { "pattern": "payoff.flip.research.{k}", "class": "probe", "doc": "第 k 次研究让多少格前线由输转赢" },
     { "pattern": "payoff.research.m_max", "class": "probe", "doc": "一轮里单次研究让参考小队模型强度变化的最大 log2 倍数" },
     { "pattern": "payoff.research.flips", "class": "probe", "doc": "一轮里所有研究让前线由输转赢的格数之和" },
+    { "pattern": "payoff.ladder_gain.research.{k}", "class": "probe", "doc": "第 k 次研究让最强小队在固定标尺 56 场遭遇里模拟多赢的场数（之后减之前，可为负）" },
+    { "pattern": "payoff.research.ladder_gain", "class": "probe", "doc": "一轮里所有研究让固定标尺模拟多赢的场数之和" },
     { "pattern": "payoff.gap_max_h.{period}", "class": "result", "doc": "该时段内相邻可感爽点的最长间隔" },
     { "pattern": "payoff.gap_max_h.big.{period}", "class": "result", "doc": "该时段内相邻“大”爽点（tier ≥ 2）的最长间隔" },
     { "pattern": "payoff.gap_p90_h.{period}", "class": "result", "doc": "该时段内相邻可感爽点间隔的 90 分位" },
@@ -44,6 +46,8 @@
     { "pattern": "payoff.power.h{N}", "class": "probe", "doc": "最强小队对固定标尺（第 1～7 环遭遇）的模型强度几何平均" },
     { "pattern": "payoff.growth.power", "class": "probe", "doc": "一轮里模型强度的总增长（log2）" },
     { "pattern": "payoff.sawtooth.power", "class": "probe", "doc": "模型强度增长里来自单次可感跳变的比例" },
+    { "pattern": "payoff.ladder.h{N}", "class": "probe", "doc": "第 N 小时最强小队在固定标尺（第 1～7 环共 56 场遭遇）上模拟能赢的场数，看得到模型看不到的效果类学说" },
+    { "pattern": "payoff.growth.ladder", "class": "probe", "doc": "一轮里固定标尺模拟胜场的总增加（最后一小时减第 1 小时）" },
     { "pattern": "payoff.wall.{stat}", "class": "probe", "doc": "战斗墙：前线一格都打不赢的连续小时（次数、最长、占比、墙内无操作占比、靠研究破墙的比例）" },
     { "pattern": "payoff.frontier.margin.h{N}", "class": "probe", "doc": "最强小队对前线各格的最佳模型强度" },
     { "pattern": "payoff.model_ratio.research", "class": "model", "doc": "研究时刻：实测 ÷ 模型（情报一够就研究），中位数" },
@@ -52,8 +56,8 @@
     { "pattern": "llm.score.{dim}.{stage}", "class": "llm", "doc": "阶段打分（1～5）" },
     { "pattern": "llm.delight_given_felt", "class": "llm", "doc": "回访窗口（上次回访，这次回访]里有可感爽点（tier ≥ 1）时记“惊喜”的比例；会话过期时不输出" },
     { "pattern": "llm.delight_given_none", "class": "llm", "doc": "回访窗口里没有可感爽点时记“惊喜”的比例；会话过期时不输出" },
-    { "pattern": "llm.invalid", "class": "llm", "doc": "行动里失败项的占比（失败项 ÷ 全部行动项）；会话过期时不输出" },
-    { "pattern": "llm.delight_lift", "class": "result", "doc": "有可感爽点的回访比没有的回访多出的惊喜率；越大说明爽点分级越贴近玩家感觉" },
-    { "pattern": "session.stale", "class": "result", "doc": "会话重放后存档指纹对不上（游戏在会话之后改过）：1 是，0 否" }
+    { "pattern": "llm.delight_lift", "class": "llm", "doc": "有可感爽点的回访比没有的回访多出的惊喜率（delight_given_felt − delight_given_none）；越大说明爽点分级越贴近玩家感觉；会话过期时不输出" },
+    { "pattern": "session.stale", "class": "llm", "doc": "会话重放后存档指纹对不上（游戏在会话之后改过）：1 是，0 否" },
+    { "pattern": "llm.invalid", "class": "llm", "doc": "行动里失败项的占比（失败项 ÷ 全部行动项）；会话过期时不输出" }
   ]
 }
