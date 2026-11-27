@@ -596,6 +596,21 @@ export interface TagDef {
   desc: string;
 }
 
+/** The numbers from engine/content/balance.json that the web shows in its own text. */
+export interface Balance {
+  surge_interval: number;
+  tide_horizon: number;
+  trust_policy: number;
+  contiguity_trust: number;
+  contiguity_output_bp: number;
+  housing_capacity: number;
+  warden_max: number;
+  warden_route_win: number;
+  warden_counter_restore: number;
+  warden_counter_restore_clinic: number;
+  org_perks: { archive: number[] };
+}
+
 export interface ContentView {
   tags: TagDef[];
   professions: { id: string; name: string; icon: string }[];

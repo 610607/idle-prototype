@@ -4,6 +4,7 @@
 import init, { WasmEngine } from './pkg/idle_engine.js';
 import wasmUrl from './pkg/idle_engine_bg.wasm?url';
 import type {
+  Balance,
   BattleReport,
   Command,
   ContentView,
@@ -35,17 +36,21 @@ export class Game {
   /** Debug fast-forward: seconds added to the wall clock. Stored with the save. */
   offset: number;
   readonly content: ContentView;
+  /** Balance numbers, for text that quotes them (never write them into components). */
+  readonly balance: Balance;
   loadError: string | null = null;
 
-  private constructor(engine: WasmEngine, offset: number, content: ContentView) {
+  private constructor(engine: WasmEngine, offset: number, content: ContentView, balance: Balance) {
     this.engine = engine;
     this.offset = offset;
     this.content = content;
+    this.balance = balance;
   }
 
   static async boot(): Promise<Game> {
     await init({ module_or_path: wasmUrl });
     const content = JSON.parse(WasmEngine.content()) as ContentView;
+    const balance = JSON.parse(WasmEngine.balance()) as Balance;
     const offset = readOffset();
     let saved: string | null = null;
     try {
@@ -56,14 +61,14 @@ export class Game {
     let loadError: string | null = null;
     if (saved) {
       try {
-        const g = new Game(WasmEngine.load(saved), offset, content);
+        const g = new Game(WasmEngine.load(saved), offset, content, balance);
         g.tick();
         return g;
       } catch (e) {
         loadError = String(e instanceof Error ? e.message : e);
       }
     }
-    const g = new Game(Game.fresh(offset), offset, content);
+    const g = new Game(Game.fresh(offset), offset, content, balance);
     g.loadError = loadError;
     g.persist();
     return g;

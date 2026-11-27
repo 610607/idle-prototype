@@ -330,9 +330,9 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
     {
         let t = &mut state.cycle.tiles[tile as usize];
         if held {
-            t.warden = (t.warden + gain).min(100);
+            t.warden = (t.warden + gain).min(b.warden_max);
         } else {
-            t.warden = (t.warden - b.warden_surge_loss + gain).clamp(0, 100);
+            t.warden = (t.warden - b.warden_surge_loss + gain).clamp(0, b.warden_max);
         }
     }
     let warden_after = state.cycle.tiles[tile as usize].warden;

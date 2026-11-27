@@ -5,7 +5,7 @@
 
 use crate::actions::ActResult;
 use crate::combat::{BattleInput, BattleReport};
-use crate::content::{balance, content, DoctrineDef, TraitEffect};
+use crate::content::{balance, content, DoctrineDef, OrgPerks, TraitEffect};
 use crate::state::*;
 use crate::{i18n, t, txt};
 
@@ -19,7 +19,8 @@ pub fn research_cost(state: &GameState) -> i64 {
 
 pub fn archive_slots(state: &GameState) -> usize {
     let level = crate::sim::org_level(state);
-    balance().archive_slots + (level >= 3) as usize + (level >= 5) as usize
+    let b = balance();
+    b.archive_slots + OrgPerks::count(&b.org_perks.archive, level)
 }
 
 /// Doctrines that can still be drawn this cycle.

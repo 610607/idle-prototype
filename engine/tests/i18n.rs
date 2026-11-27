@@ -239,3 +239,54 @@ fn web_keys_are_their_own() {
         );
     }
 }
+
+/// Numbers in runtime text come from the data as arguments (`balance.json`, content), so
+/// changing a number never leaves a stale sentence behind. Content descriptions
+/// (`content.json`) are not covered yet. Allowed: command examples in the text harness.
+#[test]
+fn runtime_text_quotes_no_numbers() {
+    const EXAMPLES: [&str; 3] = ["cli.run.usage", "cli.menu.other", "cli.info.commands"];
+    let placeholder = |s: &str| -> String {
+        let mut out = String::new();
+        let mut rest = s;
+        while let Some(i) = rest.find('{') {
+            out.push_str(&rest[..i]);
+            match rest[i..].find('}') {
+                Some(j)
+                    if rest[i + 1..i + j]
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_') =>
+                {
+                    rest = &rest[i + j + 1..];
+                }
+                _ => {
+                    out.push('{');
+                    rest = &rest[i + 1..];
+                }
+            }
+        }
+        out + rest
+    };
+    let mut bad = Vec::new();
+    for lang in idle_engine::i18n::locales() {
+        for file in ["engine", "events", "battle", "cli", "web"] {
+            let p = root().join(format!("locales/{lang}/{file}.json"));
+            let map: BTreeMap<String, serde_json::Value> =
+                serde_json::from_str(&fs::read_to_string(&p).unwrap())
+                    .unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+            for (k, v) in map {
+                let Some(s) = v.as_str() else { continue };
+                if !EXAMPLES.contains(&k.as_str())
+                    && placeholder(s).chars().any(|c| c.is_ascii_digit())
+                {
+                    bad.push(format!("{lang}/{file}.json {k}: {s}"));
+                }
+            }
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "numbers written into text; pass them as arguments from the data:\n{}",
+        bad.join("\n")
+    );
+}

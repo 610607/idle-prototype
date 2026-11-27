@@ -145,7 +145,7 @@ function AlertBlock({ t }: { t: TileView }) {
     <div className="card striped bad">
       <Section title={tr('tile.alert.title')} icon="alert" hint={tr('tile.alert.hint')}>
         <p className="small muted" style={{ margin: 0 }}>
-          {tr('tile.alert.body')}
+          {tr('tile.alert.body', { n: game.balance.warden_counter_restore, clinic: game.balance.warden_counter_restore_clinic })}
         </p>
         {report ? (
           <div className="row small" style={{ margin: '8px 0' }}>
@@ -176,7 +176,7 @@ function DefenseBlock({ t }: { t: TileView }) {
     <Section title={tr('tile.defense.title')} icon="garrison" hint={current ? tr('tile.defense.held_by', { name: current.name }) : tr('tile.defense.none')}>
       {tide.length ? (
         <div className="row wrap small" style={{ gap: 6, marginBottom: 8 }}>
-          <span className="muted">{tr('tile.defense.tide')}</span>
+          <span className="muted">{tr('tile.defense.tide', { h: game.balance.tide_horizon / 3600 })}</span>
           {tide.map((e, k) => (
             <span key={k} className={'chip ' + (e.held ? 'good' : 'bad')}>
               <Icon id="wave" size={12} />
@@ -255,7 +255,7 @@ function BuildBlock({ t }: { t: TileView }) {
             <Icon id="housing" size={20} />
             <div className="grow">
               <b>{tr('tile.build.revert')}</b>
-              <div className="small muted">{tr('tile.build.revert_desc')}</div>
+              <div className="small muted">{tr('tile.build.revert_desc', { n: game.balance.housing_capacity })}</div>
             </div>
           </button>
         ) : null}
@@ -356,7 +356,7 @@ function EnemyBlock({ t }: { t: TileView }) {
         ))}
       </div>
       <p className="small muted" style={{ margin: '8px 0' }}>
-        {tr('tile.enemy.help')}
+        {tr('tile.enemy.help', { n: game.balance.warden_route_win, max: game.balance.warden_max })}
       </p>
       <div className="row wrap">
         {view.squads

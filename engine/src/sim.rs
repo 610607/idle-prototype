@@ -4,7 +4,7 @@
 
 use crate::actions;
 use crate::combat::BattleReport;
-use crate::content::{balance, content, Tag};
+use crate::content::{balance, content, OrgPerks, Tag};
 use crate::defense;
 use crate::economy;
 use crate::geom::TILES;
@@ -18,10 +18,12 @@ use crate::{i18n, t, txt};
 use std::collections::BTreeMap;
 
 const HOUR: i64 = 3600;
-pub const ORG_LEVELS: [i64; 7] = [0, 100, 250, 500, 900, 1400, 2000];
-
 pub fn org_level(state: &GameState) -> u32 {
-    ORG_LEVELS.iter().filter(|x| state.org.exp >= **x).count() as u32
+    balance()
+        .org_levels
+        .iter()
+        .filter(|x| state.org.exp >= **x)
+        .count() as u32
 }
 
 pub fn bump_counter(state: &mut GameState, op_id: u32, counter: &str, by: i32) {
@@ -176,15 +178,16 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
     cy.tiles = g.tiles;
     cy.districts = g.districts;
     cy.resources = b.start_resources.clone();
-    if level >= 6 {
-        cy.resources.scrap += b.start_resources.scrap / 2;
-        cy.resources.parts += b.start_resources.parts / 2;
+    let perks = &b.org_perks;
+    if level >= perks.start_bonus {
+        cy.resources.scrap += b.start_resources.scrap * perks.start_bonus_bp / 10_000;
+        cy.resources.parts += b.start_resources.parts * perks.start_bonus_bp / 10_000;
     }
     // 快反规章: the first ring starts fully held.
-    if level >= 3 {
+    if level >= perks.rapid_response {
         for i in 0..TILES as u16 {
             if crate::geom::ring(i) == 1 && cy.tiles[i as usize].claimable_kind() {
-                cy.tiles[i as usize].warden = 100;
+                cy.tiles[i as usize].warden = b.warden_max;
             }
         }
     }
@@ -215,7 +218,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
         op.rest_until = 0;
         ops.push(op);
     }
-    let squads = if level >= 2 { 2 } else { 1 };
+    let squads = 1 + OrgPerks::count(&b.org_perks.squads, level);
     let first: Vec<u32> = ops.iter().take(3).map(|o| o.id).collect();
     let mut sq = Vec::new();
     for k in 0..squads {

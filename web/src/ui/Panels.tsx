@@ -36,14 +36,15 @@ export function CommandPanel() {
   );
 }
 
-/** The next 12 hours as one strip: every surge is a mark, lost ones stand out. */
+/** The forecast window (balance.tide_horizon) as one strip: every surge is a mark, lost ones stand out. */
 export function TideStrip() {
-  const { view, now, open, setFocusTile } = useCtx();
-  const H = 12 * 3600;
+  const { game, view, now, open, setFocusTile } = useCtx();
+  const H = game.balance.tide_horizon;
+  const last = Math.round(H / 3600);
   const W = 480;
   const lost = view.tide.filter((e) => !e.held && !e.skipped).length;
   const x = (t: number) => 4 + ((t - now) / H) * (W - 8);
-  const hours = Array.from({ length: 13 }, (_, k) => k);
+  const hours = Array.from({ length: last + 1 }, (_, k) => k);
   // Stack marks that land on the same few minutes.
   const lanes: number[] = [];
   const marks = view.tide
@@ -59,7 +60,7 @@ export function TideStrip() {
     <div className="tide-strip">
       <div className="head">
         <Icon id="tide" />
-        <h4>{t('panels.tide_strip.title')}</h4>
+        <h4>{t('panels.tide_strip.title', { h: last })}</h4>
         <span className="grow">
           {t('panels.tide_strip.count', { n: view.tide.length })}
           {lost ? <b className="bad">{t('panels.tide_strip.lost', { n: lost })}</b> : <span className="good">{t('panels.tide_strip.all_held')}</span>}
@@ -68,13 +69,13 @@ export function TideStrip() {
           {t('panels.tide_strip.full_table')}
         </button>
       </div>
-      <svg viewBox={`0 0 ${W} 40`} preserveAspectRatio="none" role="img" aria-label={t('panels.tide_strip.aria')}>
+      <svg viewBox={`0 0 ${W} 40`} preserveAspectRatio="none" role="img" aria-label={t('panels.tide_strip.aria', { h: last })}>
         <rect x={0} y={4} width={W} height={22} fill="var(--sunk)" />
         {hours.map((h) => (
           <g key={h}>
             <rect x={x(now + h * 3600) - 0.5} y={h % 4 === 0 ? 4 : 20} width={1} height={h % 4 === 0 ? 22 : 6} fill="var(--line)" />
             {h % 3 === 0 ? (
-              <text x={x(now + h * 3600)} y={38} textAnchor={h === 0 ? 'start' : h === 12 ? 'end' : 'middle'}>
+              <text x={x(now + h * 3600)} y={38} textAnchor={h === 0 ? 'start' : h === last ? 'end' : 'middle'}>
                 {h === 0 ? t('panels.tide_strip.now') : fmtClock(now + h * 3600)}
               </text>
             ) : null}
@@ -214,7 +215,7 @@ export function TideRows({ rows }: { rows: TideView[] }) {
 }
 
 export function TideTable({ limit }: { limit?: number }) {
-  const { view, open } = useCtx();
+  const { game, view, open } = useCtx();
   const rows = limit ? view.tide.slice(0, limit) : view.tide;
   const lostOnly = view.tide.filter((e) => !e.held && !e.skipped);
   const lost = view.tide.filter((e) => !e.held && !e.skipped).length;
@@ -224,7 +225,7 @@ export function TideTable({ limit }: { limit?: number }) {
       icon="tide"
       hint={
         <span>
-          {t('panels.tide.hint', { n: view.tide.length })}
+          {t('panels.tide.hint', { n: view.tide.length, h: game.balance.tide_horizon / 3600 })}
           {lost ? <b className="bad">{t('panels.tide.hint_lost', { n: lost })}</b> : null}
         </span>
       }

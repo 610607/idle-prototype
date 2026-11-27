@@ -535,6 +535,7 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         &mut o,
         t!(
             "cli.board.tide",
+            h = crate::content::balance().tide_horizon / 3600,
             n = v.tide.len(),
             lost = lost.len(),
             list = if lost.is_empty() {
@@ -874,7 +875,10 @@ pub fn info(e: &mut Engine) -> String {
             t!(
                 "cli.info.command",
                 json = serde_json::to_string(&c).unwrap(),
-                desc = t!(&format!("cli.cmd.{name}"))
+                desc = t!(
+                    &format!("cli.cmd.{name}"),
+                    squad_size = crate::content::balance().squad_size
+                )
             ),
         );
     }
@@ -1200,7 +1204,14 @@ pub fn menu_text(e: &mut Engine, items: &[Item]) -> String {
     for (i, it) in items.iter().enumerate() {
         line(&mut o, format!("  {}. {}", i + 1, it.label));
     }
-    line(&mut o, t!("cli.menu.other", sq = sq));
+    line(
+        &mut o,
+        t!(
+            "cli.menu.other",
+            sq = sq,
+            squad_size = crate::content::balance().squad_size
+        ),
+    );
     o
 }
 

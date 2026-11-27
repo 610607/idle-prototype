@@ -10,7 +10,7 @@
   { "id": "silver_tongue", "icon": "trait-talk", "effects": [{ "type": "stat", "hp": 10 }] },
 
   { "id": "resonance", "icon": "trait-resonance", "effects": [{ "type": "resonance", "threshold": 3 }] },
-  { "id": "decoy", "icon": "trait-decoy", "effects": [{ "type": "marked_gain_pp" }] },
+  { "id": "decoy", "icon": "trait-decoy", "effects": [{ "type": "marked_gain_pp", "pp": 1 }] },
   { "id": "shield_burst", "icon": "trait-burst", "effects": [{ "type": "shield_burst", "bp": 6000 }] },
   { "id": "precise", "icon": "trait-gear", "effects": [{ "type": "bonus_vs_tag", "tag": "mark", "bp": 1500 }, { "type": "stat", "spd": 1 }] },
 

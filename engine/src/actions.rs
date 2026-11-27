@@ -25,7 +25,7 @@ pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
     {
         let t = &mut state.cycle.tiles[i];
         t.owned = true;
-        t.warden = 100;
+        t.warden = balance().warden_max;
         t.usage = match (terrain, frozen) {
             (_, Some(u)) => u,
             (Terrain::City, None) => TileUse::Housing,
@@ -341,12 +341,16 @@ pub fn customize(
                 .find(|m| m.class == x && (m.a == profession || m.b == profession))
                 .ok_or_else(|| t!("err.profession_class"))?;
             let other = if m.a == profession { &m.b } else { &m.a };
-            if workers(other) < 4 {
+            if workers(other) < b.customize_base {
                 let on = c
                     .profession(other)
                     .map(|p| p.name.clone())
                     .unwrap_or_default();
-                return Err(t!("err.customize_mixed", profession = on));
+                return Err(t!(
+                    "err.customize_mixed",
+                    profession = on,
+                    n = b.customize_base
+                ));
             }
             x.to_string()
         }
@@ -428,7 +432,8 @@ pub fn retire(state: &mut GameState, op_id: u32) -> ActResult {
                 "event.retired.instructor",
                 name = name,
                 district = state.cycle.districts[d as usize].name.clone(),
-                profession = i18n::name("profession", &p)
+                profession = i18n::name("profession", &p),
+                pct = balance().instructor_talent_bp / 100
             )
         }
         _ => txt!("event.retired.left", name = name),
@@ -591,12 +596,9 @@ pub fn equip(state: &mut GameState, op_id: u32, item: Option<&str>) -> ActResult
 }
 
 pub fn seal(state: &mut GameState, item: &str, on: bool) -> ActResult {
-    let slots = balance().sealed_slots
-        + if crate::sim::org_level(state) >= 5 {
-            1
-        } else {
-            0
-        };
+    let b = balance();
+    let slots = b.sealed_slots
+        + crate::content::OrgPerks::count(&b.org_perks.sealed, crate::sim::org_level(state));
     if on {
         if state.org.sealed.len() >= slots {
             return Err(t!("err.seal_slots", n = slots));
@@ -679,12 +681,8 @@ pub fn set_priority(state: &mut GameState, district: u16, priority: &[String]) -
 }
 
 pub fn pool_cap(state: &GameState) -> usize {
-    balance().pool_cap
-        + if crate::sim::org_level(state) >= 4 {
-            1
-        } else {
-            0
-        }
+    let b = balance();
+    b.pool_cap + crate::content::OrgPerks::count(&b.org_perks.pool, crate::sim::org_level(state))
 }
 
 /// How many border tiles there would be after claiming `tile` (for the safe-claim rule and previews).

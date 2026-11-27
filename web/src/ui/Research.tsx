@@ -113,13 +113,17 @@ function Held() {
 
 /** The 知识库: every doctrine ever researched; a few slots say which ones the next cycle starts with. */
 export function Archive() {
-  const { view, run } = useCtx();
+  const { game, view, run } = useCtx();
   const r = view.research;
   const full = r.archive.length >= r.archive_slots;
   return (
     <Section title={t('research.archive.title')} icon="seal" hint={t('research.archive.hint', { n: r.archive.length, slots: r.archive_slots, have: r.library.length, total: r.total })}>
       {r.library.length === 0 ? (
-        <div className="empty">{t('research.archive.empty')}</div>
+        <div className="empty">
+          {t('research.archive.empty', {
+            levels: game.balance.org_perks.archive.map((n) => t('research.archive.level', { n })).join(t('research.archive.level_sep')),
+          })}
+        </div>
       ) : (
         <div className="small muted" style={{ marginBottom: 6 }}>
           {t('research.archive.note')}

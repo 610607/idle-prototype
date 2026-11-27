@@ -17,9 +17,6 @@ use crate::view::{self, TideView};
 use crate::world;
 use serde::Serialize;
 
-/// How far ahead the tide table looks.
-pub const TIDE_HORIZON: i64 = 12 * 3600;
-
 struct TideCache {
     key: (u64, u32, i64),
     entries: Vec<TideEntry>,
@@ -198,7 +195,7 @@ impl Engine {
                 entries: vec![],
             });
         } else if self.tide.as_ref().map(|c| c.key) != Some(key) {
-            let entries = sim::forecast(&self.state, TIDE_HORIZON);
+            let entries = sim::forecast(&self.state, balance().tide_horizon);
             self.tide = Some(TideCache { key, entries });
         }
         &self.tide.as_ref().unwrap().entries
@@ -314,7 +311,7 @@ impl Engine {
         }
         if a.lost != b.lost || a.held != b.held {
             out.push(Delta {
-                label: t!("delta.tide_lost"),
+                label: t!("delta.tide_lost", h = balance().tide_horizon / 3600),
                 before: t!("delta.times", n = a.lost),
                 after: t!("delta.times", n = b.lost),
                 better: b.lost < a.lost || (b.lost == a.lost && b.held >= a.held),
@@ -456,7 +453,7 @@ impl Engine {
             },
             Ok(()) => {
                 let after_tide = if copy.cycle.phase == Phase::Active {
-                    sim::forecast(&copy, TIDE_HORIZON)
+                    sim::forecast(&copy, balance().tide_horizon)
                 } else {
                     vec![]
                 };

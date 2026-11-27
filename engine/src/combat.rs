@@ -97,8 +97,8 @@ impl Outcome {
     pub fn yield_bp(self) -> i32 {
         match self {
             Outcome::Victory | Outcome::Planned => 10_000,
-            Outcome::Emergency => 6_000,
-            Outcome::Wipe => 3_000,
+            Outcome::Emergency => balance().yield_emergency_bp,
+            Outcome::Wipe => balance().yield_wipe_bp,
         }
     }
 }
@@ -915,7 +915,8 @@ impl<'a> Battle<'a> {
             if stacks <= 0 {
                 continue;
             }
-            let base = ((self.units[i].max_hp as i64 * 400 * stacks as i64) / 10_000).max(2) as i32;
+            let dot = Tag::Erosion.dot_bp();
+            let base = ((self.units[i].max_hp as i64 * dot * stacks as i64) / 10_000).max(2) as i32;
             let cut: i32 = self.units[i]
                 .effects
                 .iter()
@@ -938,6 +939,7 @@ impl<'a> Battle<'a> {
                 let mut f = t!(
                     "battle.formula.erosion",
                     max = self.units[i].max_hp,
+                    pct = pct(dot),
                     stacks = stacks,
                     n = base
                 );
@@ -1480,13 +1482,18 @@ impl<'a> Battle<'a> {
             }
         }
         if landed > 0 && tag == Tag::Mark {
-            if let Some(src) = self.has_effect(u, |e| matches!(e, TraitEffect::MarkedGainPp)) {
-                self.units[u].pp += 1;
+            let gain = self.units[u].effects.iter().find_map(|(s, e)| match e {
+                TraitEffect::MarkedGainPp { pp } => Some((s.clone(), *pp)),
+                _ => None,
+            });
+            if let Some((src, pp)) = gain {
+                self.units[u].pp += pp;
                 if log && self.rec() {
                     let text = t!(
                         "battle.log.marked_pp",
                         name = self.units[u].name,
-                        src = trait_name(&src)
+                        src = trait_name(&src),
+                        n = pp
                     );
                     self.push(
                         LogKind::Tag,
@@ -1703,12 +1710,12 @@ impl<'a> Battle<'a> {
 
         let over = self.units[a].tags[Tag::Overload.idx()] as i64;
         if over > 0 {
-            mul(&mut f, 1500 * over);
+            mul(&mut f, Tag::Overload.dealt_bp() * over);
             if rec {
                 notes.push(t!(
                     "battle.note.self_overload",
                     n = over,
-                    pct = pct(1500 * over)
+                    pct = pct(Tag::Overload.dealt_bp() * over)
                 ));
             }
         }
@@ -1794,24 +1801,32 @@ impl<'a> Battle<'a> {
         let mitigated = raw * 1000 / (1000 + def * 22);
         let shock = self.units[d].tags[Tag::Shock.idx()] as i64;
         let dover = self.units[d].tags[Tag::Overload.idx()] as i64;
-        let mut mult: i64 = 10_000 + 1000 * shock + 800 * dover;
+        let mut mult: i64 =
+            10_000 + Tag::Shock.taken_bp() * shock + Tag::Overload.taken_bp() * dover;
         let mut taken_notes = Vec::new();
         if rec && shock > 0 {
-            taken_notes.push(t!("battle.note.shock", n = shock, pct = pct(1000 * shock)));
+            taken_notes.push(t!(
+                "battle.note.shock",
+                n = shock,
+                pct = pct(Tag::Shock.taken_bp() * shock)
+            ));
         }
         if rec && dover > 0 {
             taken_notes.push(t!(
                 "battle.note.overload",
                 n = dover,
-                pct = pct(800 * dover)
+                pct = pct(Tag::Overload.taken_bp() * dover)
             ));
         }
         if self.units[d].tags[Tag::Fortify.idx()] > 0 {
-            mult = mult * 7000 / 10_000;
+            mult = mult * (10_000 + Tag::Fortify.taken_bp()) / 10_000;
             self.units[d].tags[Tag::Fortify.idx()] -= 1;
             consumed.push((Tag::Fortify, 1));
             if rec {
-                taken_notes.push(t!("battle.note.fortify"));
+                taken_notes.push(t!(
+                    "battle.note.fortify",
+                    pct = pct(Tag::Fortify.taken_bp())
+                ));
             }
         }
         let mut dmg = (mitigated * mult / 10_000).max(1) as i32;

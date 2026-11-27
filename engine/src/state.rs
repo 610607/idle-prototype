@@ -8,7 +8,7 @@ use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SAVE_VERSION: u32 = 3;
+pub const SAVE_VERSION: u32 = 4;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -132,7 +132,7 @@ impl Tile {
         }
     }
     pub fn claimable(&self) -> bool {
-        !self.owned && self.claimable_kind() && self.warden >= 100
+        !self.owned && self.claimable_kind() && self.warden >= crate::content::balance().warden_max
     }
 }
 

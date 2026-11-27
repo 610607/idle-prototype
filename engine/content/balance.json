@@ -64,5 +64,23 @@
   "customize_base": 4,
   "customize_class": 3,
   "customize_lock": 4,
-  "customize_rarity": [0, 1, 4, 10]
+  "customize_rarity": [0, 1, 4, 10],
+  "org_levels": [0, 100, 250, 500, 900, 1400, 2000],
+  "org_perks": {
+    "squads": [2],
+    "archive": [3, 5],
+    "pool": [4],
+    "sealed": [5],
+    "rapid_response": 3,
+    "start_bonus": 6,
+    "start_bonus_bp": 5000
+  },
+  "tide_horizon": 43200,
+  "warden_max": 100,
+  "instructor_talent_bp": 2000,
+  "cache_scrap": 80,
+  "cache_parts": 12,
+  "clue_intel": 25,
+  "yield_emergency_bp": 6000,
+  "yield_wipe_bp": 3000
 }

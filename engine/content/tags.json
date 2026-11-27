@@ -1,8 +1,8 @@
 [
-  { "id": "shock", "icon": "tag-shock", "max": 3 },
+  { "id": "shock", "icon": "tag-shock", "max": 3, "taken_bp": 1000 },
   { "id": "mark", "icon": "tag-mark", "max": 2 },
-  { "id": "overload", "icon": "tag-overload", "max": 3 },
-  { "id": "erosion", "icon": "tag-erosion", "max": 6 },
+  { "id": "overload", "icon": "tag-overload", "max": 3, "dealt_bp": 1500, "taken_bp": 800 },
+  { "id": "erosion", "icon": "tag-erosion", "max": 6, "dot_bp": 400 },
   { "id": "shield", "icon": "tag-shield", "max": 1 },
-  { "id": "fortify", "icon": "tag-fortify", "max": 2 }
+  { "id": "fortify", "icon": "tag-fortify", "max": 2, "taken_bp": -3000 }
 ]

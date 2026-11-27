@@ -114,11 +114,11 @@ fn tile_loot(state: &mut GameState, tile: u16, drops: &mut Vec<String>) -> Resou
             }
         }
         (_, Some(SpecialKind::Cache)) if !t.special_done => {
-            loot.scrap += 80;
-            loot.parts += 12;
+            loot.scrap += b.cache_scrap;
+            loot.parts += b.cache_parts;
         }
         (_, Some(SpecialKind::Clue)) if !t.special_done => {
-            loot.intel += 25;
+            loot.intel += b.clue_intel;
         }
         (_, Some(SpecialKind::Core)) => {}
         _ => loot.scrap += b.loot_city_scrap * r,
@@ -289,24 +289,23 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             && !state.cycle.tiles[i].special_done
         {
             state.cycle.tiles[i].special_done = true;
-            let key = if special == Some(SpecialKind::Cache) {
-                "event.cache"
+            let text = if special == Some(SpecialKind::Cache) {
+                txt!(
+                    "event.cache",
+                    tile = label.clone(),
+                    scrap = b.cache_scrap,
+                    parts = b.cache_parts
+                )
             } else {
-                "event.clue"
+                txt!("event.clue", tile = label.clone(), intel = b.clue_intel)
             };
-            state.event(
-                EventKind::Info,
-                txt!(key, tile = label.clone()),
-                Some(r.tile),
-                None,
-                None,
-            );
+            state.event(EventKind::Info, text, Some(r.tile), None, None);
         }
         let t = &mut state.cycle.tiles[i];
         if !t.owned && t.claimable_kind() {
             let before = t.warden;
-            t.warden = (t.warden + b.warden_route_win).min(100);
-            if before < 100 && t.warden >= 100 {
+            t.warden = (t.warden + b.warden_route_win).min(b.warden_max);
+            if before < b.warden_max && t.warden >= b.warden_max {
                 let key = if t.terrain == crate::state::Terrain::Rift {
                     "event.claimable.rift"
                 } else {
@@ -326,7 +325,7 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
     for &w in &trip.walked {
         if state.cycle.tiles[w as usize].owned && world::is_border(&state.cycle, w) {
             let t = &mut state.cycle.tiles[w as usize];
-            t.warden = (t.warden + b.warden_patrol).min(100);
+            t.warden = (t.warden + b.warden_patrol).min(b.warden_max);
         }
     }
     // Fog.
@@ -376,7 +375,12 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
         let name = state.cycle.squads[si].name.clone();
         state.event(
             EventKind::Trip,
-            txt!(key, squad = name, tile = lost_at),
+            txt!(
+                key,
+                squad = name,
+                tile = lost_at,
+                pct = trip.outcome.yield_bp() / 100
+            ),
             trip.results.last().map(|r| r.tile),
             None,
             rid,

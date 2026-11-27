@@ -382,7 +382,8 @@ export function CandidateSheet({ candidate, onClose }: { candidate: number; onCl
 // ---------------------------------------------------------------------------
 
 export function DistrictSheet({ district, onClose }: { district: number; onClose: () => void }) {
-  const { view, open } = useCtx();
+  const { game, view, open } = useCtx();
+  const b = game.balance;
   const d = view.districts.find((x) => x.id === district)!;
   return (
     <Page
@@ -410,7 +411,7 @@ export function DistrictSheet({ district, onClose }: { district: number; onClose
         {t('sheets.district.summary', {
           owned: d.owned,
           total: d.total,
-          contiguous: d.contiguous ? t('sheets.district.contiguous') : '',
+          contiguous: d.contiguous ? t('sheets.district.contiguous', { output: b.contiguity_output_bp / 100, trust: b.contiguity_trust }) : '',
           population: d.population,
           housing: d.housing,
           employed: d.employed,
@@ -505,7 +506,7 @@ function DistrictPolicy({ d }: { d: DistrictView }) {
   const { game, run } = useCtx();
   const [dry, setDry] = useState<{ id: string | null; r: DryRun } | null>(null);
   return (
-    <Section title={t('sheets.policy.title')} icon="policy" hint={d.policy_unlocked ? (d.policy ? t('sheets.policy.set') : t('sheets.policy.open')) : t('sheets.policy.locked')}>
+    <Section title={t('sheets.policy.title')} icon="policy" hint={d.policy_unlocked ? (d.policy ? t('sheets.policy.set') : t('sheets.policy.open')) : t('sheets.policy.locked', { n: game.balance.trust_policy })}>
       <div className="stack" style={{ gap: 6 }}>
         {d.policy_options.map((p) => (
           <button
@@ -771,11 +772,12 @@ function TripBlock({ squad }: { squad: number }) {
 }
 
 export function TideSheet({ onClose }: { onClose: () => void }) {
-  const { view } = useCtx();
+  const { game, view } = useCtx();
+  const b = game.balance;
   return (
-    <Page title={t('sheets.tide.title')} icon="tide" onClose={onClose}>
+    <Page title={t('sheets.tide.title', { h: b.tide_horizon / 3600 })} icon="tide" onClose={onClose}>
       <p className="small muted" style={{ margin: 0 }}>
-        {t('sheets.tide.intro')}
+        {t('sheets.tide.intro', { h: b.surge_interval / 3600 })}
       </p>
       <TideRows rows={view.tide} />
       {view.modifier ? (

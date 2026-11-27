@@ -310,7 +310,10 @@ pub fn calc(state: &GameState) -> EconCalc {
                 continue;
             }
             let inst = d.instructors.get(p).copied().unwrap_or(0);
-            let mods = 10_000 + training + inst * 2_000 + policy.map(|x| x.talent_bp).unwrap_or(0);
+            let mods = 10_000
+                + training
+                + inst * b.instructor_talent_bp
+                + policy.map(|x| x.talent_bp).unwrap_or(0);
             let rate =
                 (*w as i64 * 100 * trust_bp as i64 / 10_000 * mods.max(0) as i64 / 10_000) as i32;
             dc.talent_rate.insert(p.clone(), rate);

@@ -307,7 +307,7 @@ pub fn generate(seed: u64, modifier: &str) -> GeneratedMap {
         match t.terrain {
             Terrain::Hq => {
                 t.owned = true;
-                t.warden = 100;
+                t.warden = balance().warden_max;
                 t.revealed = true;
                 t.usage = TileUse::None;
             }

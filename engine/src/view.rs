@@ -2,7 +2,7 @@
 //! they render these and send commands back.
 
 use crate::actions;
-use crate::content::{balance, content, Gambit, Resources, Stat, Tag, Trigger};
+use crate::content::{balance, content, Gambit, OrgPerks, Resources, Stat, Tag, Trigger};
 use crate::economy::{self, EconCalc};
 use crate::geom::{self, ring, TILES};
 use crate::operative::{self, Derived, RARITY_NAMES};
@@ -267,12 +267,16 @@ fn customize_view(state: &GameState, dc: &economy::DistrictCalc) -> CustomizeVie
             let mut classes = vec![class_entry(&p.class, false, None)];
             for m in c.mixed.iter().filter(|m| m.a == p.id || m.b == p.id) {
                 let other = if m.a == p.id { &m.b } else { &m.a };
-                let reason = (workers(other) < 4).then(|| {
+                let reason = (workers(other) < b.customize_base).then(|| {
                     let on = c
                         .profession(other)
                         .map(|x| x.name.clone())
                         .unwrap_or_default();
-                    t!("view.customize.need_partner", prof = on, n = 4)
+                    t!(
+                        "view.customize.need_partner",
+                        prof = on,
+                        n = b.customize_base
+                    )
                 });
                 classes.push(class_entry(&m.class, true, reason));
             }
@@ -895,6 +899,54 @@ pub fn tide_view(entries: &[TideEntry]) -> Vec<TideView> {
         .collect()
 }
 
+/// What each organisation level unlocks, from `balance.org_perks` and the doctrines' levels.
+fn perks(level: u32) -> Vec<PerkView> {
+    let b = balance();
+    let p = &b.org_perks;
+    let mut out = Vec::new();
+    for l in 2..=b.org_levels.len() as u32 {
+        let at = |list: &[u32]| list.iter().filter(|&&x| x == l).count();
+        let mut row = |text: String| {
+            out.push(PerkView {
+                level: l,
+                text,
+                unlocked: level >= l,
+            })
+        };
+        if at(&p.squads) > 0 {
+            row(t!(
+                "view.perk.squads",
+                n = 1 + OrgPerks::count(&p.squads, l)
+            ));
+        }
+        if p.rapid_response == l {
+            row(t!("view.perk.rapid_response"));
+        }
+        if at(&p.pool) > 0 {
+            row(t!("view.perk.pool", n = at(&p.pool)));
+        }
+        if at(&p.sealed) > 0 {
+            row(t!("view.perk.sealed", n = at(&p.sealed)));
+        }
+        if at(&p.archive) > 0 {
+            row(t!("view.perk.archive", n = at(&p.archive)));
+        }
+        if p.start_bonus == l {
+            row(t!("view.perk.start_bonus", pct = p.start_bonus_bp / 100));
+        }
+        let doctrines: String = content()
+            .doctrines
+            .iter()
+            .filter(|d| d.level == l)
+            .map(|d| t!("view.perk.doctrine", name = d.name))
+            .collect();
+        if !doctrines.is_empty() {
+            row(t!("view.perk.doctrines", list = doctrines));
+        }
+    }
+    out
+}
+
 pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     let c = content();
     let b = balance();
@@ -903,7 +955,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     let org = OrgView {
         level,
         exp: state.org.exp,
-        next: sim::ORG_LEVELS.get(level as usize).copied(),
+        next: b.org_levels.get(level as usize).copied(),
         cycles: state.org.cycles,
         rules: c
             .rules
@@ -946,43 +998,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 }
             })
             .collect(),
-        perks: vec![
-            PerkView {
-                level: 2,
-                text: t!("view.perk.l2_squad"),
-                unlocked: level >= 2,
-            },
-            PerkView {
-                level: 2,
-                text: t!("view.perk.l2_doctrines"),
-                unlocked: level >= 2,
-            },
-            PerkView {
-                level: 3,
-                text: t!("view.perk.l3_rapid_response"),
-                unlocked: level >= 3,
-            },
-            PerkView {
-                level: 3,
-                text: t!("view.perk.l3_archive"),
-                unlocked: level >= 3,
-            },
-            PerkView {
-                level: 4,
-                text: t!("view.perk.l4_recruit"),
-                unlocked: level >= 4,
-            },
-            PerkView {
-                level: 5,
-                text: t!("view.perk.l5_sealed"),
-                unlocked: level >= 5,
-            },
-            PerkView {
-                level: 6,
-                text: t!("view.perk.l6_materials"),
-                unlocked: level >= 6,
-            },
-        ],
+        perks: perks(level),
         history: state.org.history.clone(),
         sealed_slots: b.sealed_slots + if level >= 5 { 1 } else { 0 },
     };
@@ -1331,7 +1347,11 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     if losing.len() > SHOWN_PER_KIND {
         pending.push(PendingView {
             kind: "defend_more",
-            text: t!("view.pending.defend_more", n = losing.len()),
+            text: t!(
+                "view.pending.defend_more",
+                n = losing.len(),
+                h = balance().tide_horizon / 3600
+            ),
             tile: None,
             op: None,
             candidate: None,

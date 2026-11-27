@@ -47,7 +47,22 @@ impl Tag {
     }
 
     pub fn max(self) -> i32 {
-        content().tag_max[self.idx()]
+        content().tag_num[self.idx()].max
+    }
+
+    /// Damage taken per stack, x10000 (negative = less).
+    pub fn taken_bp(self) -> i64 {
+        content().tag_num[self.idx()].taken_bp as i64
+    }
+
+    /// Damage dealt per stack, x10000.
+    pub fn dealt_bp(self) -> i64 {
+        content().tag_num[self.idx()].dealt_bp as i64
+    }
+
+    /// Damage at the start of each round per stack, x10000 of max HP.
+    pub fn dot_bp(self) -> i64 {
+        content().tag_num[self.idx()].dot_bp as i64
     }
 
     pub fn name(self) -> String {
@@ -398,7 +413,9 @@ pub enum TraitEffect {
     ShieldBurst {
         bp: i32,
     },
-    MarkedGainPp,
+    MarkedGainPp {
+        pp: i32,
+    },
     LowHpBonus {
         below: i32,
         bp: i32,
@@ -452,7 +469,7 @@ impl TraitEffect {
                 .filter(|t| *t != Tag::Shield)
                 .collect(),
             TraitEffect::ShieldBurst { .. } => vec![Tag::Shield],
-            TraitEffect::MarkedGainPp => vec![Tag::Mark],
+            TraitEffect::MarkedGainPp { .. } => vec![Tag::Mark],
             TraitEffect::Transmute { from, .. } => vec![*from],
             TraitEffect::Overflow | TraitEffect::ConsumeBurst { .. } => Tag::ALL
                 .iter()
@@ -951,7 +968,7 @@ pub struct Balance {
     pub reroll_base: i64,
     #[serde(default = "default_reroll_step")]
     pub reroll_step: i64,
-    /// 知识库 slots at organisation level 1 (+1 at levels 3 and 5).
+    /// 知识库 slots at organisation level 1 (more from `org_perks.archive`).
     #[serde(default = "default_archive_slots")]
     pub archive_slots: usize,
     /// Cycle score: one point per this many residents.
@@ -964,6 +981,43 @@ pub struct Balance {
     pub customize_class: i32,
     pub customize_lock: i32,
     pub customize_rarity: [i32; 4],
+    /// Organisation experience needed for each level (level 1 at the first entry).
+    pub org_levels: Vec<i64>,
+    pub org_perks: OrgPerks,
+    /// Surge forecast (tide table, pending warnings, previews), seconds ahead.
+    pub tide_horizon: i64,
+    /// Full warden: a tile can be claimed, counter-attacks restore towards it.
+    pub warden_max: i32,
+    /// Talent gain per retired instructor of that profession in the district, x10000.
+    pub instructor_talent_bp: i32,
+    pub cache_scrap: i64,
+    pub cache_parts: i64,
+    pub clue_intel: i64,
+    /// Share of a trip's loot brought back after an emergency retreat / a wipe, x10000.
+    pub yield_emergency_bp: i32,
+    pub yield_wipe_bp: i32,
+}
+
+/// What each organisation level unlocks. A list gives +1 for every entry at or below the level
+/// (so `[3, 5]` is +1 from level 3 and +2 from level 5).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OrgPerks {
+    pub squads: Vec<u32>,
+    pub archive: Vec<u32>,
+    pub pool: Vec<u32>,
+    pub sealed: Vec<u32>,
+    /// From this level the first ring starts fully held (快反规章).
+    pub rapid_response: u32,
+    /// From this level a cycle starts with extra materials, x10000 of the start amount.
+    pub start_bonus: u32,
+    pub start_bonus_bp: i64,
+}
+
+impl OrgPerks {
+    /// Entries of `list` at or below `level`.
+    pub fn count(list: &[u32], level: u32) -> usize {
+        list.iter().filter(|&&l| l <= level).count()
+    }
 }
 
 fn default_research_base() -> i64 {
@@ -1023,6 +1077,19 @@ pub enum ReactionEffect {
     ExtraAction,
 }
 
+/// A tag's numbers, per stack (see `Tag::taken_bp` and friends). Unused ones stay 0.
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TagNum {
+    #[serde(skip)]
+    pub max: i32,
+    #[serde(default)]
+    pub taken_bp: i32,
+    #[serde(default)]
+    pub dealt_bp: i32,
+    #[serde(default)]
+    pub dot_bp: i32,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TagDef {
     pub id: Tag,
@@ -1030,6 +1097,8 @@ pub struct TagDef {
     pub name: String,
     pub icon: String,
     pub max: i32,
+    #[serde(flatten)]
+    pub num: TagNum,
     #[serde(default)]
     pub desc: String,
 }
@@ -1040,7 +1109,7 @@ pub struct TagDef {
 
 pub struct Content {
     pub tags: Vec<TagDef>,
-    pub tag_max: [i32; 6],
+    pub tag_num: [TagNum; 6],
     pub skills: BTreeMap<String, SkillDef>,
     pub traits: BTreeMap<String, TraitDef>,
     pub exp_traits: Vec<ExpTraitDef>,
@@ -1104,9 +1173,15 @@ fn parse<T: for<'de> Deserialize<'de>>(name: &str, text: &str) -> T {
 
 fn load() -> Content {
     let tags: Vec<TagDef> = parse("tags.json", include_str!("../content/tags.json"));
-    let mut tag_max = [1; 6];
+    let mut tag_num = [TagNum {
+        max: 1,
+        ..TagNum::default()
+    }; 6];
     for t in &tags {
-        tag_max[t.id.idx()] = t.max;
+        tag_num[t.id.idx()] = TagNum {
+            max: t.max,
+            ..t.num
+        };
     }
     let skills: Vec<SkillDef> = parse("skills.json", include_str!("../content/skills.json"));
     let traits: Vec<TraitDef> = parse("traits.json", include_str!("../content/traits.json"));
@@ -1142,7 +1217,7 @@ fn load() -> Content {
     let tasks: Vec<TaskDef> = parse("tasks.json", include_str!("../content/tasks.json"));
     let mut c = Content {
         tags,
-        tag_max,
+        tag_num,
         skills: skills.into_iter().map(|s| (s.id.clone(), s)).collect(),
         traits: traits.into_iter().map(|t| (t.id.clone(), t)).collect(),
         exp_traits,

@@ -3,6 +3,7 @@
 ## 文字和图像资源（docs/i18n.md）
 
 - 玩家看得到的文字只放在 `locales/<语言>/*.json`，代码里用 `t!("key", 参数 = 值)` 取；内容数据（`engine/content/*.json`）只放 id 和数字；图标只按 id 引用（`icons/pixel/<id>.txt`），图里不画字。
+- 文字里不写数字：数值从 `engine/content/balance.json` 或内容数据当参数传（网页用 `game.balance`），代码里的这类常数也放进 `balance.json`；`runtime_text_quotes_no_numbers` 测试会拦。
 - 存档不存渲染好的句子：要存的文字用 `txt!` 存 key 和参数，key 放 `events.json`；生成的名字存名字池下标。
 - 快速迭代期不写存档迁移：存档结构或 `events.json` 的 key 名变了，就把 `SAVE_VERSION` 加一，旧存档直接作废。
 - 挪文字前后各跑一次 `cargo run --release --example text_snapshot -- <文件>`（网页是 `node scripts/text_dump.mjs <文件>`，在 `web/`），两次输出必须逐字一致。
