@@ -188,7 +188,8 @@ pub fn profile() -> Profile {
     p
 }
 
-fn battle(allies: &[UnitSpec], e: &synergy::Enc) -> BattleInput {
+/// A route battle of `allies` against one ladder encounter (no doctrines).
+pub fn battle(allies: &[UnitSpec], e: &synergy::Enc) -> BattleInput {
     BattleInput {
         kind: BattleKind::Route,
         allies: allies.to_vec(),

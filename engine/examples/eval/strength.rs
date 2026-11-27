@@ -12,8 +12,8 @@ use idle_engine::state::Trace;
 pub struct Mag {
     pub t_h: f64,
     pub class: &'static str,
-    /// log2(after ÷ before).
-    pub m: f64,
+    /// log2(after ÷ before); `None` for a category payoff (e.g. the frontier opening up).
+    pub m: Option<f64>,
     /// Frontier tiles turned from loss to win, when measured.
     pub flips: Option<u32>,
 }
