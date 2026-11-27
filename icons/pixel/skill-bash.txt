@@ -1,10 +1,10 @@
 ................
 .kkkkkkkk.......
 klllllllgk......
-klggggggdk.k.k..
-klggggggdkkBkBk.
-klgggggdkwwBBkk.
-klggggdkwBBwBwBk
+kldddddgdk.k.k..
+kgkkkkkldkkBkBk.
+klllllldkwwBwbk.
+klggggdkwBBwBBBk
 klggggdkBBwwBbk.
 klggggggkBBbbk..
 klgggggggkBkBBk.

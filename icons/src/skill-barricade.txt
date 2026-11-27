@@ -2,10 +2,10 @@
 ................
 ..ee........ee..
 ..ee........ee..
-.YYkkYYkkYYkkYY.
-.YkkYYkkYYkkYYk.
-.kkYYkkYYkkYYkk.
-.kYYkkYYkkYYkkY.
+.YddYYddYYddYYd.
+.ddYYddYYddYYdd.
+.dYYddYYddYYddY.
+.YYddYYddYYddYY.
 ................
 ...SS......SS...
 ...SS......SS...
