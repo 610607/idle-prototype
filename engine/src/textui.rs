@@ -6,7 +6,7 @@
 use crate::api::{Engine, RoutePreview};
 use crate::combat::Outcome;
 use crate::commands::Command;
-use crate::content::{content, Tag};
+use crate::content::{content, Act, Cond, Gambit, Stat, Tag, Target};
 use crate::geom;
 use crate::state::{Dial, Phase};
 use crate::t;
@@ -133,7 +133,15 @@ pub fn samples() -> Vec<Command> {
         },
         Command::SetGambits {
             op: 2,
-            gambits: vec![],
+            gambits: vec![Gambit {
+                cond: Cond::EnemyCountAtLeast { n: 2 },
+                cond2: Some(Cond::EnemyHasTag { tag: Tag::Mark }),
+                act: Act::Skill {
+                    skill: "skill_id".into(),
+                },
+                target: Target::WithTag,
+                on: true,
+            }],
         },
         Command::Equip {
             op: 2,
@@ -315,20 +323,148 @@ fn rw(reads: &[Tag], writes: &[Tag]) -> String {
     }
 }
 
-fn op_line(o: &OpView) -> String {
+/// A combat condition in words (the web's 战术 editor wording).
+fn cond_text(c: &Cond) -> String {
+    match c {
+        Cond::Always => t!("cli.cond.always"),
+        Cond::SelfHpBelow { pct } => t!("cli.cond.self_hp_below", pct = pct),
+        Cond::SelfHpAbove { pct } => t!("cli.cond.self_hp_above", pct = pct),
+        Cond::AllyHpBelow { pct } => t!("cli.cond.ally_hp_below", pct = pct),
+        Cond::EnemyHasTag { tag } => t!("cli.cond.enemy_has_tag", tag = tag.name()),
+        Cond::SelfHasTag { tag } => t!("cli.cond.self_has_tag", tag = tag.name()),
+        Cond::EnemyTagAtLeast { tag, n } => {
+            t!("cli.cond.enemy_tag_at_least", tag = tag.name(), n = n)
+        }
+        Cond::AnyTagAtLeast { n } => t!("cli.cond.any_tag_at_least", n = n),
+        Cond::EnemyCountAtLeast { n } => t!("cli.cond.enemy_count_at_least", n = n),
+        Cond::WaveAtLeast { n } => t!("cli.cond.wave_at_least", n = n),
+        Cond::RoundAtLeast { n } => t!("cli.cond.round_at_least", n = n),
+    }
+}
+
+fn target_text(t: Target) -> String {
+    t!(match t {
+        Target::Default => "cli.target.default",
+        Target::FrontLowest => "cli.target.front_lowest",
+        Target::BackFirst => "cli.target.back_first",
+        Target::HighestAtk => "cli.target.highest_atk",
+        Target::WithTag => "cli.target.with_tag",
+        Target::LowestAlly => "cli.target.lowest_ally",
+        Target::SelfUnit => "cli.target.self",
+        Target::MostTags => "cli.target.most_tags",
+    })
+}
+
+/// One 战术 rule in words, then its JSON for `set_gambits`.
+fn gambit_line(o: &OpView, k: usize, g: &Gambit) -> String {
+    let action = match &g.act {
+        Act::Skill { skill } => t!(
+            "cli.gambit.use_skill",
+            skill = o
+                .skills
+                .iter()
+                .find(|s| &s.id == skill)
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| skill.clone()),
+            target = target_text(g.target)
+        ),
+        Act::RetreatPlanned => t!("cli.gambit.planned"),
+        Act::RetreatEmergency => t!("cli.gambit.emergency"),
+    };
+    let rule = t!(
+        "cli.gambit.rule",
+        cond = cond_text(&g.cond),
+        and = g
+            .cond2
+            .as_ref()
+            .map(|c| t!("cli.gambit.and", cond = cond_text(c)))
+            .unwrap_or_default(),
+        action = action
+    );
+    t!(
+        if g.on {
+            "cli.op.gambit_on"
+        } else {
+            "cli.op.gambit_off"
+        },
+        k = k,
+        rule = rule,
+        json = serde_json::to_string(g).unwrap_or_default()
+    )
+}
+
+/// Everything the web's operative page shows, one fact per line. `own` adds what only the
+/// player's operatives have (equipment, 战术); candidates show the rest, as on the web.
+fn op_line(o: &OpView, own: bool) -> String {
     let d = &o.derived;
+    let sep = t!("cli.sep.item");
+    let mut out = vec![t!(
+        "cli.op.head",
+        id = o.id,
+        name = o.name,
+        rarity = o.rarity_name,
+        class = o.class_name,
+        row = row(o.front),
+        hp = d.hp,
+        atk = d.atk,
+        def = d.def,
+        spd = d.spd,
+        status = o.status
+    )];
+    let stats: Vec<String> = Stat::ALL
+        .iter()
+        .map(|s| t!("cli.op.stat", name = s.name(), n = o.stats[s.idx()]))
+        .collect();
+    out.push(t!(
+        "cli.op.more",
+        origin = o.origin,
+        special = if o.special.is_some() {
+            t!("cli.op.special")
+        } else {
+            String::new()
+        },
+        locked = if o.locked {
+            t!("cli.op.locked")
+        } else {
+            String::new()
+        },
+        ap = d.ap,
+        pp = d.pp,
+        stats = stats.join(" ")
+    ));
     let traits: Vec<String> = o
         .traits
         .iter()
         .map(|x| {
             t!(
-                "cli.op.trait",
+                if x.exp {
+                    "cli.op.trait_exp"
+                } else {
+                    "cli.op.trait"
+                },
                 name = x.name,
                 rw = rw(&x.reads, &x.writes),
                 desc = x.desc
             )
         })
         .collect();
+    out.push(t!("cli.op.traits", list = none_or(&traits, &sep)));
+    if !o.growing.is_empty() {
+        let growing: Vec<String> = o
+            .growing
+            .iter()
+            .map(|g| {
+                t!(
+                    "cli.op.growing_one",
+                    name = g.name,
+                    have = g.have,
+                    need = g.need,
+                    hint = g.hint
+                )
+            })
+            .collect();
+        out.push(t!("cli.op.growing", list = growing.join(&sep)));
+    }
     let skills: Vec<String> = o
         .skills
         .iter()
@@ -341,40 +477,32 @@ fn op_line(o: &OpView) -> String {
                     String::new()
                 },
                 name = s.name,
+                id = s.id,
                 rw = rw(&s.reads, &s.writes),
                 desc = s.desc
             )
         })
         .collect();
-    let sep = t!("cli.sep.item");
-    let equip = o
-        .equipment
-        .as_ref()
-        .map(|it| {
-            t!(
-                "cli.op.equip_full",
+    out.push(t!("cli.op.skills", list = none_or(&skills, &sep)));
+    if own {
+        if let Some(it) = &o.equipment {
+            out.push(t!(
+                "cli.op.equip",
                 name = it.name,
                 rw = rw(&it.reads, &it.writes),
                 desc = it.desc
-            )
-        })
-        .unwrap_or_default();
-    t!(
-        "cli.op.full",
-        id = o.id,
-        name = o.name,
-        rarity = o.rarity_name,
-        class = o.class_name,
-        row = row(o.front),
-        hp = d.hp,
-        atk = d.atk,
-        def = d.def,
-        spd = d.spd,
-        status = o.status,
-        traits = none_or(&traits, &sep),
-        skills = none_or(&skills, &sep),
-        equip = equip
-    )
+            ));
+        }
+        out.push(t!(
+            "cli.op.gambits",
+            on = o.gambits.iter().filter(|g| g.on).count(),
+            slots = d.tactic_slots
+        ));
+        for (k, g) in o.gambits.iter().enumerate() {
+            out.push(gambit_line(o, k + 1, g));
+        }
+    }
+    out.join("\n")
 }
 
 fn op_short(o: &OpView) -> String {
@@ -417,6 +545,11 @@ fn op_short(o: &OpView) -> String {
         def = o.derived.def,
         spd = o.derived.spd,
         status = o.status,
+        lock = if o.locked {
+            t!("cli.op.lock_short")
+        } else {
+            String::new()
+        },
         writes = dash(&w),
         reads = dash(&r),
         traits = none_or(&traits, &t!("cli.sep.list")),
@@ -1029,12 +1162,12 @@ pub fn info(e: &mut Engine) -> String {
     let mut o = String::new();
     line(&mut o, t!("cli.info.ops"));
     for op in &v.operatives {
-        line(&mut o, op_line(op));
+        line(&mut o, op_line(op, true));
     }
     if !v.candidates.is_empty() {
         line(&mut o, t!("cli.info.candidates"));
         for c in &v.candidates {
-            line(&mut o, op_line(&c.op));
+            line(&mut o, op_line(&c.op, false));
         }
     }
     line(&mut o, t!("cli.info.stash", n = v.inventory.len()));
@@ -1090,6 +1223,10 @@ pub fn info(e: &mut Engine) -> String {
     hq(&mut o, &v);
     library(&mut o, &v);
     line(&mut o, t!("cli.info.commands"));
+    let tag_ids: Vec<String> = Tag::ALL
+        .iter()
+        .map(|x| t!("cli.tag_id", id = x.id(), name = x.name()))
+        .collect();
     for c in samples() {
         if reach(&c) == Reach::BetweenCycles {
             continue;
@@ -1102,7 +1239,8 @@ pub fn info(e: &mut Engine) -> String {
                 json = serde_json::to_string(&c).unwrap(),
                 desc = t!(
                     &format!("cli.cmd.{name}"),
-                    squad_size = crate::content::balance().squad_size
+                    squad_size = crate::content::balance().squad_size,
+                    tags = list(&tag_ids)
                 )
             ),
         );
@@ -1638,6 +1776,119 @@ mod tests {
         assert!(text.contains(&it.desc));
         let sealed = &v.sealed[0];
         assert!(text.contains(&t!("cli.sealed_item", name = sealed.name, id = sealed.id)));
+    }
+
+    /// What the web's operative page shows is in info: origin, base stats, growing traits,
+    /// skill ids and the combat rules with their JSON, which set_gambits takes back as printed.
+    #[test]
+    fn operative_page_is_shown() {
+        let opts = Options::default();
+        let mut e = new_game(0);
+        let now = e.state.time;
+        e.advance(now + 24 * 3600);
+        let v = e.view();
+        let text = info(&mut e);
+        assert!(!text.contains("cli."), "unresolved key in:\n{text}");
+        for o in &v.operatives {
+            assert!(text.contains(&o.origin));
+            for s in Stat::ALL {
+                assert!(text.contains(&t!("cli.op.stat", name = s.name(), n = o.stats[s.idx()])));
+            }
+            assert!(o.growing.iter().all(|g| text.contains(&g.hint)));
+            assert!(o
+                .skills
+                .iter()
+                .all(|s| text.contains(&format!("（{}）", s.id))));
+            for g in &o.gambits {
+                assert!(text.contains(&serde_json::to_string(g).unwrap()));
+            }
+        }
+        let header = t!("cli.op.gambits", on = 0, slots = 0);
+        let header = header.split('（').next().unwrap();
+        assert_eq!(text.matches(header).count(), v.operatives.len());
+
+        // Reorder and switch off a rule by sending back the printed JSON, then lock.
+        let o = &v.operatives[0];
+        let mut rules: Vec<String> = o
+            .gambits
+            .iter()
+            .rev()
+            .map(|g| serde_json::to_string(g).unwrap())
+            .collect();
+        rules[0] = rules[0].replace(r#""on":true"#, r#""on":false"#);
+        let cmd = format!(
+            r#"{{"cmd":"set_gambits","op":{},"gambits":[{}]}}"#,
+            o.id,
+            rules.join(",")
+        );
+        run(&mut e, &parse_json(&cmd).unwrap(), &opts).unwrap();
+        let lock = format!(r#"{{"cmd":"lock","op":{},"locked":true}}"#, o.id);
+        run(&mut e, &parse_json(&lock).unwrap(), &opts).unwrap();
+        let v = e.view();
+        let o = &v.operatives[0];
+        assert!(!o.gambits[0].on);
+        let text = info(&mut e);
+        assert!(text.contains(&gambit_line(o, 1, &o.gambits[0])));
+        assert!(text.contains(&t!("cli.op.locked")));
+        assert!(board(&mut e, now, &opts).contains(&t!("cli.op.lock_short")));
+    }
+
+    /// The set_gambits help names every condition, action and target the JSON can take.
+    #[test]
+    fn set_gambits_help_lists_every_choice() {
+        let help = t!("cli.cmd.set_gambits");
+        let tag = Tag::Mark;
+        let conds = [
+            Cond::Always,
+            Cond::SelfHpBelow { pct: 0 },
+            Cond::SelfHpAbove { pct: 0 },
+            Cond::AllyHpBelow { pct: 0 },
+            Cond::EnemyHasTag { tag },
+            Cond::SelfHasTag { tag },
+            Cond::EnemyTagAtLeast { tag, n: 0 },
+            Cond::AnyTagAtLeast { n: 0 },
+            Cond::EnemyCountAtLeast { n: 0 },
+            Cond::WaveAtLeast { n: 0 },
+            Cond::RoundAtLeast { n: 0 },
+        ];
+        // Each condition also has words (cond_text has no catch-all arm).
+        assert!(conds.iter().all(|c| !cond_text(c).contains("cli.")));
+        let acts = [
+            Act::Skill { skill: "x".into() },
+            Act::RetreatPlanned,
+            Act::RetreatEmergency,
+        ];
+        let name = |v: serde_json::Value| v["t"].as_str().unwrap().to_string();
+        let mut words: Vec<String> = conds
+            .iter()
+            .map(|c| name(serde_json::to_value(c).unwrap()))
+            .chain(acts.iter().map(|a| name(serde_json::to_value(a).unwrap())))
+            .collect();
+        for t in [
+            Target::Default,
+            Target::FrontLowest,
+            Target::BackFirst,
+            Target::HighestAtk,
+            Target::WithTag,
+            Target::LowestAlly,
+            Target::SelfUnit,
+            Target::MostTags,
+        ] {
+            assert!(!target_text(t).contains("cli."));
+            words.push(
+                serde_json::to_value(t)
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            );
+        }
+        for w in words {
+            assert!(
+                help.contains(&w),
+                "cli.cmd.set_gambits does not mention {w}"
+            );
+        }
     }
 
     #[test]
