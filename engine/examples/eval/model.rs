@@ -380,6 +380,94 @@ pub fn lab_rows(p: &Profile) -> Vec<(Margins, Sample)> {
     out
 }
 
+/// Intel all research draws up to the n-th cost together: C(n) = Σ_{k<n} (base + step·k).
+pub fn research_cum_cost(n: u32) -> f64 {
+    let b = idle_engine::content::balance();
+    (0..n)
+        .map(|k| (b.research_base + b.research_step * k as i64) as f64)
+        .sum()
+}
+
+/// Research timing model (docs/balance-model.md §爽点时间轴): the n-th draw happens when
+/// cumulative intel income first reaches C(n), i.e. the player spends as soon as they can.
+/// `income` is cumulative intel by hour as (hour, total) points, linearly interpolated from (0, 0).
+/// Returns t_1..t_n_max in hours (`None` past the last point).
+pub fn research_times(income: &[(f64, f64)], n_max: u32) -> Vec<Option<f64>> {
+    let mut pts = vec![(0.0, 0.0)];
+    pts.extend(income.iter().copied());
+    (1..=n_max)
+        .map(|n| {
+            let c = research_cum_cost(n);
+            pts.windows(2).find_map(|w| {
+                let ((h0, y0), (h1, y1)) = (w[0], w[1]);
+                (y1 >= c && y1 > y0).then(|| h0 + (h1 - h0) * ((c - y0).max(0.0) / (y1 - y0)))
+            })
+        })
+        .collect()
+}
+
+/// One-week target for entering ring r (docs/balance-eval.md §已定): τ_r = 4r(r−1)+1 hours.
+pub fn week_target(r: i32) -> f64 {
+    (4 * r * (r - 1) + 1) as f64
+}
+
+/// Prints the research timing model against a bot run: income from the run's `intel_in.h*`
+/// (p50 per checkpoint), predicted draw times, the bot's measured `payoff.t.research.*`, and how
+/// many draws land before each ring's one-week target (the doors combat gates could hang on).
+fn pace_research(bot: &crate::run::RunFile) {
+    let p50 = |id: &str| {
+        bot.metrics
+            .get(id)
+            .map(|v| crate::stats::summary(v).p50)
+            .filter(|x| x.is_finite())
+    };
+    let income: Vec<(f64, f64)> = crate::run::CHECKPOINTS
+        .iter()
+        .filter_map(|&h| p50(&format!("intel_in.h{h}")).map(|y| (h as f64, y)))
+        .collect();
+    if income.is_empty() {
+        return;
+    }
+    println!(
+        "# research timing: income p50 {}",
+        income
+            .iter()
+            .map(|(h, y)| format!("h{h}={y:.0}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    println!(
+        "{:<4} {:>6} {:>7} {:>8} {:>8} {:>7}",
+        "n", "cost", "cum", "model_h", "bot_p50", "bot/mdl"
+    );
+    let times = research_times(&income, 12);
+    let show = |x: Option<f64>| x.map_or("-".to_string(), |x| format!("{x:.1}"));
+    for (k, t) in times.iter().enumerate() {
+        let n = k as u32 + 1;
+        let b = p50(&format!("payoff.t.research.{n}"));
+        println!(
+            "{:<4} {:>6.0} {:>7.0} {:>8} {:>8} {:>7}",
+            n,
+            research_cum_cost(n) - research_cum_cost(n - 1),
+            research_cum_cost(n),
+            show(*t),
+            show(b),
+            match (b, t) {
+                (Some(a), Some(m)) if *m > 0.0 => format!("{:.2}", a / m),
+                _ => "-".into(),
+            }
+        );
+    }
+    let before = |tau: f64| times.iter().flatten().filter(|t| **t <= tau).count();
+    println!(
+        "# draws before each ring's one-week target τ_r (model): {}",
+        (1..=7)
+            .map(|r| format!("r{r}@{:.0}h={}", week_target(r), before(week_target(r))))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+}
+
 /// Pacing model (docs/balance-model.md §节奏) for a bot that re-plans every `every` hours and sends
 /// its squads at the nearest winnable tile: all squads hit the same tile, which takes
 /// w_r = ⌈(100 − start_r) / win_gain⌉ wins; a one-tile trip takes T_r = 2·travel + rounds·secs.
@@ -492,5 +580,8 @@ pub fn pace(
             break;
         }
         prev = Some((n, h));
+    }
+    if let Some(bot) = bot {
+        pace_research(bot);
     }
 }

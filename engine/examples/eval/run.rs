@@ -309,6 +309,10 @@ pub fn play_full(seed: u64, persona: Persona, hours: i64) -> (Metrics, Vec<crate
     let mut timeline = crate::payoff::Timeline::new();
     let mut series = crate::strength::Series::new();
     let mut intel_in = 0i64;
+    // Cumulative intel income by hour, and the hours research draws happened (for the research
+    // timing model's measured ÷ predicted ratio).
+    let mut intel_by_h: Vec<(f64, f64)> = Vec::new();
+    let mut draws_at: Vec<f64> = Vec::new();
     let mut reach: [Option<f64>; 8] = [None; 8];
     let (mut inner, mut front, mut deep) = (Tally::default(), Tally::default(), Tally::default());
     let (mut s_inside, mut s_edge) = (Tally::default(), Tally::default());
@@ -372,6 +376,9 @@ pub fn play_full(seed: u64, persona: Persona, hours: i64) -> (Metrics, Vec<crate
             .map(|k| b.research_base + b.research_step * k as i64)
             .sum();
         intel_in += now[2] - before[2] + spent;
+        intel_by_h.push((h as f64, intel_in as f64));
+        // Draws happen when the bot acts, at the start of the hour.
+        draws_at.extend((research..e.state.cycle.research_count).map(|_| (h - 1) as f64));
         timeline.on_hour(&e, h, &issued);
         series.on_hour(&e, h, issued.values().sum());
         let res = sim::cycle_results(&e.state);
@@ -458,6 +465,18 @@ pub fn play_full(seed: u64, persona: Persona, hours: i64) -> (Metrics, Vec<crate
         Some(e.state.cycle.research_count as f64),
     );
     m.insert("hired".into(), Some(e.state.cycle.stats.hired as f64));
+    // Research timing model: measured draw time ÷ the time income first covered it (median over
+    // draws). Above 1 means the player sat on the intel; `greedy` should read about 1.
+    let predicted = crate::model::research_times(&intel_by_h, draws_at.len() as u32);
+    let ratios: Vec<Option<f64>> = draws_at
+        .iter()
+        .zip(&predicted)
+        .filter_map(|(a, p)| p.filter(|p| *p > 0.0).map(|p| Some(a.max(p) / p)))
+        .collect();
+    m.insert(
+        "payoff.model_ratio.research".into(),
+        (!ratios.is_empty()).then(|| crate::stats::summary(&ratios).p50),
+    );
     let mags = series.finish(&mut m, hours);
     let evs = timeline.finish(&mut m, &mags, hours);
     (m, evs)

@@ -114,6 +114,10 @@ struct Band {
     /// (nothing to measure, e.g. no ring past the map's edge) and does not fail.
     #[serde(default)]
     missing_fails: bool,
+    /// Observation only: reported (`watch` when outside the band) but never fails the check. For
+    /// metrics whose band is a candidate still to calibrate (the `payoff.*` shape checks).
+    #[serde(default)]
+    watch: bool,
 }
 
 fn check(f: &RunFile, bands_path: &str) -> bool {
@@ -128,7 +132,7 @@ fn check(f: &RunFile, bands_path: &str) -> bool {
                 continue;
             }
             let Some(v) = f.metrics.get(id) else {
-                println!("{:<4} {id} (no such metric)", "n/a");
+                println!("{:<5} {id} (no such metric)", "n/a");
                 continue;
             };
             let s = stats::summary(v);
@@ -140,13 +144,15 @@ fn check(f: &RunFile, bands_path: &str) -> bool {
             };
             let pass = b.min.is_none_or(|lo| x >= lo) && b.max.is_none_or(|hi| x <= hi);
             let na = x.is_infinite() && !b.missing_fails;
-            ok &= pass || na;
+            ok &= pass || na || b.watch;
             println!(
-                "{:<4} {id} {} = {} in [{}, {}]  ({}/{} seeds)",
+                "{:<5} {id} {} = {} in [{}, {}]  ({}/{} seeds)",
                 if na {
                     "n/a"
                 } else if pass {
                     "pass"
+                } else if b.watch {
+                    "watch"
                 } else {
                     "FAIL"
                 },
