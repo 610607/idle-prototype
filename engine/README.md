@@ -45,6 +45,9 @@ cargo run --release --example population     # 人口、岗位、闲置、人才
 cargo run --release --example customize      # 定制新队员值多少：指定词条 / 稀有度保底（加 loop 开闭环）
 cargo run --release --example custcost       # 定制一单的代价：每个能下单的街区，下单和不下单各跑 24 小时比较
 cargo run --release --example midsave 1 60 $(date +%s)  # 自动玩家玩 60 小时，打印一份结束在此刻的存档（网页「从文本读档」）
+cargo run --release --example agent_cli -- new <存档> <种子>   # 文字版局面 + 编号菜单，给 LLM 玩家用（docs/llm-playtest.md）
+cargo run --release --example agent_cli -- do <存档> 1 3 --wait 4 --note "理由"
+cargo run --release --example agent_cli -- autoplay <存档> <种子> 72 4   # 同节奏的脚本玩家对照（BOT_NORESEARCH=1 关研究）
 ```
 
 `population` 和 `custcost` 可以多给一个 JSON 参数临时改数值（`content::patch_balance`，只在内容第一次加载前有效），比如复现人口改稀缺之前的旧数值：
