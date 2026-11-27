@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { Game } from '../engine/client';
+import { t } from '../i18n';
 import { Icon } from '../icons';
 import type { Command, Delta, DryRun, Resources, Tag, View } from '../types';
 
@@ -66,22 +67,27 @@ export function useCtx(): Ctx {
 // Formatting
 
 export const RES_KEYS: (keyof Resources)[] = ['scrap', 'parts', 'intel', 'crystal'];
-export const RES_NAMES: Record<keyof Resources, string> = { scrap: '废材', parts: '零件', intel: '情报', crystal: '晶体' };
+export const RES_NAMES: Record<keyof Resources, string> = {
+  scrap: t('common.res.scrap'),
+  parts: t('common.res.parts'),
+  intel: t('common.res.intel'),
+  crystal: t('common.res.crystal'),
+};
 
 export function fmtIn(secs: number): string {
-  if (secs <= 0) return '现在';
-  if (secs < 60) return `${secs} 秒`;
+  if (secs <= 0) return t('common.time.now');
+  if (secs < 60) return t('common.time.s', { s: secs });
   const m = Math.floor(secs / 60);
-  if (m < 60) return `${m} 分`;
+  if (m < 60) return t('common.time.m', { m });
   const h = Math.floor(m / 60);
   const mm = m % 60;
-  if (h < 48) return mm ? `${h} 时 ${mm} 分` : `${h} 时`;
-  return `${Math.floor(h / 24)} 天 ${h % 24} 时`;
+  if (h < 48) return mm ? t('common.time.hm', { h, mm }) : t('common.time.h', { h });
+  return t('common.time.dh', { d: Math.floor(h / 24), h: h % 24 });
 }
 
 export function fmtAgo(secs: number): string {
-  if (secs < 60) return '刚刚';
-  return fmtIn(secs) + '前';
+  if (secs < 60) return t('common.time.just_now');
+  return t('common.time.ago', { t: fmtIn(secs) });
 }
 
 export function fmtClock(t: number): string {
@@ -96,13 +102,13 @@ export function fmtRate(v: number): string {
 }
 
 export const OUTCOME_NAMES: Record<string, string> = {
-  victory: '全胜',
-  planned: '按计划收队',
-  emergency: '紧急撤退',
-  wipe: '全员倒下',
+  victory: t('common.outcome.victory'),
+  planned: t('outcome.planned'),
+  emergency: t('outcome.emergency'),
+  wipe: t('common.outcome.wipe'),
 };
 
-export const DIAL_NAMES: Record<string, string> = { mine: '开采', balance: '平衡', seal: '封印' };
+export const DIAL_NAMES: Record<string, string> = { mine: t('dial.mine'), balance: t('dial.balance'), seal: t('common.dial.seal') };
 
 export const SQUAD_HEX = ['#5ea3d6', '#e58cab'];
 
@@ -124,19 +130,19 @@ export const TAG_HEX: Record<Tag, string> = {
 export function pageLabel(view: View, s: Sheet): string {
   switch (s.kind) {
     case 'tile':
-      return view.tiles[s.tile]?.label ?? '格子';
+      return view.tiles[s.tile]?.label ?? t('common.crumb.tile');
     case 'op':
-      return view.operatives.find((o) => o.id === s.op)?.name ?? '队员';
+      return view.operatives.find((o) => o.id === s.op)?.name ?? t('common.crumb.op');
     case 'candidate':
-      return view.candidates.find((c) => c.id === s.candidate)?.op.name ?? '候选';
+      return view.candidates.find((c) => c.id === s.candidate)?.op.name ?? t('common.crumb.candidate');
     case 'district':
-      return view.districts.find((d) => d.id === s.district)?.name ?? '街区';
+      return view.districts.find((d) => d.id === s.district)?.name ?? t('common.crumb.district');
     case 'report':
-      return '战报';
+      return t('common.crumb.report');
     case 'squad':
-      return view.squads.find((q) => q.id === s.squad)?.name ?? '小队';
+      return view.squads.find((q) => q.id === s.squad)?.name ?? t('common.crumb.squad');
     case 'tide':
-      return '潮汐表';
+      return t('common.crumb.tide');
   }
 }
 
@@ -145,10 +151,12 @@ export function pageLabel(view: View, s: Sheet): string {
 
 export function TagChip({ tag, n, mode }: { tag: Tag; n?: number; mode?: 'read' | 'write' | 'solid' }) {
   const { game } = useCtx();
-  const def = game.content.tags.find((t) => t.id === tag);
+  const def = game.content.tags.find((d) => d.id === tag);
   const cls = 'chip' + (mode === 'read' ? ' read' : '') + (mode === 'solid' ? ' solid' : '');
   const style = mode === 'solid' ? { background: TAG_HEX[tag] } : { color: TAG_HEX[tag] };
-  const title = (def ? `${def.name}：${def.desc}` : tag) + (mode === 'read' ? '（读取）' : mode === 'write' ? '（施加）' : '');
+  const title =
+    (def ? t('common.tag.title', { name: def.name, desc: def.desc }) : tag) +
+    (mode === 'read' ? t('common.tag.read') : mode === 'write' ? t('common.tag.write') : '');
   return (
     <span className={cls} style={style} title={title}>
       <Icon id={`tag-${tag}`} size={16} />
@@ -163,12 +171,12 @@ export function TagIO({ reads, writes }: { reads: Tag[]; writes: Tag[] }) {
   if (!reads.length && !writes.length) return null;
   return (
     <span className="row wrap" style={{ gap: 4 }}>
-      {writes.map((t) => (
-        <TagChip key={'w' + t} tag={t} mode="write" />
+      {writes.map((w) => (
+        <TagChip key={'w' + w} tag={w} mode="write" />
       ))}
-      {reads.length ? <span className="faint tiny">读</span> : null}
-      {reads.map((t) => (
-        <TagChip key={'r' + t} tag={t} mode="read" />
+      {reads.length ? <span className="faint tiny">{t('common.tag.reads')}</span> : null}
+      {reads.map((r) => (
+        <TagChip key={'r' + r} tag={r} mode="read" />
       ))}
     </span>
   );
@@ -176,7 +184,7 @@ export function TagIO({ reads, writes }: { reads: Tag[]; writes: Tag[] }) {
 
 export function Cost({ cost, have }: { cost: Resources; have?: Resources }) {
   const parts = RES_KEYS.filter((k) => cost[k] > 0);
-  if (!parts.length) return <span className="faint">免费</span>;
+  if (!parts.length) return <span className="faint">{t('common.cost.free')}</span>;
   return (
     <span className="row" style={{ gap: 8 }}>
       {parts.map((k) => (
@@ -203,7 +211,7 @@ export function Rarity({ r, name }: { r: number; name: string }) {
 }
 
 export function DeltaList({ deltas }: { deltas: Delta[] }) {
-  if (!deltas.length) return <div className="delta-empty">没有可见的变化。</div>;
+  if (!deltas.length) return <div className="delta-empty">{t('common.delta.empty')}</div>;
   return (
     <div className="deltas">
       {deltas.map((d, i) => (
@@ -231,7 +239,7 @@ export function DryRunView({ dry }: { dry: DryRun | null }) {
   return (
     <div className="stack" style={{ gap: 6 }}>
       <DeltaList deltas={dry.deltas} />
-      {dry.irreversible ? <div className="warn small">这一步改变地图形状，做了就不能撤回。</div> : null}
+      {dry.irreversible ? <div className="warn small">{t('common.dry.irreversible')}</div> : null}
     </div>
   );
 }
@@ -258,8 +266,8 @@ export function Page({
   return (
     <div className="page">
       <div className="page-head">
-        <button className="btn ghost small" onClick={onClose} aria-label="返回" title="返回（Esc）">
-          <Icon id="chevron-right" className="flip" /> 返回
+        <button className="btn ghost small" onClick={onClose} aria-label={t('common.page.back')} title={t('common.page.back_title')}>
+          <Icon id="chevron-right" className="flip" /> {t('common.page.back')}
         </button>
         {icon ? <Icon id={icon} size={32} /> : null}
         <div className="grow" style={{ minWidth: 0 }}>
@@ -298,7 +306,7 @@ export function ConfirmDialog({ ask, onDone }: { ask: ConfirmAsk; onDone: () => 
         <div className="small muted">{ask.body}</div>
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
           <button className="btn ghost" onClick={onDone}>
-            算了
+            {t('common.confirm.cancel')}
           </button>
           <button
             className={'btn ' + (ask.danger ? 'danger' : 'primary')}
