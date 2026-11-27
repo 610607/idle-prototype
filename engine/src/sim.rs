@@ -223,7 +223,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
         state.next_id += 1;
         sq.push(Squad {
             id,
-            name: i18n::list("names.squad")[k].clone(),
+            name: i18n::Text::item("names.squad", k as u16),
             members: if k == 0 { first.clone() } else { vec![] },
             route: vec![],
             trip: None,

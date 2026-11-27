@@ -1,8 +1,8 @@
 //! Save codec owned by the engine, so web and iOS write byte-compatible saves.
 //!
 //! A save is a JSON envelope: format tag, save version, revision, device, time, checksum and the
-//! state itself. Older versions are upgraded step by step through `MIGRATIONS` on the raw JSON
-//! before deserialising, so old saves keep loading after the structs change.
+//! state itself. While the game is iterating fast there are no migrations: when the state's shape
+//! changes, `SAVE_VERSION` goes up and older saves are refused (the web starts a new game).
 
 use crate::state::{GameState, SAVE_VERSION};
 use crate::t;
@@ -29,40 +29,6 @@ pub struct SaveInfo {
     pub revision: u64,
     pub device: String,
     pub saved_at: i64,
-}
-
-type Migration = fn(&mut Value) -> Result<(), String>;
-
-/// `MIGRATIONS[n]` upgrades a version `n + 1` state to version `n + 2`.
-const MIGRATIONS: &[Migration] = &[v1_text_keys];
-
-/// v1 → v2: events, operative origins and candidate sources were kept as rendered sentences; now
-/// they are text keys (`i18n::Text`). Old sentences are kept verbatim under `legacy.text`.
-fn v1_text_keys(state: &mut Value) -> Result<(), String> {
-    fn wrap(v: Option<&mut Value>) {
-        if let Some(v) = v {
-            if let Some(s) = v.as_str() {
-                *v = serde_json::json!({"key": "legacy.text", "args": {"text": s}});
-            }
-        }
-    }
-    fn each(v: Option<&mut Value>, f: impl Fn(&mut Value)) {
-        if let Some(a) = v.and_then(Value::as_array_mut) {
-            a.iter_mut().for_each(f);
-        }
-    }
-    each(state.get_mut("events"), |e| wrap(e.get_mut("text")));
-    each(state.pointer_mut("/cycle/operatives"), |o| {
-        wrap(o.get_mut("origin"))
-    });
-    each(state.pointer_mut("/cycle/candidates"), |c| {
-        wrap(c.get_mut("source"));
-        wrap(c.pointer_mut("/op/origin"));
-    });
-    each(state.pointer_mut("/org/specials"), |o| {
-        wrap(o.get_mut("origin"))
-    });
-    Ok(())
 }
 
 fn fnv64(bytes: &[u8]) -> String {
@@ -113,24 +79,18 @@ pub fn decode(json: &str) -> Result<GameState, String> {
             current = SAVE_VERSION
         ));
     }
-    if env.version == 0 {
-        return Err(t!("err.save.bad_version"));
+    if env.version < SAVE_VERSION {
+        return Err(t!(
+            "err.save.too_old",
+            version = env.version,
+            current = SAVE_VERSION
+        ));
     }
     let body = serde_json::to_string(&env.state).map_err(|e| e.to_string())?;
     if fnv64(body.as_bytes()) != env.checksum {
         return Err(t!("err.save.checksum"));
     }
-    let mut value = env.state;
-    for v in env.version..SAVE_VERSION {
-        let step = MIGRATIONS
-            .get((v - 1) as usize)
-            .ok_or_else(|| t!("err.save.no_migration", from = v, to = v + 1))?;
-        step(&mut value)?;
-    }
-    let mut state: GameState =
-        serde_json::from_value(value).map_err(|e| t!("err.save.bad_shape", err = e))?;
-    state.version = SAVE_VERSION;
-    Ok(state)
+    serde_json::from_value(env.state).map_err(|e| t!("err.save.bad_shape", err = e))
 }
 
 /// Later of two saves of the same game: higher revision wins, then later time, then device name
@@ -173,55 +133,6 @@ mod tests {
         let mut env: Envelope = serde_json::from_str(&json).unwrap();
         env.version = SAVE_VERSION + 1;
         assert!(decode(&serde_json::to_string(&env).unwrap()).is_err());
-    }
-
-    /// A v1 save (rendered sentences) loads and shows the same text.
-    #[test]
-    fn migrates_v1_text() {
-        let mut s = sim::new_game(7, 1_000_000, "test");
-        commands::apply(&mut s, &commands::Command::ChooseMap { index: 0 }).unwrap();
-        sim::advance(&mut s, 1_000_000 + 30 * 3600);
-        crate::economy::spawn_city_candidate(&mut s, 0, "militia", "vanguard");
-        assert!(!s.events.is_empty() && !s.cycle.candidates.is_empty());
-        let mut v = serde_json::to_value(&s).unwrap();
-        let flat = |x: &mut Value| {
-            let t: crate::i18n::Text = serde_json::from_value(x.clone()).unwrap();
-            *x = Value::String(t.render());
-        };
-        v["events"]
-            .as_array_mut()
-            .unwrap()
-            .iter_mut()
-            .for_each(|e| flat(&mut e["text"]));
-        for o in v["cycle"]["operatives"].as_array_mut().unwrap() {
-            flat(&mut o["origin"]);
-        }
-        for c in v["cycle"]["candidates"].as_array_mut().unwrap() {
-            flat(&mut c["source"]);
-            flat(&mut c["op"]["origin"]);
-        }
-        v["version"] = 1.into();
-        let body = serde_json::to_string(&v).unwrap();
-        let env = Envelope {
-            format: FORMAT.into(),
-            version: 1,
-            revision: s.revision,
-            device: s.device.clone(),
-            saved_at: s.time,
-            checksum: fnv64(body.as_bytes()),
-            state: v,
-        };
-        let old = decode(&serde_json::to_string(&env).unwrap()).unwrap();
-        let text = |g: &GameState| -> Vec<String> {
-            g.events
-                .iter()
-                .map(|e| e.text.render())
-                .chain(g.cycle.operatives.iter().map(|o| o.origin.render()))
-                .chain(g.cycle.candidates.iter().map(|c| c.source.render()))
-                .collect()
-        };
-        assert_eq!(text(&old), text(&s));
-        assert_eq!(old.events[0].text.key, "legacy.text");
     }
 
     #[test]

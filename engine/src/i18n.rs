@@ -150,6 +150,16 @@ pub fn tr(key: &str) -> String {
     }
 }
 
+/// How many items a list entry (name pool) has. Every locale must have the same count, so the
+/// game picks the same names whatever language it shows (`catalogs_match`).
+pub fn list_len(key: &str) -> usize {
+    match entry(key) {
+        Some(Entry::Many(v)) => v.len(),
+        Some(Entry::One(_)) => 1,
+        None => 0,
+    }
+}
+
 /// A list entry (name pools).
 pub fn list(key: &str) -> Vec<String> {
     match entry(key) {
@@ -168,6 +178,18 @@ pub fn fmt(key: &str, args: &[(&str, &dyn Display)]) -> String {
         Some(Entry::One(s)) => fill(s, args),
         Some(Entry::Many(v)) => fill(&v.join(", "), args),
         None => key.to_string(),
+    }
+}
+
+/// Item `i` of a list entry (wrapping round), or the key itself when no catalog has it.
+fn item(key: &str, i: u16, args: &[(&str, &dyn Display)]) -> String {
+    if is_quiet() {
+        return String::new();
+    }
+    match entry(key) {
+        Some(Entry::Many(v)) if !v.is_empty() => fill(&v[i as usize % v.len()], args),
+        Some(Entry::One(s)) => fill(s, args),
+        _ => format!("{key}#{i}"),
     }
 }
 
@@ -212,13 +234,17 @@ macro_rules! t {
     };
 }
 
-/// Text that is kept rather than shown at once (events in the save): a key and its arguments,
-/// rendered in whatever language reads it. Content names are kept as their own keys
-/// (`name("doctrine", id)`), so they follow the language too. Keys a save refers to live in
-/// `locales/<lang>/events.json` and must never be renamed; add a new key instead.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Text that is kept rather than shown at once (events, generated names): a key and its
+/// arguments, rendered in whatever language reads it. Content names are kept as their own keys
+/// (`name("doctrine", id)`) and generated names as items of a name pool
+/// (`Text::item("names.district", 3)`), so they follow the language too. Keys kept this way live
+/// in `locales/<lang>/events.json` (pools in `content.json`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Text {
     pub key: String,
+    /// Set when `key` is a list (name pool): which item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item: Option<u16>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub args: BTreeMap<String, Arg>,
 }
@@ -236,7 +262,16 @@ impl Text {
     pub fn new(key: &str) -> Text {
         Text {
             key: key.to_string(),
+            item: None,
             args: BTreeMap::new(),
+        }
+    }
+
+    /// Item `i` of the list entry `key` (a name pool).
+    pub fn item(key: &str, i: u16) -> Text {
+        Text {
+            item: Some(i),
+            ..Text::new(key)
         }
     }
 
@@ -253,7 +288,10 @@ impl Text {
             .zip(&rendered)
             .map(|(k, v)| (k.as_str(), v as &dyn Display))
             .collect();
-        fmt(&self.key, &args)
+        match self.item {
+            Some(i) => item(&self.key, i, &args),
+            None => fmt(&self.key, &args),
+        }
     }
 }
 
@@ -369,12 +407,33 @@ mod tests {
     fn catalogs_match() {
         let base = keys(DEFAULT);
         assert!(!base.is_empty());
-        for l in locales() {
+        let len = |i: usize, k: &str| match catalogs()[i].get(k) {
+            Some(Entry::Many(v)) => Some(v.len()),
+            _ => None,
+        };
+        for (i, l) in locales().into_iter().enumerate() {
             assert_eq!(
                 keys(l),
                 base,
                 "locale {l} has different keys from {DEFAULT}"
             );
+            for k in &base {
+                assert_eq!(
+                    len(i, k),
+                    len(0, k),
+                    "locale {l}: list {k} has a different length"
+                );
+            }
         }
+    }
+
+    #[test]
+    fn pool_items_render() {
+        let n = list("names.squad");
+        assert_eq!(Text::item("names.squad", 1).render(), n[1]);
+        assert_eq!(Text::item("names.squad", n.len() as u16 + 1).render(), n[1]);
+        let x = Text::item("names.squad", 0);
+        let back: Text = serde_json::from_str(&serde_json::to_string(&x).unwrap()).unwrap();
+        assert_eq!(back, x);
     }
 }

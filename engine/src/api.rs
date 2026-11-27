@@ -7,6 +7,7 @@ use crate::content::{balance, Resources};
 use crate::defense;
 use crate::economy;
 use crate::geom;
+use crate::i18n::Text;
 use crate::routes;
 use crate::save;
 use crate::sim;
@@ -49,7 +50,7 @@ pub struct Metrics {
     pub held: usize,
     pub lost: usize,
     pub lost_tiles: Vec<u16>,
-    pub trust_targets: Vec<(String, i32)>,
+    pub trust_targets: Vec<(Text, i32)>,
     pub unhoused: i32,
     pub housing: i32,
     pub talent_rate: i32,
@@ -550,7 +551,7 @@ impl Engine {
                 .unwrap_or_default();
             out.push(GarrisonOption {
                 op: Some(o.id),
-                name: o.name.clone(),
+                name: o.name.render(),
                 icon,
                 current: current == Some(o.id),
                 busy,

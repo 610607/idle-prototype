@@ -8,7 +8,7 @@ use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SAVE_VERSION: u32 = 2;
+pub const SAVE_VERSION: u32 = 3;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -139,7 +139,7 @@ impl Tile {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct District {
     pub id: u16,
-    pub name: String,
+    pub name: Text,
     pub tiles: Vec<u16>,
     pub trust: i32,
     pub population: i32,
@@ -177,7 +177,7 @@ pub enum Assignment {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Operative {
     pub id: u32,
-    pub name: String,
+    pub name: Text,
     pub class: String,
     /// 0 = N, 1 = R, 2 = SR, 3 = SSR.
     pub rarity: u8,
@@ -247,7 +247,7 @@ pub struct Trip {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Squad {
     pub id: u32,
-    pub name: String,
+    pub name: Text,
     pub members: Vec<u32>,
     pub route: Vec<u16>,
     #[serde(default)]

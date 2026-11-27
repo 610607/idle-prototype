@@ -1,5 +1,4 @@
 {
-  "legacy.text": "{text}",
   "origin.hq": "总部老队员",
   "origin.city": "{district} · {profession}",
   "origin.city_custom": "{district} · {profession} · 定制",
@@ -40,5 +39,7 @@
   "event.surge.lost_wave": "第 {wave} 波失守",
   "event.surge.lost": "失守",
   "event.surge.alert": "{tile} 告急：来潮{lost}，镇守度归零，停产等你处理",
-  "event.surge.lost_warden": "{tile} 来潮{lost}，镇守度 {before} → {after}"
+  "event.surge.lost_warden": "{tile} 来潮{lost}，镇守度 {before} → {after}",
+  "district.unnamed": "无名街区 {n}",
+  "name.person": "{family}{given}"
 }

@@ -3,8 +3,10 @@
 
 use crate::combat::UnitSpec;
 use crate::content::{content, Stat, TraitEffect};
+use crate::i18n::{self, Text};
 use crate::rng::Rng;
 use crate::state::Operative;
+use crate::txt;
 
 pub const RARITY_NAMES: [&str; 4] = ["N", "R", "SR", "SSR"];
 
@@ -75,16 +77,14 @@ pub fn generate(rng: &mut Rng, id: u32, class_id: &str, origin: &Origin) -> Oper
             }
         }
     }
+    let mut pick = |pool: &str| Text::item(pool, rng.below(i18n::list_len(pool) as u32) as u16);
     let name = if class.side == "otherworld" {
-        rng.pick(&c.otherworld_names).cloned().unwrap_or_default()
+        pick("names.otherworld")
     } else if class.side == "special" {
-        class.name.clone()
+        i18n::name("class", class_id)
     } else {
-        format!(
-            "{}{}",
-            rng.pick(&c.family_names).cloned().unwrap_or_default(),
-            rng.pick(&c.given_names).cloned().unwrap_or_default()
-        )
+        let family = pick("names.family");
+        txt!("name.person", family = family, given = pick("names.given"))
     };
     Operative {
         id,
@@ -185,7 +185,7 @@ pub fn spec(op: &Operative) -> UnitSpec {
     gambits.truncate(d.tactic_slots.max(1));
     UnitSpec {
         key: format!("op:{}", op.id),
-        name: op.name.clone(),
+        name: op.name.render(),
         icon: class.icon.clone(),
         row: class.row,
         max_hp: d.hp,

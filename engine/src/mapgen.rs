@@ -4,9 +4,10 @@
 
 use crate::content::{balance, content, Tag};
 use crate::geom::{self, ring, TILES};
+use crate::i18n::{self, Text};
 use crate::rng::Rng;
 use crate::state::{Dial, District, MapPreview, RiftState, SpecialKind, Terrain, Tile, TileUse};
-use crate::t;
+use crate::txt;
 use std::collections::VecDeque;
 
 pub struct GeneratedMap {
@@ -205,7 +206,7 @@ fn build_districts(rng: &mut Rng, tiles: &mut [Tile]) -> Vec<District> {
             groups[o].extend(moved);
         }
     }
-    let mut names = c.district_names.clone();
+    let mut names: Vec<u16> = (0..i18n::list_len("names.district") as u16).collect();
     rng.shuffle(&mut names);
     let professions: Vec<String> = c.professions.iter().map(|p| p.id.clone()).collect();
     let mut out = Vec::new();
@@ -218,8 +219,8 @@ fn build_districts(rng: &mut Rng, tiles: &mut [Tile]) -> Vec<District> {
         }
         let name = names
             .get(id as usize)
-            .cloned()
-            .unwrap_or_else(|| t!("district.unnamed", n = id + 1));
+            .map(|&i| Text::item("names.district", i))
+            .unwrap_or_else(|| txt!("district.unnamed", n = id + 1));
         let flavor = rng.pick(&c.district_traits).cloned().unwrap_or_default();
         out.push(District {
             id,

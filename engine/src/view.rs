@@ -807,7 +807,7 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
     };
     OpView {
         id: op.id,
-        name: op.name.clone(),
+        name: op.name.render(),
         class: op.class.clone(),
         class_name: class.name.clone(),
         icon: class.icon.clone(),
@@ -1173,7 +1173,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 .collect();
             DistrictView {
                 id: d.id,
-                name: d.name.clone(),
+                name: d.name.render(),
                 tiles: d.tiles.clone(),
                 owned: dc.owned,
                 total: d.tiles.len(),
@@ -1205,7 +1205,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         .iter()
         .map(|s| SquadView {
             id: s.id,
-            name: s.name.clone(),
+            name: s.name.render(),
             members: s.members.clone(),
             route: s.route.clone(),
             running: s.trip.as_ref().map(trip_view),

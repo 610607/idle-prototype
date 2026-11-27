@@ -864,8 +864,6 @@ pub struct RuleDef {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct WorldFile {
-    #[serde(default)]
-    district_names: Vec<String>,
     district_traits: Vec<String>,
     rift_kinds: Vec<RiftKindDef>,
     modifiers: Vec<ModifierDef>,
@@ -873,12 +871,6 @@ struct WorldFile {
     policies: Vec<PolicyDef>,
     equipment: Vec<EquipDef>,
     rules: Vec<RuleDef>,
-    #[serde(default)]
-    given_names: Vec<String>,
-    #[serde(default)]
-    family_names: Vec<String>,
-    #[serde(default)]
-    otherworld_names: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1057,7 +1049,6 @@ pub struct Content {
     pub facilities: Vec<FacilityDef>,
     pub professions: Vec<ProfessionDef>,
     pub mixed: Vec<MixedDef>,
-    pub district_names: Vec<String>,
     pub district_traits: Vec<String>,
     pub rift_kinds: Vec<RiftKindDef>,
     pub modifiers: Vec<ModifierDef>,
@@ -1068,9 +1059,6 @@ pub struct Content {
     pub reactions: Vec<ReactionDef>,
     pub doctrines: Vec<DoctrineDef>,
     pub tasks: Vec<TaskDef>,
-    pub given_names: Vec<String>,
-    pub family_names: Vec<String>,
-    pub otherworld_names: Vec<String>,
     pub balance: Balance,
 }
 
@@ -1163,7 +1151,6 @@ fn load() -> Content {
         facilities,
         professions: prof.professions,
         mixed: prof.mixed,
-        district_names: world.district_names,
         district_traits: world.district_traits,
         rift_kinds: world.rift_kinds,
         modifiers: world.modifiers,
@@ -1174,9 +1161,6 @@ fn load() -> Content {
         reactions,
         doctrines,
         tasks,
-        given_names: world.given_names,
-        family_names: world.family_names,
-        otherworld_names: world.otherworld_names,
         balance,
     };
     localize(&mut c);
@@ -1270,10 +1254,6 @@ fn localize(c: &mut Content) {
         t.name = text("task", &t.id, "name");
         t.desc = text("task", &t.id, "desc");
     }
-    c.district_names = crate::i18n::list("names.district");
-    c.given_names = crate::i18n::list("names.given");
-    c.family_names = crate::i18n::list("names.family");
-    c.otherworld_names = crate::i18n::list("names.otherworld");
 }
 
 static CONTENT: OnceLock<Content> = OnceLock::new();
