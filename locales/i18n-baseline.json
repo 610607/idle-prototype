@@ -1,9 +1,5 @@
 {
-  "web/src/main.tsx": 1,
-  "web/src/ui/App.tsx": 50,
   "web/src/ui/BattleReport.tsx": 38,
-  "web/src/ui/Board.tsx": 12,
-  "web/src/ui/Sheets.tsx": 174,
   "web/src/ui/TileSheet.tsx": 128,
   "web/src/ui/common.tsx": 39
 }
