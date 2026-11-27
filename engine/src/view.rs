@@ -8,6 +8,7 @@ use crate::geom::{self, ring, TILES};
 use crate::operative::{self, Derived, RARITY_NAMES};
 use crate::sim::{self, CycleResults};
 use crate::state::*;
+use crate::t;
 use crate::world;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -271,7 +272,7 @@ fn customize_view(state: &GameState, dc: &economy::DistrictCalc) -> CustomizeVie
                         .profession(other)
                         .map(|x| x.name.clone())
                         .unwrap_or_default();
-                    format!("还要{}在岗满 4 人", on)
+                    t!("view.customize.need_partner", prof = on, n = 4)
                 });
                 classes.push(class_entry(&m.class, true, reason));
             }
@@ -282,7 +283,7 @@ fn customize_view(state: &GameState, dc: &economy::DistrictCalc) -> CustomizeVie
                 prof_icon: p.icon.clone(),
                 workers: workers(&p.id),
                 ok,
-                reason: (!ok).then(|| format!("在岗满 {} 人才能带新人", b.customize_base)),
+                reason: (!ok).then(|| t!("view.customize.need_workers", n = b.customize_base)),
                 classes,
             }
         })
@@ -292,7 +293,7 @@ fn customize_view(state: &GameState, dc: &economy::DistrictCalc) -> CustomizeVie
         hint: if unlocked {
             String::new()
         } else {
-            "本轮有街区连片，或完成一轮之后开放".into()
+            t!("view.customize.locked")
         },
         base: b.customize_base,
         class_cost: b.customize_class,
@@ -402,7 +403,7 @@ pub struct RuleView {
 #[derive(Serialize)]
 pub struct PerkView {
     pub level: u32,
-    pub text: &'static str,
+    pub text: String,
     pub unlocked: bool,
 }
 
@@ -579,7 +580,7 @@ pub fn research_view(state: &GameState) -> ResearchView {
                     name: if seen {
                         r.name.clone()
                     } else {
-                        "？？？".into()
+                        t!("view.codex.unseen")
                     },
                     a: tag_chip(r.a),
                     b: tag_chip(r.b),
@@ -792,17 +793,17 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
     writes.sort();
     writes.dedup();
     let status = match op.assignment {
-        Assignment::Idle => "空闲".to_string(),
+        Assignment::Idle => t!("view.status.idle"),
         Assignment::Squad { squad } => {
             let s = state.cycle.squads.iter().find(|s| s.id == squad);
             match s {
-                Some(s) if s.trip.is_some() => format!("{} · 路线中", s.name),
-                Some(s) if s.rest_until > state.time => format!("{} · 休整", s.name),
-                Some(s) => format!("{} · 待命", s.name),
-                None => "空闲".into(),
+                Some(s) if s.trip.is_some() => t!("view.status.on_route", squad = s.name),
+                Some(s) if s.rest_until > state.time => t!("view.status.resting", squad = s.name),
+                Some(s) => t!("view.status.standby", squad = s.name),
+                None => t!("view.status.idle"),
             }
         }
-        Assignment::Garrison { tile } => format!("驻扎 {}", geom::label(tile)),
+        Assignment::Garrison { tile } => t!("view.status.garrison", tile = geom::label(tile)),
     };
     OpView {
         id: op.id,
@@ -948,37 +949,37 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         perks: vec![
             PerkView {
                 level: 2,
-                text: "第二支小队",
+                text: t!("view.perk.l2_squad"),
                 unlocked: level >= 2,
             },
             PerkView {
                 level: 2,
-                text: "条令「连锁」「超频供电」进研究池",
+                text: t!("view.perk.l2_doctrines"),
                 unlocked: level >= 2,
             },
             PerkView {
                 level: 3,
-                text: "快反规章：开局第一圈格子镇守度满",
+                text: t!("view.perk.l3_rapid_response"),
                 unlocked: level >= 3,
             },
             PerkView {
                 level: 3,
-                text: "知识库 +1 格；条令「前置观测」进研究池",
+                text: t!("view.perk.l3_archive"),
                 unlocked: level >= 3,
             },
             PerkView {
                 level: 4,
-                text: "招募池 +1",
+                text: t!("view.perk.l4_recruit"),
                 unlocked: level >= 4,
             },
             PerkView {
                 level: 5,
-                text: "封存格 +1，知识库 +1 格",
+                text: t!("view.perk.l5_sealed"),
                 unlocked: level >= 5,
             },
             PerkView {
                 level: 6,
-                text: "开局材料 +50%",
+                text: t!("view.perk.l6_materials"),
                 unlocked: level >= 6,
             },
         ],
@@ -1033,7 +1034,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             tide: vec![],
             pending: vec![PendingView {
                 kind: "map",
-                text: "从三张地图里选一张，开始这一轮".into(),
+                text: t!("view.pending.choose_map"),
                 tile: None,
                 op: None,
                 candidate: None,
@@ -1260,10 +1261,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     if alerts.len() > SHOWN_PER_KIND {
         pending.push(PendingView {
             kind: "alert_more",
-            text: format!(
-                "共 {} 格告急：停产中。反击、放弃，或先守住还没丢的",
-                alerts.len()
-            ),
+            text: t!("view.pending.alert_more", n = alerts.len()),
             tile: None,
             op: None,
             candidate: None,
@@ -1273,7 +1271,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     for i in alerts.into_iter().take(SHOWN_PER_KIND) {
         pending.push(PendingView {
             kind: "alert",
-            text: format!("{} 告急：反击、放弃或暂不处理", geom::label(i)),
+            text: t!("view.pending.alert", tile = geom::label(i)),
             tile: Some(i),
             op: None,
             candidate: None,
@@ -1283,14 +1281,14 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     for i in actions::claimable_tiles(state) {
         let t = &cy.tiles[i as usize];
         let (before, after) = actions::border_after_claim(state, i);
-        let what = if t.terrain == Terrain::Rift {
-            "可镇压"
+        let key = if t.terrain == Terrain::Rift {
+            "view.pending.suppress"
         } else {
-            "可占领"
+            "view.pending.claim"
         };
         pending.push(PendingView {
             kind: "claim",
-            text: format!("{} {}（边界 {} → {}）", geom::label(i), what, before, after),
+            text: t!(key, tile = geom::label(i), before = before, after = after),
             tile: Some(i),
             op: None,
             candidate: None,
@@ -1300,11 +1298,11 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     for cd in cy.candidates.iter().take(cap) {
         pending.push(PendingView {
             kind: "candidate",
-            text: format!(
-                "候选 {} {}（{}）",
-                RARITY_NAMES[cd.op.rarity.min(3) as usize],
-                cd.op.name,
-                cd.source
+            text: t!(
+                "view.pending.candidate",
+                rarity = RARITY_NAMES[cd.op.rarity.min(3) as usize],
+                name = cd.op.name,
+                source = cd.source
             ),
             tile: None,
             op: None,
@@ -1316,7 +1314,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         if d.policy.is_none() && d.trust >= b.trust_policy && world::district_owned(cy, d.id) > 0 {
             pending.push(PendingView {
                 kind: "policy",
-                text: format!("{} 信任到 {}，可以定政策", d.name, d.trust),
+                text: t!("view.pending.policy", district = d.name, trust = d.trust),
                 tile: d.tiles.first().copied(),
                 op: None,
                 candidate: None,
@@ -1333,7 +1331,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     if losing.len() > SHOWN_PER_KIND {
         pending.push(PendingView {
             kind: "defend_more",
-            text: format!("未来 12 小时有 {} 格会失守：看潮汐表挑要守的", losing.len()),
+            text: t!("view.pending.defend_more", n = losing.len()),
             tile: None,
             op: None,
             candidate: None,
@@ -1349,18 +1347,18 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         }
         let mins = (e.t - state.time).max(0) / 60;
         let when = if mins < 60 {
-            format!("{} 分钟后", mins)
+            t!("view.pending.in_minutes", n = mins)
         } else {
-            format!("约 {} 小时后", (mins + 30) / 60)
+            t!("view.pending.in_hours", n = (mins + 30) / 60)
         };
         pending.push(PendingView {
             kind: "defend",
-            text: format!(
-                "{} {}的来潮会在第 {}/{} 波失守：换驻守或加强防线",
-                geom::label(e.tile),
-                when,
-                e.lost_wave.unwrap_or(1),
-                e.total_waves
+            text: t!(
+                "view.pending.defend",
+                tile = geom::label(e.tile),
+                when = when,
+                wave = e.lost_wave.unwrap_or(1),
+                waves = e.total_waves
             ),
             tile: Some(e.tile),
             op: None,
@@ -1373,9 +1371,9 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             continue;
         }
         let text = if s.route.is_empty() {
-            format!("{}还没有路线", s.name)
+            t!("view.pending.no_route", squad = s.name)
         } else if s.route.iter().all(|t| cy.tiles[*t as usize].owned) {
-            format!("{}的路线全在领地里，只在巡逻", s.name)
+            t!("view.pending.patrol_only", squad = s.name)
         } else {
             continue;
         };
@@ -1391,7 +1389,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     if !cy.research_offers.is_empty() {
         pending.push(PendingView {
             kind: "research",
-            text: "研究出了三条条令：挑一条".into(),
+            text: t!("view.pending.research_pick"),
             tile: None,
             op: None,
             candidate: None,
@@ -1402,7 +1400,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         if cy.resources.intel >= cost && !crate::doctrine::pool(state).is_empty() {
             pending.push(PendingView {
                 kind: "research",
-                text: format!("情报够研究一次条令（{} 情报）", cost),
+                text: t!("view.pending.research_ready", cost = cost),
                 tile: None,
                 op: None,
                 candidate: None,
