@@ -28,6 +28,8 @@
     { "pattern": "payoff.t.{class}.{k}", "class": "result", "doc": "第 k 次某类爽点的时刻" },
     { "pattern": "payoff.m.research.{k}", "class": "probe", "doc": "第 k 次研究让参考小队模型强度变化的 log2 倍数" },
     { "pattern": "payoff.flip.research.{k}", "class": "probe", "doc": "第 k 次研究让多少格前线由输转赢" },
+    { "pattern": "payoff.research.m_max", "class": "probe", "doc": "一轮里单次研究让参考小队模型强度变化的最大 log2 倍数" },
+    { "pattern": "payoff.research.flips", "class": "probe", "doc": "一轮里所有研究让前线由输转赢的格数之和" },
     { "pattern": "payoff.gap_max_h.{period}", "class": "result", "doc": "该时段内相邻可感爽点的最长间隔" },
     { "pattern": "payoff.gap_max_h.big.{period}", "class": "result", "doc": "该时段内相邻“大”爽点（tier ≥ 2）的最长间隔" },
     { "pattern": "payoff.gap_p90_h.{period}", "class": "result", "doc": "该时段内相邻可感爽点间隔的 90 分位" },

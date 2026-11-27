@@ -1,0 +1,44 @@
+{
+  "_doc": "爽点时间轴的事件分类（docs/balance-eval.md §爽点时间轴）。locales/zh-CN/events.json 里每个 event.* key 都要在这里：class 是时间轴上的类别，tier 0 涓流、1 小、2 大、3 巨大；novel: false 表示它第一次出现也不算新奇（挫折、来潮、轮回记账）。规章代做（EventKind::Rule）不看这张表，一律是 auto。新事件不归类，cargo test 失败。",
+  "keys": {
+    "event.research.new": { "class": "research", "tier": 1 },
+    "event.research.done": { "class": "research", "tier": 1 },
+    "event.contiguous": { "class": "contiguous", "tier": 1 },
+    "event.core_sealed": { "class": "core", "tier": 1 },
+    "event.special_arrived": { "class": "special", "tier": 1 },
+    "event.drop.item": { "class": "drop", "tier": 1 },
+    "event.trait_grown": { "class": "trait", "tier": 1 },
+    "event.codex_lit": { "class": "codex", "tier": 1 },
+    "event.claimed.rift": { "class": "rift", "tier": 1 },
+
+    "event.claimed.city": { "class": "claimed", "tier": 0 },
+    "event.claimed.special": { "class": "claimed", "tier": 0 },
+    "event.claimable.city": { "class": "claimable", "tier": 0 },
+    "event.claimable.rift": { "class": "claimable", "tier": 0 },
+    "event.candidate": { "class": "candidate", "tier": 0 },
+    "event.hired": { "class": "hired", "tier": 0 },
+    "event.cache": { "class": "cache", "tier": 0 },
+    "event.clue": { "class": "clue", "tier": 0 },
+    "event.task_done": { "class": "task", "tier": 0 },
+    "event.drop.salvaged": { "class": "salvage", "tier": 0 },
+    "event.counter.won": { "class": "counter", "tier": 0 },
+    "event.retired.instructor": { "class": "retired", "tier": 0 },
+    "event.trip.planned": { "class": "trip", "tier": 0 },
+
+    "event.trip.emergency": { "class": "trip", "tier": 0, "novel": false },
+    "event.trip.wiped": { "class": "trip", "tier": 0, "novel": false },
+    "event.counter.lost": { "class": "counter", "tier": 0, "novel": false },
+    "event.abandoned": { "class": "abandoned", "tier": 0, "novel": false },
+    "event.retired.left": { "class": "retired", "tier": 0, "novel": false },
+    "event.surge.alert": { "class": "surge", "tier": 0, "novel": false },
+    "event.surge.lost": { "class": "surge", "tier": 0, "novel": false },
+    "event.surge.lost_wave": { "class": "surge", "tier": 0, "novel": false },
+    "event.surge.lost_warden": { "class": "surge", "tier": 0, "novel": false },
+    "event.cycle_started": { "class": "cycle", "tier": 0, "novel": false },
+    "event.collapsed": { "class": "cycle", "tier": 0, "novel": false },
+
+    "event.rule.claimed": { "class": "auto", "tier": 0 },
+    "event.rule.hired": { "class": "auto", "tier": 0 },
+    "event.rule.countered": { "class": "auto", "tier": 0 }
+  }
+}

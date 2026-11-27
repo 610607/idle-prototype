@@ -41,7 +41,9 @@ use idle_engine::api::Engine;
 use idle_engine::geom::{label, ring};
 use idle_engine::sim;
 use idle_engine::state::{EventKind, Trace};
+use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::OnceLock;
 
 /// Size tiers on m = log2(after ÷ before): "small" ×1.2, "big" ×2, "huge" ×10. All three are
 /// candidates to calibrate with LLM playtests (docs/payoff-pacing-research.md §七
@@ -130,50 +132,86 @@ fn size(ev: &Ev) -> f64 {
     ev.m.unwrap_or(SMALL).max(SMALL)
 }
 
-/// Class and tier of an event-log entry (ring entries are found separately, from claimed tiles).
-fn class_of(kind: EventKind, key: &str) -> (&'static str, u8) {
-    if kind == EventKind::Rule {
-        return ("auto", 0);
-    }
-    match key {
-        "event.research.done" | "event.research.new" => ("research", 1),
-        "event.contiguous" => ("contiguous", 1),
-        "event.core_sealed" => ("core", 1),
-        "event.special_arrived" => ("special", 1),
-        "event.drop.item" => ("drop", 1),
-        "event.trait_grown" => ("trait", 1),
-        "event.codex_lit" => ("codex", 1),
-        "event.claimed.rift" => ("rift", 1),
-        "event.candidate" => ("candidate", 0),
-        "event.hired" => ("hired", 0),
-        "event.cache" => ("cache", 0),
-        "event.clue" => ("clue", 0),
-        "event.task_done" => ("task", 0),
-        "event.drop.salvaged" => ("salvage", 0),
-        "event.abandoned" => ("abandoned", 0),
-        "event.cycle_started" | "event.collapsed" => ("cycle", 0),
-        k if k.starts_with("event.claimed.") => ("claimed", 0),
-        k if k.starts_with("event.claimable.") => ("claimable", 0),
-        k if k.starts_with("event.trip.") => ("trip", 0),
-        k if k.starts_with("event.surge.") => ("surge", 0),
-        k if k.starts_with("event.counter.") => ("counter", 0),
-        k if k.starts_with("event.retired.") => ("retired", 0),
-        _ => ("other", 0),
-    }
-}
+/// Event classification (docs/balance-eval.md §爽点时间轴): every `event.*` key in
+/// `locales/zh-CN/events.json` must be in this file, so a new event declares whether it is a
+/// payoff when it is added (the test below fails otherwise).
+pub const CLASSES_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/eval/payoff_classes.json");
 
-/// Setbacks: their first occurrence is new, but not a payoff.
-const SETBACKS: [&str; 5] = [
-    "event.trip.emergency",
-    "event.trip.wiped",
-    "event.counter.lost",
-    "event.abandoned",
-    "event.retired.left",
+/// Every class the file may name.
+const KNOWN: [&str; 23] = [
+    "research",
+    "contiguous",
+    "core",
+    "special",
+    "drop",
+    "trait",
+    "codex",
+    "rift",
+    "claimed",
+    "claimable",
+    "candidate",
+    "hired",
+    "cache",
+    "clue",
+    "task",
+    "salvage",
+    "counter",
+    "retired",
+    "trip",
+    "abandoned",
+    "surge",
+    "cycle",
+    "auto",
 ];
 
-/// Whether the first occurrence of `key` (of class `class`) can be a novelty (module doc).
-fn novel_key(class: &str, tier: u8, key: &str) -> bool {
-    tier == 0 && class != "cycle" && class != "surge" && !SETBACKS.contains(&key)
+#[derive(Deserialize)]
+struct KeyClass {
+    class: String,
+    tier: u8,
+    /// False: the key's first occurrence is not a novelty (setbacks, surges, cycle bookkeeping).
+    #[serde(default = "yes")]
+    novel: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+#[derive(Deserialize)]
+struct ClassFile {
+    keys: BTreeMap<String, KeyClass>,
+}
+
+/// One classified key: class, tier, whether its first occurrence can be a novelty.
+type Class = (&'static str, u8, bool);
+
+fn classes() -> &'static BTreeMap<String, Class> {
+    static C: OnceLock<BTreeMap<String, Class>> = OnceLock::new();
+    C.get_or_init(|| {
+        let p = CLASSES_PATH;
+        let text = std::fs::read_to_string(p).unwrap_or_else(|e| panic!("{p}: {e}"));
+        let f: ClassFile = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{p}: {e}"));
+        f.keys
+            .into_iter()
+            .map(|(k, c)| {
+                let name = KNOWN
+                    .iter()
+                    .find(|&&n| n == c.class)
+                    .unwrap_or_else(|| panic!("{p}: {k}: unknown class {}", c.class));
+                assert!(c.tier <= 3, "{p}: {k}: tier {} > 3", c.tier);
+                (k, (*name, c.tier, c.novel))
+            })
+            .collect()
+    })
+}
+
+/// Class, tier and novelty of an event-log entry (ring entries are found separately, from claimed
+/// tiles). An automated act (`EventKind::Rule`) is `auto`; a key missing from the file is `other`.
+fn class_of(kind: EventKind, key: &str) -> Class {
+    if kind == EventKind::Rule {
+        return ("auto", 0, true);
+    }
+    classes().get(key).copied().unwrap_or(("other", 0, true))
 }
 
 fn hours_since_start(t: i64) -> f64 {
@@ -264,7 +302,7 @@ impl Timeline {
                     }
                 }
             }
-            let (class, mut tier) = class_of(*kind, key);
+            let (class, mut tier, novel) = class_of(*kind, key);
             let mut m = None;
             if class == "contiguous" {
                 let x = contiguous_m();
@@ -281,7 +319,7 @@ impl Timeline {
             };
             self.push(at, class, m, tier, note);
             let merge = prev_novelty.take();
-            if self.seen_keys.insert(key.clone()) && novel_key(class, tier, key) {
+            if self.seen_keys.insert(key.clone()) && tier == 0 && novel {
                 if by_command {
                     self.echoes.push((at, key.clone()));
                 } else if let Some(i) =
@@ -664,5 +702,49 @@ pub fn print(seed: u64, persona: Persona, hours: i64) {
     }
     for (id, v) in m.iter().filter(|(id, _)| id.starts_with("payoff.")) {
         println!("{id} {}", v.map_or("-".into(), crate::fmt));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn leaves(v: &serde_json::Value, path: &str, out: &mut Vec<String>) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, v) in m {
+                    let p = if path.is_empty() {
+                        k.clone()
+                    } else {
+                        format!("{path}.{k}")
+                    };
+                    leaves(v, &p, out);
+                }
+            }
+            _ => out.push(path.to_string()),
+        }
+    }
+
+    /// The 爽点 declaration ratchet: every event key is classified, and every classified key
+    /// still exists.
+    #[test]
+    fn every_event_key_is_classified() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../locales/zh-CN/events.json");
+        let text = std::fs::read_to_string(p).unwrap();
+        let mut keys = Vec::new();
+        leaves(&serde_json::from_str(&text).unwrap(), "", &mut keys);
+        let keys: BTreeSet<String> = keys
+            .into_iter()
+            .filter(|k| k.starts_with("event."))
+            .collect();
+        let c = classes();
+        let missing: Vec<_> = keys.iter().filter(|k| !c.contains_key(*k)).collect();
+        assert!(
+            missing.is_empty(),
+            "classify these event keys in {CLASSES_PATH} (a payoff class and tier, or a tier-0 \
+             trickle class): {missing:?}"
+        );
+        let stale: Vec<_> = c.keys().filter(|k| !keys.contains(*k)).collect();
+        assert!(stale.is_empty(), "no longer in {p}: {stale:?}");
     }
 }
