@@ -1,5 +1,5 @@
 {
-  "_doc": "Metric registry (docs/eval-interface.md §版本和稳健性). Every id `eval run` / `eval session` writes and every id in bands.json must match one pattern here. `{x}` matches one id segment (letters, digits, underscores). class: probe 局面探针 / result 结果量 / self 自选样本 / model 模型对实测 / llm 玩家反馈. `eval metrics` prints this table.",
+  "_doc": "Metric registry (docs/eval-interface.md §版本和稳健性). Every id `eval run` / `eval session` writes and every id in goals.json must match one pattern here. `{x}` matches one id segment (letters, digits, underscores). class: probe 局面探针 / result 结果量 / self 自选样本 / model 模型对实测 / llm 玩家反馈. `eval metrics` prints this table.",
   "metrics": [
     { "pattern": "owned.h{N}", "class": "result", "doc": "第 N 小时占有的格数" },
     { "pattern": "ring.h{N}", "class": "result", "doc": "第 N 小时最深的已占环" },
