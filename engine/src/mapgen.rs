@@ -6,6 +6,7 @@ use crate::content::{balance, content, Tag};
 use crate::geom::{self, ring, TILES};
 use crate::rng::Rng;
 use crate::state::{Dial, District, MapPreview, RiftState, SpecialKind, Terrain, Tile, TileUse};
+use crate::t;
 use std::collections::VecDeque;
 
 pub struct GeneratedMap {
@@ -218,7 +219,7 @@ fn build_districts(rng: &mut Rng, tiles: &mut [Tile]) -> Vec<District> {
         let name = names
             .get(id as usize)
             .cloned()
-            .unwrap_or_else(|| format!("无名街区 {}", id + 1));
+            .unwrap_or_else(|| t!("district.unnamed", n = id + 1));
         let flavor = rng.pick(&c.district_traits).cloned().unwrap_or_default();
         out.push(District {
             id,

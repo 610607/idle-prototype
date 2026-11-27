@@ -12,7 +12,7 @@ fn main() {
         let m = mapgen::generate(seed, "static_turbulence");
         let mut rng = Rng::new(seed);
         let origin = operative::Origin {
-            label: "x".into(),
+            label: idle_engine::txt!("origin.hq"),
             district: None,
             profession: None,
             flavor_trait: None,

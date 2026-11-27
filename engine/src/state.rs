@@ -2,11 +2,13 @@
 
 use crate::combat::{BattleReport, Outcome};
 use crate::content::{Gambit, Resources};
+use crate::i18n::Text;
 use crate::rng::Rng;
+use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SAVE_VERSION: u32 = 1;
+pub const SAVE_VERSION: u32 = 2;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -47,12 +49,12 @@ impl Dial {
             Dial::Seal => 2,
         }
     }
-    pub fn name(self) -> &'static str {
-        match self {
-            Dial::Mine => "开采",
-            Dial::Balance => "平衡",
-            Dial::Seal => "封存",
-        }
+    pub fn name(self) -> String {
+        t!(match self {
+            Dial::Mine => "dial.mine",
+            Dial::Balance => "dial.balance",
+            Dial::Seal => "dial.seal",
+        })
     }
 }
 
@@ -180,7 +182,7 @@ pub struct Operative {
     /// 0 = N, 1 = R, 2 = SR, 3 = SSR.
     pub rarity: u8,
     /// Where they came from, e.g. "钟表匠巷 · 工程师".
-    pub origin: String,
+    pub origin: Text,
     #[serde(default)]
     pub origin_district: Option<u16>,
     #[serde(default)]
@@ -209,7 +211,7 @@ pub struct Operative {
 pub struct Candidate {
     pub id: u32,
     pub op: Operative,
-    pub source: String,
+    pub source: Text,
     pub arrived: i64,
 }
 
@@ -283,7 +285,7 @@ pub struct Event {
     pub id: u32,
     pub t: i64,
     pub kind: EventKind,
-    pub text: String,
+    pub text: Text,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tile: Option<u16>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -470,7 +472,7 @@ impl GameState {
     pub fn event(
         &mut self,
         kind: EventKind,
-        text: String,
+        text: Text,
         tile: Option<u16>,
         op: Option<u32>,
         report: Option<u32>,

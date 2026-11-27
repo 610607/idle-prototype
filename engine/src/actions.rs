@@ -8,14 +8,15 @@ use crate::geom::{self, TILES};
 use crate::operative;
 use crate::state::{Assignment, Dial, EventKind, GameState, SpecialKind, Terrain, TileUse};
 use crate::world;
+use crate::{i18n, t, txt};
 
 pub type ActResult = Result<(), String>;
 
 pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
     let i = tile as usize;
-    let t = state.cycle.tiles.get(i).ok_or("格子不存在")?;
+    let t = state.cycle.tiles.get(i).ok_or_else(|| t!("err.no_tile"))?;
     if !t.claimable() {
-        return Err("镇守度还没满".into());
+        return Err(t!("err.warden_not_full"));
     }
     let terrain = t.terrain;
     let natives = t.natives;
@@ -41,18 +42,12 @@ pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
         state.cycle.stats.rifts_suppressed += 1;
     }
     let label = geom::label(tile);
-    let what = match terrain {
-        Terrain::Rift => "镇压了裂隙".to_string(),
-        Terrain::Special => "占下了特殊格".to_string(),
-        _ => format!("占领，{} 名居民归入", natives),
+    let text = match terrain {
+        Terrain::Rift => txt!("event.claimed.rift", tile = label),
+        Terrain::Special => txt!("event.claimed.special", tile = label),
+        _ => txt!("event.claimed.city", tile = label, n = natives),
     };
-    state.event(
-        EventKind::Claimed,
-        format!("{} {}", label, what),
-        Some(tile),
-        None,
-        None,
-    );
+    state.event(EventKind::Claimed, text, Some(tile), None, None);
     world::reveal_frontier(&mut state.cycle);
     check_contiguity(state);
     Ok(())
@@ -71,11 +66,11 @@ fn check_contiguity(state: &mut GameState) {
             state.cycle.stats.contiguous_districts += 1;
             state.event(
                 EventKind::Contiguous,
-                format!(
-                    "{} 连片：产出 +{}%，信任目标 +{}",
-                    name,
-                    b.contiguity_output_bp / 100,
-                    b.contiguity_trust
+                txt!(
+                    "event.contiguous",
+                    district = name,
+                    output = b.contiguity_output_bp / 100,
+                    trust = b.contiguity_trust
                 ),
                 state.cycle.districts[di].tiles.first().copied(),
                 None,
@@ -88,9 +83,9 @@ fn check_contiguity(state: &mut GameState) {
 /// Give up a tile on alert. Its building is frozen and comes back when the tile is retaken.
 pub fn abandon(state: &mut GameState, tile: u16) -> ActResult {
     let i = tile as usize;
-    let t = state.cycle.tiles.get(i).ok_or("格子不存在")?;
+    let t = state.cycle.tiles.get(i).ok_or_else(|| t!("err.no_tile"))?;
     if !t.owned || t.terrain == Terrain::Hq {
-        return Err("这格不能放弃".into());
+        return Err(t!("err.cannot_abandon"));
     }
     let district = t.district;
     let natives = t.natives;
@@ -115,7 +110,7 @@ pub fn abandon(state: &mut GameState, tile: u16) -> ActResult {
     }
     state.event(
         EventKind::Info,
-        format!("放弃了 {}，建筑冻结，夺回后原样恢复", geom::label(tile)),
+        txt!("event.abandoned", tile = geom::label(tile)),
         Some(tile),
         None,
         None,
@@ -127,9 +122,9 @@ pub fn abandon(state: &mut GameState, tile: u16) -> ActResult {
 pub fn build(state: &mut GameState, tile: u16, facility: Option<&str>) -> ActResult {
     let c = content();
     let i = tile as usize;
-    let t = state.cycle.tiles.get(i).ok_or("格子不存在")?;
+    let t = state.cycle.tiles.get(i).ok_or_else(|| t!("err.no_tile"))?;
     if !t.owned || t.terrain != Terrain::City {
-        return Err("只有占领的城市格能建设".into());
+        return Err(t!("err.build_city_only"));
     }
     let was_housing = t.usage == TileUse::Housing;
     let district = t.district;
@@ -138,12 +133,12 @@ pub fn build(state: &mut GameState, tile: u16, facility: Option<&str>) -> ActRes
             state.cycle.tiles[i].usage = TileUse::Housing;
         }
         Some(id) => {
-            let f = c.facility(id).ok_or("没有这种设施")?;
+            let f = c.facility(id).ok_or_else(|| t!("err.no_facility"))?;
             if state.cycle.tiles[i].usage.facility() == Some(id) {
-                return Err("已经是这种设施".into());
+                return Err(t!("err.same_facility"));
             }
             if !state.cycle.resources.covers(&f.cost) {
-                return Err("材料不够".into());
+                return Err(t!("err.not_enough_materials"));
             }
             state.cycle.resources.sub(&f.cost);
             state.cycle.tiles[i].usage = TileUse::Facility { id: id.to_string() };
@@ -164,14 +159,18 @@ pub fn build(state: &mut GameState, tile: u16, facility: Option<&str>) -> ActRes
 
 pub fn counter(state: &mut GameState, tile: u16) -> ActResult {
     let b = balance();
-    let t = state.cycle.tiles.get(tile as usize).ok_or("格子不存在")?;
+    let t = state
+        .cycle
+        .tiles
+        .get(tile as usize)
+        .ok_or_else(|| t!("err.no_tile"))?;
     if !t.alert() {
-        return Err("这格没有告急".into());
+        return Err(t!("err.no_alert"));
     }
     let district = t.district;
     let calc = economy::calc(state);
     let setup = crate::defense::surge_setup(state, &calc, tile, None, BattleKind::Counter)
-        .ok_or("这格没有来敌")?;
+        .ok_or_else(|| t!("err.no_enemy"))?;
     let report = combat::simulate(&setup.input);
     crate::doctrine::note(state, &report);
     let mut rec = setup.input.clone();
@@ -193,7 +192,11 @@ pub fn counter(state: &mut GameState, tile: u16) -> ActResult {
         state.cycle.stats.counters_won += 1;
         state.event(
             EventKind::Info,
-            format!("{} 反击成功，镇守度回到 {}", geom::label(tile), restore),
+            txt!(
+                "event.counter.won",
+                tile = geom::label(tile),
+                warden = restore
+            ),
             Some(tile),
             None,
             Some(rid),
@@ -202,12 +205,12 @@ pub fn counter(state: &mut GameState, tile: u16) -> ActResult {
     } else {
         state.event(
             EventKind::Info,
-            format!("{} 反击失败，仍然告急", geom::label(tile)),
+            txt!("event.counter.lost", tile = geom::label(tile)),
             Some(tile),
             None,
             Some(rid),
         );
-        Err("反击失败".into())
+        Err(t!("err.counter_failed"))
     }
 }
 
@@ -216,11 +219,11 @@ pub fn set_dial(state: &mut GameState, tile: u16, dial: Dial) -> ActResult {
         .cycle
         .tiles
         .get_mut(tile as usize)
-        .ok_or("格子不存在")?;
+        .ok_or_else(|| t!("err.no_tile"))?;
     if !t.owned {
-        return Err("还没镇压".into());
+        return Err(t!("err.not_suppressed"));
     }
-    let r = t.rift.as_mut().ok_or("这格不是裂隙")?;
+    let r = t.rift.as_mut().ok_or_else(|| t!("err.not_rift"))?;
     r.dial = dial;
     Ok(())
 }
@@ -232,18 +235,18 @@ pub fn hire(state: &mut GameState, candidate: u32) -> ActResult {
         .candidates
         .iter()
         .position(|c| c.id == candidate)
-        .ok_or("没有这名候选")?;
+        .ok_or_else(|| t!("err.no_candidate"))?;
     if pos >= pool_cap(state) {
-        return Err("还在排队".into());
+        return Err(t!("err.queued"));
     }
     let normals = state.cycle.operatives.len();
     if normals >= b.roster_cap {
-        return Err(format!("队员已满 {} 人", b.roster_cap));
+        return Err(t!("err.roster_full", cap = b.roster_cap));
     }
     let is_special = state.cycle.candidates[pos].op.special.is_some();
     let cost = if is_special { 0 } else { b.hire_cost_scrap };
     if state.cycle.resources.scrap < cost {
-        return Err("废材不够".into());
+        return Err(t!("err.not_enough_scrap"));
     }
     state.cycle.resources.scrap -= cost;
     let c = state.cycle.candidates.remove(pos);
@@ -262,7 +265,7 @@ pub fn hire(state: &mut GameState, candidate: u32) -> ActResult {
     state.cycle.stats.hired += 1;
     state.event(
         EventKind::Info,
-        format!("招募了 {}", name),
+        txt!("event.hired", name = name),
         None,
         None,
         None,
@@ -300,28 +303,31 @@ pub fn customize(
     let b = balance();
     let c = content();
     if !customize_unlocked(state) {
-        return Err("定制招募还没开放：本轮有街区连片，或完成一轮之后开放".into());
+        return Err(t!("err.customize_locked"));
     }
     let d = state
         .cycle
         .districts
         .get(district as usize)
-        .ok_or("没有这个街区")?;
-    let prof = c.profession(profession).ok_or("没有这个职业")?;
+        .ok_or_else(|| t!("err.no_district"))?;
+    let prof = c
+        .profession(profession)
+        .ok_or_else(|| t!("err.no_profession"))?;
     let calc = economy::calc(state);
     let dc = calc
         .districts
         .iter()
         .find(|x| x.id == district)
-        .ok_or("没有这个街区")?;
+        .ok_or_else(|| t!("err.no_district"))?;
     if dc.owned == 0 {
-        return Err("这个街区还没有地盘".into());
+        return Err(t!("err.district_unowned"));
     }
     let workers = |p: &str| dc.workers.get(p).copied().unwrap_or(0);
     if workers(profession) < b.customize_base {
-        return Err(format!(
-            "{}在岗不到 {} 人，带不出新人",
-            prof.name, b.customize_base
+        return Err(t!(
+            "err.customize_workers",
+            profession = prof.name,
+            n = b.customize_base
         ));
     }
     let plain = prof.class.clone();
@@ -333,14 +339,14 @@ pub fn customize(
                 .mixed
                 .iter()
                 .find(|m| m.class == x && (m.a == profession || m.b == profession))
-                .ok_or("这个职业带不出这种队员")?;
+                .ok_or_else(|| t!("err.profession_class"))?;
             let other = if m.a == profession { &m.b } else { &m.a };
             if workers(other) < 4 {
                 let on = c
                     .profession(other)
                     .map(|p| p.name.clone())
                     .unwrap_or_default();
-                return Err(format!("还要{}在岗满 4 人", on));
+                return Err(t!("err.customize_mixed", profession = on));
             }
             x.to_string()
         }
@@ -348,17 +354,18 @@ pub fn customize(
     if let Some(t) = lock {
         let cl = &c.classes[&class_id];
         if !cl.fixed_traits.is_empty() || !cl.trait_pool.iter().any(|x| x == t) {
-            return Err("这个职业的词条池里没有这条".into());
+            return Err(t!("err.profession_trait"));
         }
     }
     if rarity.is_some_and(|r| r > 3) {
-        return Err("没有这个稀有度".into());
+        return Err(t!("err.no_rarity"));
     }
     let cost = customize_cost(class_id != plain, lock.is_some(), rarity);
     if d.population < cost {
-        return Err(format!(
-            "街区居民不够：要 {} 人，现有 {} 人",
-            cost, d.population
+        return Err(t!(
+            "err.customize_residents",
+            cost = cost,
+            have = d.population
         ));
     }
     state.cycle.districts[district as usize].population -= cost;
@@ -370,7 +377,7 @@ pub fn customize(
         &class_id,
         lock,
         rarity.unwrap_or(0),
-        " · 定制",
+        true,
     );
     Ok(())
 }
@@ -381,9 +388,9 @@ pub fn dismiss(state: &mut GameState, candidate: u32) -> ActResult {
         .candidates
         .iter()
         .position(|c| c.id == candidate)
-        .ok_or("没有这名候选")?;
+        .ok_or_else(|| t!("err.no_candidate"))?;
     if state.cycle.candidates[pos].op.special.is_some() {
-        return Err("特别队员不能拒绝".into());
+        return Err(t!("err.special_no_dismiss"));
     }
     state.cycle.candidates.remove(pos);
     Ok(())
@@ -396,13 +403,13 @@ pub fn retire(state: &mut GameState, op_id: u32) -> ActResult {
         .operatives
         .iter()
         .position(|o| o.id == op_id)
-        .ok_or("没有这名队员")?;
+        .ok_or_else(|| t!("err.no_op"))?;
     let op = &state.cycle.operatives[pos];
     if op.special.is_some() {
-        return Err("特别队员不退役".into());
+        return Err(t!("err.special_no_retire"));
     }
     if op.locked {
-        return Err("已锁定".into());
+        return Err(t!("err.locked"));
     }
     let (d, p) = (op.origin_district, op.origin_prof.clone());
     let name = op.name.clone();
@@ -417,16 +424,14 @@ pub fn retire(state: &mut GameState, op_id: u32) -> ActResult {
                 .instructors
                 .entry(p.clone())
                 .or_insert(0) += 1;
-            let pname = content()
-                .profession(&p)
-                .map(|x| x.name.clone())
-                .unwrap_or_default();
-            format!(
-                "{} 退役，回到{}当{}教官（人才积累 +20%）",
-                name, state.cycle.districts[d as usize].name, pname
+            txt!(
+                "event.retired.instructor",
+                name = name,
+                district = state.cycle.districts[d as usize].name.clone(),
+                profession = i18n::name("profession", &p)
             )
         }
-        _ => format!("{} 离队", name),
+        _ => txt!("event.retired.left", name = name),
     };
     state.event(EventKind::Info, note, None, None, None);
     Ok(())
@@ -443,12 +448,16 @@ pub fn unassign(state: &mut GameState, op_id: u32) {
 
 pub fn garrison(state: &mut GameState, op_id: u32, tile: Option<u16>) -> ActResult {
     if state.op(op_id).is_none() {
-        return Err("没有这名队员".into());
+        return Err(t!("err.no_op"));
     }
     if let Some(t) = tile {
-        let tt = state.cycle.tiles.get(t as usize).ok_or("格子不存在")?;
+        let tt = state
+            .cycle
+            .tiles
+            .get(t as usize)
+            .ok_or_else(|| t!("err.no_tile"))?;
         if !tt.owned {
-            return Err("只能驻扎在领地上".into());
+            return Err(t!("err.garrison_owned_only"));
         }
         // One operative per tile: the previous one goes idle.
         for o in state.cycle.operatives.iter_mut() {
@@ -467,15 +476,15 @@ pub fn garrison(state: &mut GameState, op_id: u32, tile: Option<u16>) -> ActResu
 pub fn set_squad(state: &mut GameState, squad: u32, members: &[u32]) -> ActResult {
     let b = balance();
     if members.len() > b.squad_size {
-        return Err(format!("一队最多 {} 人", b.squad_size));
+        return Err(t!("err.squad_full", n = b.squad_size));
     }
     for m in members {
         if state.op(*m).is_none() {
-            return Err("没有这名队员".into());
+            return Err(t!("err.no_op"));
         }
     }
     if !state.cycle.squads.iter().any(|s| s.id == squad) {
-        return Err("没有这支小队".into());
+        return Err(t!("err.no_squad"));
     }
     let old: Vec<u32> = state
         .cycle
@@ -515,7 +524,7 @@ pub fn set_route(state: &mut GameState, squad: u32, route: &[u16]) -> ActResult 
         .squads
         .iter()
         .find(|s| s.id == squad)
-        .ok_or("没有这支小队")?
+        .ok_or_else(|| t!("err.no_squad"))?
         .members
         .clone();
     crate::routes::validate(state, &members, route)?;
@@ -529,7 +538,6 @@ pub fn set_route(state: &mut GameState, squad: u32, route: &[u16]) -> ActResult 
 
 pub fn receive_item(state: &mut GameState, id: &str) {
     let b = balance();
-    let c = content();
     let owned = state.cycle.inventory.iter().any(|x| x == id)
         || state
             .cycle
@@ -537,13 +545,13 @@ pub fn receive_item(state: &mut GameState, id: &str) {
             .iter()
             .any(|o| o.equipment.as_deref() == Some(id))
         || state.org.sealed.iter().any(|x| x == id);
-    let name = c.equip(id).map(|e| e.name.clone()).unwrap_or_default();
+    let name = i18n::name("equip", id);
     if owned {
         // Duplicates turn into materials on arrival.
         state.cycle.resources.parts += b.salvage_parts;
         state.event(
             EventKind::Drop,
-            format!("重复的「{}」自动分解：零件 +{}", name, b.salvage_parts),
+            txt!("event.drop.salvaged", item = name, parts = b.salvage_parts),
             None,
             None,
             None,
@@ -552,7 +560,7 @@ pub fn receive_item(state: &mut GameState, id: &str) {
         state.cycle.inventory.push(id.to_string());
         state.event(
             EventKind::Drop,
-            format!("获得装备「{}」", name),
+            txt!("event.drop.item", item = name),
             None,
             None,
             None,
@@ -562,7 +570,7 @@ pub fn receive_item(state: &mut GameState, id: &str) {
 
 pub fn equip(state: &mut GameState, op_id: u32, item: Option<&str>) -> ActResult {
     if state.op(op_id).is_none() {
-        return Err("没有这名队员".into());
+        return Err(t!("err.no_op"));
     }
     if let Some(it) = item {
         let pos = state
@@ -570,7 +578,7 @@ pub fn equip(state: &mut GameState, op_id: u32, item: Option<&str>) -> ActResult
             .inventory
             .iter()
             .position(|x| x == it)
-            .ok_or("仓库里没有这件装备")?;
+            .ok_or_else(|| t!("err.no_item"))?;
         state.cycle.inventory.remove(pos);
     }
     let op = state.op_mut(op_id).unwrap();
@@ -591,14 +599,14 @@ pub fn seal(state: &mut GameState, item: &str, on: bool) -> ActResult {
         };
     if on {
         if state.org.sealed.len() >= slots {
-            return Err(format!("封存格只有 {} 个", slots));
+            return Err(t!("err.seal_slots", n = slots));
         }
         let pos = state
             .cycle
             .inventory
             .iter()
             .position(|x| x == item)
-            .ok_or("仓库里没有这件装备")?;
+            .ok_or_else(|| t!("err.no_item"))?;
         state.cycle.inventory.remove(pos);
         state.org.sealed.push(item.to_string());
     } else {
@@ -607,7 +615,7 @@ pub fn seal(state: &mut GameState, item: &str, on: bool) -> ActResult {
             .sealed
             .iter()
             .position(|x| x == item)
-            .ok_or("封存格里没有")?;
+            .ok_or_else(|| t!("err.not_sealed"))?;
         state.org.sealed.remove(pos);
         state.cycle.inventory.push(item.to_string());
     }
@@ -622,12 +630,12 @@ pub fn policy_check(state: &GameState, district: u16, policy: Option<&str>) -> A
         .cycle
         .districts
         .get(district as usize)
-        .ok_or("没有这个街区")?;
+        .ok_or_else(|| t!("err.no_district"))?;
     if let Some(p) = policy {
         if d.trust < b.trust_policy {
-            return Err(format!("信任到 {} 才能定政策", b.trust_policy));
+            return Err(t!("err.policy_trust", n = b.trust_policy));
         }
-        let def = c.policy(p).ok_or("没有这条政策")?;
+        let def = c.policy(p).ok_or_else(|| t!("err.no_policy"))?;
         if def.cohabit {
             let near_rift = d.tiles.iter().any(|t| {
                 geom::neighbors(*t).any(|n| {
@@ -636,7 +644,7 @@ pub fn policy_check(state: &GameState, district: u16, policy: Option<&str>) -> A
                 })
             });
             if !near_rift {
-                return Err("需要和镇压的裂隙相邻".into());
+                return Err(t!("err.policy_needs_rift"));
             }
         }
     }
@@ -655,7 +663,7 @@ pub fn set_priority(state: &mut GameState, district: u16, priority: &[String]) -
         .cycle
         .districts
         .get_mut(district as usize)
-        .ok_or("没有这个街区")?;
+        .ok_or_else(|| t!("err.no_district"))?;
     let mut p: Vec<String> = priority
         .iter()
         .filter(|x| c.profession(x).is_some())
@@ -702,7 +710,7 @@ pub fn alert_tiles(state: &GameState) -> Vec<u16> {
 
 pub fn spend(state: &mut GameState, cost: &Resources) -> ActResult {
     if !state.cycle.resources.covers(cost) {
-        return Err("材料不够".into());
+        return Err(t!("err.not_enough_materials"));
     }
     state.cycle.resources.sub(cost);
     Ok(())
@@ -713,7 +721,7 @@ pub fn is_landmark(state: &GameState, tile: u16) -> bool {
 }
 
 pub fn lock(state: &mut GameState, op_id: u32, locked: bool) -> ActResult {
-    let op = state.op_mut(op_id).ok_or("没有这名队员")?;
+    let op = state.op_mut(op_id).ok_or_else(|| t!("err.no_op"))?;
     op.locked = locked;
     Ok(())
 }
@@ -724,16 +732,16 @@ pub fn set_gambits(
     gambits: Vec<crate::content::Gambit>,
 ) -> ActResult {
     let c = content();
-    let op = state.op(op_id).ok_or("没有这名队员")?;
+    let op = state.op(op_id).ok_or_else(|| t!("err.no_op"))?;
     let slots = operative::tactic_slots(op);
     if gambits.len() > slots {
-        return Err(format!("战术槽只有 {} 个（智力决定）", slots));
+        return Err(t!("err.gambit_slots", n = slots));
     }
     let skills = &c.classes[&op.class].skills;
     for g in &gambits {
         if let crate::content::Act::Skill { skill } = &g.act {
             if !skills.contains(skill) {
-                return Err("这名队员不会这个技能".into());
+                return Err(t!("err.unknown_skill"));
             }
         }
     }

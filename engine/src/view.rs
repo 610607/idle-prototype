@@ -635,12 +635,39 @@ pub struct View {
     pub facilities: Vec<FacilityOption>,
     pub tide: Vec<TideView>,
     pub pending: Vec<PendingView>,
-    pub events: Vec<Event>,
+    pub events: Vec<EventView>,
     pub org: OrgView,
     pub results: CycleResults,
     pub hire_cost: i64,
     pub research: ResearchView,
     pub tasks: TasksView,
+}
+
+/// An event as shown: the kept key and arguments rendered in the current language.
+#[derive(Serialize, Clone, Debug)]
+pub struct EventView {
+    pub id: u32,
+    pub t: i64,
+    pub kind: EventKind,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tile: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub op: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub report: Option<u32>,
+}
+
+pub fn event_view(e: &Event) -> EventView {
+    EventView {
+        id: e.id,
+        t: e.t,
+        kind: e.kind,
+        text: e.text.render(),
+        tile: e.tile,
+        op: e.op,
+        report: e.report,
+    }
 }
 
 pub fn trait_view(id: &str, exp: bool) -> TraitView {
@@ -787,7 +814,7 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
         front: class.row == crate::content::Row::Front,
         rarity: op.rarity,
         rarity_name: RARITY_NAMES[op.rarity.min(3) as usize],
-        origin: op.origin.clone(),
+        origin: op.origin.render(),
         stats: op.stats,
         derived: operative::derived(op),
         traits,
@@ -976,8 +1003,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             }
         })
         .collect();
-    let mut events: Vec<Event> = state.events.iter().rev().take(60).cloned().collect();
-    events.truncate(60);
+    let events: Vec<EventView> = state.events.iter().rev().take(60).map(event_view).collect();
 
     if cy.phase != Phase::Active {
         return View {
@@ -1197,7 +1223,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         .take(cap)
         .map(|cd| CandidateView {
             id: cd.id,
-            source: cd.source.clone(),
+            source: cd.source.render(),
             arrived: cd.arrived,
             op: op_view(state, &cd.op),
             cost: if cd.op.special.is_some() {

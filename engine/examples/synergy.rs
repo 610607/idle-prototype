@@ -112,7 +112,7 @@ pub fn member(
     let cl = &content().classes[class];
     let mut rng = Rng::new(sample * 7919 + slot as u64 * 104_729 + class.len() as u64 * 31);
     let origin = operative::Origin {
-        label: "sim".into(),
+        label: idle_engine::txt!("origin.hq"),
         district: None,
         profession: None,
         flavor_trait: None,

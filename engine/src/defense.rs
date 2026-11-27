@@ -11,6 +11,7 @@ use crate::geom::{self, ring};
 use crate::operative;
 use crate::state::{EventKind, GameState, Terrain, TideEntry};
 use crate::world;
+use crate::{i18n, t, txt};
 
 pub fn slot_of(i: u16) -> i64 {
     let (x, y) = geom::xy(i);
@@ -102,7 +103,7 @@ pub fn base_defenders(state: &GameState, calc: &EconCalc, tile: u16) -> Vec<Unit
     if t.terrain == Terrain::Hq {
         return vec![simple_unit(
             "hq_guard",
-            "总部警卫",
+            &t!("unit.hq_guard"),
             "class-vanguard",
             Row::Front,
             b.hq_guard_hp,
@@ -126,10 +127,13 @@ pub fn militia_units(m: i32) -> Vec<UnitSpec> {
             let mut u = militia_unit(share);
             if n > 1 {
                 u.key = format!("militia{}", k + 1);
-                u.name = format!(
-                    "{}·{}",
-                    if m > 0 { "民兵" } else { "街坊" },
-                    ["甲", "乙", "丙"][k as usize]
+                u.name = t!(
+                    if m > 0 {
+                        "unit.militia_squad"
+                    } else {
+                        "unit.neighbour_squad"
+                    },
+                    n = i18n::list("names.unit_index")[k as usize]
                 );
             }
             u
@@ -141,9 +145,9 @@ pub fn militia_units(m: i32) -> Vec<UnitSpec> {
 pub fn militia_unit(m: i32) -> UnitSpec {
     let b = balance();
     let name = if m > 0 {
-        format!("民兵（{} 人）", m)
+        t!("unit.militia", n = m)
     } else {
-        "街坊自卫队".to_string()
+        t!("unit.neighbours")
     };
     simple_unit(
         "militia",
@@ -384,12 +388,12 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
             let label = geom::label(tile);
             let lost = report
                 .lost_wave
-                .map(|w| format!("第 {} 波失守", w))
-                .unwrap_or_else(|| "失守".into());
+                .map(|w| txt!("event.surge.lost_wave", wave = w))
+                .unwrap_or_else(|| txt!("event.surge.lost"));
             if warden_after == 0 {
                 state.event(
                     EventKind::Alert,
-                    format!("{} 告急：来潮{}，镇守度归零，停产等你处理", label, lost),
+                    txt!("event.surge.alert", tile = label, lost = lost),
                     Some(tile),
                     None,
                     Some(rid),
@@ -397,9 +401,12 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
             } else {
                 state.event(
                     EventKind::SurgeLost,
-                    format!(
-                        "{} 来潮{}，镇守度 {} → {}",
-                        label, lost, warden_before, warden_after
+                    txt!(
+                        "event.surge.lost_warden",
+                        tile = label,
+                        lost = lost,
+                        before = warden_before,
+                        after = warden_after
                     ),
                     Some(tile),
                     None,

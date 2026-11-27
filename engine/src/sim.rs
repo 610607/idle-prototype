@@ -14,6 +14,7 @@ use crate::rng::Rng;
 use crate::routes;
 use crate::state::*;
 use crate::world;
+use crate::{i18n, t, txt};
 use std::collections::BTreeMap;
 
 const HOUR: i64 = 3600;
@@ -33,15 +34,14 @@ pub fn bump_counter(state: &mut GameState, op_id: u32, counter: &str, by: i32) {
     if forecasting {
         return;
     }
-    for t in grown {
-        let tname = content()
-            .traits
-            .get(&t)
-            .map(|x| x.name.clone())
-            .unwrap_or_default();
+    for id in grown {
         state.event(
             EventKind::Trait,
-            format!("{} 长出了新词条「{}」", name, tname),
+            txt!(
+                "event.trait_grown",
+                op = name.clone(),
+                name = i18n::name("trait", &id)
+            ),
             None,
             Some(op_id),
             None,
@@ -158,13 +158,13 @@ pub fn new_game(seed: u64, now: i64, device: &str) -> GameState {
 pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
     let b = balance();
     if state.cycle.phase != Phase::ChoosingMap {
-        return Err("这一轮已经开始了".into());
+        return Err(t!("err.cycle_started"));
     }
     let p = state
         .cycle
         .previews
         .get(index)
-        .ok_or("没有这张地图")?
+        .ok_or_else(|| t!("err.no_map"))?
         .clone();
     let g = mapgen::generate(p.seed, &p.modifier);
     let level = org_level(state);
@@ -196,7 +196,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
         let id = state.next_id;
         state.next_id += 1;
         let origin = Origin {
-            label: "总部老队员".into(),
+            label: txt!("origin.hq"),
             district: None,
             profession: None,
             flavor_trait: None,
@@ -223,7 +223,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
         state.next_id += 1;
         sq.push(Squad {
             id,
-            name: ["甲队", "乙队", "丙队"][k].to_string(),
+            name: i18n::list("names.squad")[k].clone(),
             members: if k == 0 { first.clone() } else { vec![] },
             route: vec![],
             trip: None,
@@ -242,14 +242,14 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
     // Sealed equipment comes back out; filed doctrines start held.
     state.cycle.inventory = state.org.sealed.clone();
     state.cycle.doctrines = state.org.archive.clone();
-    let name = content()
-        .modifier(&p.modifier)
-        .map(|m| m.name.clone())
-        .unwrap_or_default();
     let n = state.cycle.number;
     state.event(
         EventKind::Info,
-        format!("第 {} 轮开始：{}", n, name),
+        txt!(
+            "event.cycle_started",
+            n = n,
+            modifier = i18n::name("modifier", &p.modifier)
+        ),
         None,
         None,
         None,
@@ -278,17 +278,20 @@ pub fn cycle_results(state: &GameState) -> CycleResults {
     let trust: i64 = owned_d.iter().map(|d| d.trust as i64 / 10).sum();
     let pop: i64 = owned_d.iter().map(|d| d.population as i64).sum::<i64>()
         / balance().score_pop_div.max(1) as i64;
-    lines.push(("街区信任".into(), trust));
-    lines.push(("人口".into(), pop));
-    lines.push(("连片街区".into(), s.contiguous_districts as i64 * 5));
+    lines.push((t!("results.trust"), trust));
+    lines.push((t!("results.population"), pop));
+    lines.push((t!("results.contiguous"), s.contiguous_districts as i64 * 5));
     let management = trust + pop + s.contiguous_districts as i64 * 5;
-    lines.push(("守住的来潮".into(), s.surges_held as i64));
-    lines.push(("防线自给时长".into(), s.self_sufficient_hours as i64 / 2));
+    lines.push((t!("results.surges_held"), s.surges_held as i64));
+    lines.push((
+        t!("results.self_sufficient"),
+        s.self_sufficient_hours as i64 / 2,
+    ));
     let defense = s.surges_held as i64 + s.self_sufficient_hours as i64 / 2;
     let core = if s.core_sealed { 120 } else { 0 };
-    lines.push(("最远深度".into(), s.max_ring as i64 * 10));
-    lines.push(("镇压裂隙".into(), s.rifts_suppressed as i64 * 15));
-    lines.push(("异界核心".into(), core));
+    lines.push((t!("results.max_ring"), s.max_ring as i64 * 10));
+    lines.push((t!("results.rifts"), s.rifts_suppressed as i64 * 15));
+    lines.push((t!("results.core"), core));
     let exploration = s.max_ring as i64 * 10 + s.rifts_suppressed as i64 * 15 + core;
     CycleResults {
         management,
@@ -302,7 +305,7 @@ pub fn cycle_results(state: &GameState) -> CycleResults {
 /// 收束防线: bank this cycle's results and start choosing the next map.
 pub fn collapse(state: &mut GameState) -> Result<(), String> {
     if state.cycle.phase != Phase::Active {
-        return Err("还没开始".into());
+        return Err(t!("err.cycle_not_started"));
     }
     let r = cycle_results(state);
     state.org.exp += r.total;
@@ -343,7 +346,7 @@ pub fn collapse(state: &mut GameState) -> Result<(), String> {
     state.cycle = empty_cycle(next, pv);
     state.event(
         EventKind::Info,
-        format!("收束防线：本轮成果折合组织经验 {}", r.total),
+        txt!("event.collapsed", exp = r.total),
         None,
         None,
         None,
@@ -510,11 +513,12 @@ fn run_rules(state: &mut GameState) {
             if after <= before && actions::claim(state, tile).is_ok() {
                 state.event(
                     EventKind::Rule,
-                    format!(
-                        "规章「稳妥占领」：自动占领 {}（边界 {} → {}）",
-                        crate::geom::label(tile),
-                        before,
-                        after
+                    txt!(
+                        "event.rule.claimed",
+                        rule = i18n::name("rule", "auto_claim"),
+                        tile = crate::geom::label(tile),
+                        before = before,
+                        after = after
                     ),
                     Some(tile),
                     None,
@@ -544,7 +548,11 @@ fn run_rules(state: &mut GameState) {
             if actions::hire(state, id).is_ok() {
                 state.event(
                     EventKind::Rule,
-                    format!("规章「择优招募」：招募了 {}", name),
+                    txt!(
+                        "event.rule.hired",
+                        rule = i18n::name("rule", "auto_recruit"),
+                        name = name.clone()
+                    ),
                     None,
                     None,
                     None,
@@ -558,7 +566,11 @@ fn run_rules(state: &mut GameState) {
                 if r.won() && actions::counter(state, tile).is_ok() {
                     state.event(
                         EventKind::Rule,
-                        format!("规章「告急反击」：{} 反击成功", crate::geom::label(tile)),
+                        txt!(
+                            "event.rule.countered",
+                            rule = i18n::name("rule", "auto_counter"),
+                            tile = crate::geom::label(tile)
+                        ),
                         Some(tile),
                         None,
                         None,
@@ -623,7 +635,10 @@ fn check_specials(state: &mut GameState) {
         }
         let id = state.alloc_id();
         let origin = Origin {
-            label: format!("特别队员 · {}", s.side),
+            label: txt!(
+                "origin.special",
+                side = i18n::Text::new(&format!("special.{}.side", s.id))
+            ),
             district: None,
             profession: None,
             flavor_trait: None,
@@ -646,7 +661,11 @@ fn check_specials(state: &mut GameState) {
         );
         state.event(
             EventKind::Special,
-            format!("特别队员「{}」出现了：{}", s.name, s.rule),
+            txt!(
+                "event.special_arrived",
+                name = i18n::name("special", &s.id),
+                rule = i18n::Text::new(&format!("special.{}.rule", s.id))
+            ),
             None,
             None,
             None,

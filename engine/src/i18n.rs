@@ -4,8 +4,8 @@
 //! Catalog files are flat JSON objects, key → string (or a list of strings for name pools).
 //! `{name}` in a string is replaced by the argument of that name. Lookups fall back to the
 //! default locale, then to the key itself, so a missing string shows up as its key.
-use serde::Deserialize;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{OnceLock, RwLock};
 
 pub const DEFAULT: &str = "zh-CN";
@@ -146,6 +146,98 @@ macro_rules! t {
     };
     ($key:expr, $($name:ident = $val:expr),+ $(,)?) => {
         $crate::i18n::fmt($key, &[$((stringify!($name), ($val).to_string())),+])
+    };
+}
+
+/// Text that is kept rather than shown at once (events in the save): a key and its arguments,
+/// rendered in whatever language reads it. Content names are kept as their own keys
+/// (`name("doctrine", id)`), so they follow the language too. Keys a save refers to live in
+/// `locales/<lang>/events.json` and must never be renamed; add a new key instead.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Text {
+    pub key: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub args: BTreeMap<String, Arg>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Arg {
+    /// Shown as written: numbers, tile labels, generated names.
+    Plain(String),
+    /// Another catalog entry or phrase, rendered in the reader's language.
+    Text(Text),
+}
+
+impl Text {
+    pub fn new(key: &str) -> Text {
+        Text {
+            key: key.to_string(),
+            args: BTreeMap::new(),
+        }
+    }
+
+    pub fn arg(mut self, name: &str, value: impl Into<Arg>) -> Text {
+        self.args.insert(name.to_string(), value.into());
+        self
+    }
+
+    pub fn render(&self) -> String {
+        let args: Vec<(&str, String)> = self
+            .args
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.render()))
+            .collect();
+        fmt(&self.key, &args)
+    }
+}
+
+impl std::fmt::Display for Text {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.render())
+    }
+}
+
+impl Arg {
+    pub fn render(&self) -> String {
+        match self {
+            Arg::Plain(s) => s.clone(),
+            Arg::Text(t) => t.render(),
+        }
+    }
+}
+
+impl From<Text> for Arg {
+    fn from(t: Text) -> Arg {
+        Arg::Text(t)
+    }
+}
+
+macro_rules! plain_arg {
+    ($($t:ty),*) => {$(
+        impl From<$t> for Arg {
+            fn from(v: $t) -> Arg {
+                Arg::Plain(v.to_string())
+            }
+        }
+    )*};
+}
+plain_arg!(String, &str, &String, i32, i64, u8, u16, u32, usize);
+
+/// A content entry's name as a reference: `name("doctrine", "react")` → `doctrine.react.name`.
+pub fn name(kind: &str, id: &str) -> Text {
+    Text::new(&format!("{kind}.{id}.name"))
+}
+
+/// `txt!("key", name = value, ...)` builds a [`Text`] to keep; values are [`Arg`]s (strings,
+/// numbers or other `Text`).
+#[macro_export]
+macro_rules! txt {
+    ($key:expr) => {
+        $crate::i18n::Text::new($key)
+    };
+    ($key:expr, $($name:ident = $val:expr),+ $(,)?) => {
+        $crate::i18n::Text::new($key)$(.arg(stringify!($name), $val))+
     };
 }
 

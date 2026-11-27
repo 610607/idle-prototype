@@ -5,6 +5,7 @@
 use crate::actions::ActResult;
 use crate::content::{content, TaskDef};
 use crate::state::*;
+use crate::{i18n, t, txt};
 
 /// How many open tasks the checklist shows at once.
 pub const SHOWN: usize = 3;
@@ -62,19 +63,19 @@ pub fn claim(state: &mut GameState, id: &str) -> ActResult {
     let t = open(state)
         .into_iter()
         .find(|t| t.id == id)
-        .ok_or("这条见习任务还没开放或已经领过")?;
+        .ok_or_else(|| t!("err.task_unavailable"))?;
     if !done(state, &t.check) {
-        return Err("还没做到".into());
+        return Err(t!("err.task_not_done"));
     }
     let has_reward = !t.reward.is_zero();
     if has_reward && state.cycle.phase != Phase::Active {
-        return Err("开始这一轮以后再领".into());
+        return Err(t!("err.task_needs_cycle"));
     }
     state.cycle.resources.add(&t.reward);
     state.org.tasks_done.push(t.id.clone());
     state.event(
         EventKind::Info,
-        format!("见习任务完成：{}", t.name),
+        txt!("event.task_done", name = i18n::name("task", &t.id)),
         None,
         None,
         None,

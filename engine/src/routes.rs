@@ -9,6 +9,7 @@ use crate::geom::{self, ring};
 use crate::operative;
 use crate::state::{EventKind, GameState, SpecialKind, TileResult, Trip};
 use crate::world;
+use crate::{i18n, t, txt};
 use std::collections::BTreeMap;
 
 pub fn squad_effect(
@@ -29,31 +30,31 @@ pub fn validate(state: &GameState, members: &[u32], route: &[u16]) -> Result<(),
         return Ok(());
     }
     if route.len() > b.route_max_len {
-        return Err(format!("路线最多 {} 格", b.route_max_len));
+        return Err(t!("err.route_too_long", n = b.route_max_len));
     }
     let cross = squad_effect(state, members, |e| matches!(e, TraitEffect::CrossBarrier));
     let fog = squad_effect(state, members, |e| matches!(e, TraitEffect::FogWalk));
     for (k, &i) in route.iter().enumerate() {
         if i as usize >= cy.tiles.len() {
-            return Err("格子不存在".into());
+            return Err(t!("err.no_tile"));
         }
         let t = &cy.tiles[i as usize];
         if !t.passable() && !cross {
-            return Err(format!("{} 是天险，过不去", geom::label(i)));
+            return Err(t!("err.route_barrier", tile = geom::label(i)));
         }
         if !t.revealed && !fog {
-            return Err(format!("{} 还在迷雾里", geom::label(i)));
+            return Err(t!("err.route_fog", tile = geom::label(i)));
         }
         if route[..k].contains(&i) {
-            return Err("路线不能重复经过同一格".into());
+            return Err(t!("err.route_repeat"));
         }
         if k == 0 {
             let ok = t.owned || geom::neighbors(i).any(|n| cy.tiles[n as usize].owned);
             if !ok {
-                return Err("路线要从领地出发".into());
+                return Err(t!("err.route_start"));
             }
         } else if !geom::adjacent(route[k - 1], i) {
-            return Err("路线上的格子要相邻".into());
+            return Err(t!("err.route_adjacent"));
         }
     }
     Ok(())
@@ -268,15 +269,15 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             state.cycle.stats.core_sealed = true;
             state.cycle.core_cut += b.core_attention_cut;
             state.cycle.resources.crystal += b.core_crystal;
-            let name = content()
-                .modifier(&state.cycle.modifier)
-                .map(|m| m.core_name.clone())
-                .unwrap_or_default();
+            let core = i18n::Text::new(&format!("modifier.{}.core_name", state.cycle.modifier));
             state.event(
                 EventKind::Core,
-                format!(
-                    "封住了{}（{}）：注视度 -{}，原晶 +{}",
-                    name, label, b.core_attention_cut, b.core_crystal
+                txt!(
+                    "event.core_sealed",
+                    core = core,
+                    tile = label.clone(),
+                    cut = b.core_attention_cut,
+                    crystal = b.core_crystal
                 ),
                 Some(r.tile),
                 None,
@@ -288,14 +289,14 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             && !state.cycle.tiles[i].special_done
         {
             state.cycle.tiles[i].special_done = true;
-            let what = if special == Some(SpecialKind::Cache) {
-                "物资点：废材 +80，零件 +12"
+            let key = if special == Some(SpecialKind::Cache) {
+                "event.cache"
             } else {
-                "线索：情报 +25"
+                "event.clue"
             };
             state.event(
                 EventKind::Info,
-                format!("{} {}", label, what),
+                txt!(key, tile = label.clone()),
                 Some(r.tile),
                 None,
                 None,
@@ -306,14 +307,14 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             let before = t.warden;
             t.warden = (t.warden + b.warden_route_win).min(100);
             if before < 100 && t.warden >= 100 {
-                let kind = if t.terrain == crate::state::Terrain::Rift {
-                    "可镇压"
+                let key = if t.terrain == crate::state::Terrain::Rift {
+                    "event.claimable.rift"
                 } else {
-                    "可占领"
+                    "event.claimable.city"
                 };
                 state.event(
                     EventKind::Claimable,
-                    format!("{} 镇守度满，{}", label, kind),
+                    txt!(key, tile = label.clone()),
                     Some(r.tile),
                     None,
                     None,
@@ -367,15 +368,15 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             .map(|r| geom::label(r.tile))
             .unwrap_or_default();
         let rid = trip.results.last().and_then(|r| r.report);
-        let what = match trip.outcome {
-            Outcome::Planned => "按计划收队",
-            Outcome::Emergency => "紧急撤退，带回 60%",
-            _ => "全灭撤回，带回 30%",
+        let key = match trip.outcome {
+            Outcome::Planned => "event.trip.planned",
+            Outcome::Emergency => "event.trip.emergency",
+            _ => "event.trip.wiped",
         };
         let name = state.cycle.squads[si].name.clone();
         state.event(
             EventKind::Trip,
-            format!("{}在 {} {}", name, lost_at, what),
+            txt!(key, squad = name, tile = lost_at),
             trip.results.last().map(|r| r.tile),
             None,
             rid,

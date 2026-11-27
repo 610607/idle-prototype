@@ -9,7 +9,7 @@ use crate::state::Operative;
 pub const RARITY_NAMES: [&str; 4] = ["N", "R", "SR", "SSR"];
 
 pub struct Origin<'a> {
-    pub label: String,
+    pub label: crate::i18n::Text,
     pub district: Option<u16>,
     pub profession: Option<&'a str>,
     pub flavor_trait: Option<&'a str>,
@@ -248,7 +248,7 @@ mod tests {
 
     fn origin() -> Origin<'static> {
         Origin {
-            label: "测试".into(),
+            label: crate::txt!("origin.hq"),
             district: None,
             profession: Some("militia"),
             flavor_trait: Some("street_smart"),

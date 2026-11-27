@@ -7,6 +7,7 @@ use crate::actions::ActResult;
 use crate::combat::{BattleInput, BattleReport};
 use crate::content::{balance, content, DoctrineDef, TraitEffect};
 use crate::state::*;
+use crate::{i18n, t, txt};
 
 /// The doctrine every first draw of a cycle offers while it is not held: the hub the rest wire into.
 pub const HUB: &str = "react";
@@ -35,17 +36,17 @@ pub fn pool(state: &GameState) -> Vec<&'static DoctrineDef> {
 
 pub fn research(state: &mut GameState) -> ActResult {
     if state.cycle.phase != Phase::Active {
-        return Err("这一轮还没开始".into());
+        return Err(t!("err.cycle_not_active"));
     }
     if !state.cycle.research_offers.is_empty() {
-        return Err("先从上一次研究的三条里挑一条".into());
+        return Err(t!("err.research_pick_first"));
     }
     let cost = research_cost(state);
     if state.cycle.resources.intel < cost {
-        return Err(format!("情报不够（要 {cost}）"));
+        return Err(t!("err.intel_short", cost = cost));
     }
     if pool(state).is_empty() {
-        return Err("能研究的条令都拿到了".into());
+        return Err(t!("err.research_exhausted"));
     }
     state.cycle.resources.intel -= cost;
     state.cycle.research_count += 1;
@@ -62,14 +63,14 @@ pub fn reroll_cost(state: &GameState) -> i64 {
 /// Swap the pending three for three others (scrap; the price rises each time this cycle).
 pub fn reroll(state: &mut GameState) -> ActResult {
     if state.cycle.research_offers.is_empty() {
-        return Err("先研究一次".into());
+        return Err(t!("err.research_first"));
     }
     if pool(state).is_empty() {
-        return Err("没有别的条令可换".into());
+        return Err(t!("err.reroll_exhausted"));
     }
     let cost = reroll_cost(state);
     if state.cycle.resources.scrap < cost {
-        return Err(format!("废材不够（要 {cost}）"));
+        return Err(t!("err.scrap_short", cost = cost));
     }
     state.cycle.resources.scrap -= cost;
     state.cycle.rerolls += 1;
@@ -102,9 +103,11 @@ fn draw(state: &mut GameState, hub_first: bool) -> Vec<String> {
 
 pub fn pick(state: &mut GameState, id: &str) -> ActResult {
     if !state.cycle.research_offers.iter().any(|x| x == id) {
-        return Err("这一条不在研究结果里".into());
+        return Err(t!("err.not_offered"));
     }
-    let d = content().doctrine(id).ok_or("没有这条条令")?;
+    let d = content()
+        .doctrine(id)
+        .ok_or_else(|| t!("err.no_doctrine"))?;
     state.cycle.research_offers.clear();
     state.cycle.doctrines.push(id.to_string());
     let first = !state.org.known_doctrines.iter().any(|x| x == id);
@@ -113,10 +116,13 @@ pub fn pick(state: &mut GameState, id: &str) -> ActResult {
     }
     state.event(
         EventKind::Info,
-        format!(
-            "研究完成：条令「{}」{}",
-            d.name,
-            if first { "（新）" } else { "" }
+        txt!(
+            if first {
+                "event.research.new"
+            } else {
+                "event.research.done"
+            },
+            name = i18n::name("doctrine", &d.id)
         ),
         None,
         None,
@@ -133,11 +139,11 @@ pub fn archive(state: &mut GameState, id: &str, on: bool) -> ActResult {
             return Ok(());
         }
         if !state.org.known_doctrines.iter().any(|x| x == id) {
-            return Err("还没研究过这条条令".into());
+            return Err(t!("err.doctrine_unknown"));
         }
         let slots = archive_slots(state);
         if state.org.archive.len() >= slots {
-            return Err(format!("只能带 {slots} 条"));
+            return Err(t!("err.archive_slots", n = slots));
         }
         state.org.archive.push(id.to_string());
     } else {
@@ -146,7 +152,7 @@ pub fn archive(state: &mut GameState, id: &str, on: bool) -> ActResult {
             .archive
             .iter()
             .position(|x| x == id)
-            .ok_or("知识库里没有")?;
+            .ok_or_else(|| t!("err.not_archived"))?;
         state.org.archive.remove(pos);
     }
     Ok(())
@@ -195,13 +201,9 @@ pub fn note(state: &mut GameState, report: &BattleReport) {
         let first = *e == 0;
         *e += n;
         if first {
-            let name = content()
-                .reaction(id)
-                .map(|r| r.name.clone())
-                .unwrap_or_else(|| id.clone());
             state.event(
                 EventKind::Info,
-                format!("图鉴点亮：第一次触发反应「{name}」"),
+                txt!("event.codex_lit", name = i18n::name("reaction", id)),
                 None,
                 None,
                 None,

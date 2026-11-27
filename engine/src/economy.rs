@@ -8,6 +8,7 @@ use crate::operative::{self, Origin};
 use crate::state::{
     Assignment, Candidate, Dial, EventKind, GameState, SpecialKind, Terrain, TileUse,
 };
+use crate::{i18n, t, txt};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -194,7 +195,7 @@ pub fn calc(state: &GameState) -> EconCalc {
             continue;
         }
         let policy = d.policy.as_deref().and_then(|p| c.policy(p));
-        let mut factors: Vec<(String, i32)> = vec![("基础".into(), 50)];
+        let mut factors: Vec<(String, i32)> = vec![(t!("trust.base"), 50)];
         let mut service = 0;
         let mut rift_adj = 0;
         let mut landmark = false;
@@ -234,19 +235,19 @@ pub fn calc(state: &GameState) -> EconCalc {
             }
         }
         if service != 0 {
-            factors.push(("服务与生产设施".into(), service.clamp(-20, 20)));
+            factors.push((t!("trust.service"), service.clamp(-20, 20)));
         }
         if rift_adj != 0 {
-            factors.push(("与裂隙相邻".into(), rift_adj.clamp(-15, 10)));
+            factors.push((t!("trust.rift"), rift_adj.clamp(-15, 10)));
         }
         if landmark {
-            factors.push(("地标".into(), 5));
+            factors.push((t!("trust.landmark"), 5));
         }
         if d.contiguous {
-            factors.push(("街区连片".into(), b.contiguity_trust));
+            factors.push((t!("trust.contiguous"), b.contiguity_trust));
         }
         if dc.unhoused > 0 {
-            factors.push(("无处可住".into(), -(dc.unhoused / 3).clamp(1, 20)));
+            factors.push((t!("trust.unhoused"), -(dc.unhoused / 3).clamp(1, 20)));
         }
         let alerts = d
             .tiles
@@ -254,7 +255,7 @@ pub fn calc(state: &GameState) -> EconCalc {
             .filter(|t| cy.tiles[**t as usize].alert())
             .count() as i32;
         if alerts > 0 {
-            factors.push(("告急".into(), -15 * alerts));
+            factors.push((t!("trust.alerts"), -15 * alerts));
         }
         let needs_power = d.tiles.iter().any(|t| {
             let tt = &cy.tiles[*t as usize];
@@ -266,7 +267,7 @@ pub fn calc(state: &GameState) -> EconCalc {
                     .is_some_and(|f| f.power > 0)
         });
         if out.power_bp < 10_000 && needs_power {
-            factors.push(("停电".into(), -10));
+            factors.push((t!("trust.blackout"), -10));
         }
         let talker = cy.operatives.iter().any(|o| match o.assignment {
             Assignment::Garrison { tile } => {
@@ -276,7 +277,7 @@ pub fn calc(state: &GameState) -> EconCalc {
             _ => false,
         });
         if talker {
-            factors.push(("驻扎队员的人脉".into(), 3));
+            factors.push((t!("trust.garrison"), 3));
         }
         dc.trust_target = factors.iter().map(|(_, v)| *v).sum::<i32>().clamp(0, 100);
         dc.trust_factors = factors;
@@ -469,11 +470,11 @@ fn mixed_or_plain(state: &mut GameState, dc: &DistrictCalc, p: &str) -> String {
 }
 
 pub fn spawn_city_candidate(state: &mut GameState, district: u16, prof: &str, class: &str) {
-    spawn_city_candidate_with(state, district, prof, class, None, 0, "");
+    spawn_city_candidate_with(state, district, prof, class, None, 0, false);
 }
 
 /// A city candidate, optionally customised: `lock` takes the first trait slot, rarity is at
-/// least `min_rarity`, and `suffix` is appended to the source label.
+/// least `min_rarity`, and `custom` marks the source as raised on purpose.
 pub fn spawn_city_candidate_with(
     state: &mut GameState,
     district: u16,
@@ -481,7 +482,7 @@ pub fn spawn_city_candidate_with(
     class: &str,
     lock: Option<&str>,
     min_rarity: u8,
-    suffix: &str,
+    custom: bool,
 ) {
     let c = content();
     let d = state.cycle.districts[district as usize].clone();
@@ -490,13 +491,18 @@ pub fn spawn_city_candidate_with(
         .as_deref()
         .and_then(|p| c.policy(p))
         .and_then(|p| p.recruit_trait.clone());
-    let prof_name = c
-        .profession(prof)
-        .map(|p| p.name.clone())
-        .unwrap_or_default();
     let id = state.alloc_id();
+    let key = if custom {
+        "origin.city_custom"
+    } else {
+        "origin.city"
+    };
     let origin = Origin {
-        label: format!("{} · {}{}", d.name, prof_name, suffix),
+        label: txt!(
+            key,
+            district = d.name.clone(),
+            profession = i18n::name("profession", prof)
+        ),
         district: Some(district),
         profession: Some(prof),
         flavor_trait: Some(&d.flavor),
@@ -514,7 +520,12 @@ pub fn spawn_rift_candidate(state: &mut GameState, tile: u16, kind: &str) {
     let Some(k) = c.rift_kind(kind) else { return };
     let id = state.alloc_id();
     let origin = Origin {
-        label: format!("{} {} · {}", k.name, geom::label(tile), k.resident),
+        label: txt!(
+            "origin.rift",
+            rift = i18n::name("rift", kind),
+            tile = geom::label(tile),
+            resident = i18n::Text::new(&format!("rift.{kind}.resident"))
+        ),
         district: None,
         profession: None,
         flavor_trait: None,
@@ -527,14 +538,10 @@ pub fn spawn_rift_candidate(state: &mut GameState, tile: u16, kind: &str) {
     push_candidate(state, op, origin.label.clone());
 }
 
-pub fn push_candidate(state: &mut GameState, op: crate::state::Operative, source: String) {
+pub fn push_candidate(state: &mut GameState, op: crate::state::Operative, source: i18n::Text) {
     let cid = state.alloc_id();
     let name = op.name.clone();
-    let class = content()
-        .classes
-        .get(&op.class)
-        .map(|c| c.name.clone())
-        .unwrap_or_default();
+    let class = i18n::name("class", &op.class);
     let rarity = operative::RARITY_NAMES[op.rarity as usize];
     state.cycle.candidates.push(Candidate {
         id: cid,
@@ -545,7 +552,13 @@ pub fn push_candidate(state: &mut GameState, op: crate::state::Operative, source
     state.cycle.stats.candidates += 1;
     state.event(
         EventKind::Candidate,
-        format!("新候选：{} {}（{}，{}）", rarity, name, class, source),
+        txt!(
+            "event.candidate",
+            rarity = rarity,
+            name = name,
+            class = class,
+            source = source.clone()
+        ),
         None,
         None,
         None,

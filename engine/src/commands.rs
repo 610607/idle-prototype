@@ -5,6 +5,7 @@ use crate::actions;
 use crate::content::Gambit;
 use crate::sim;
 use crate::state::{Dial, GameState, Phase};
+use crate::t;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -128,7 +129,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
                 | Command::ClaimTask { .. }
         )
     {
-        return Err("先选一张地图".into());
+        return Err(t!("err.choose_map_first"));
     }
     let r = match cmd {
         Command::ChooseMap { index } => sim::choose_map(state, *index),
@@ -165,7 +166,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         }
         Command::SetRule { rule, on } => {
             if crate::content::content().rule(rule).is_none() {
-                Err("没有这条规章".into())
+                Err(t!("err.no_rule"))
             } else {
                 state.org.rules.insert(rule.clone(), *on);
                 Ok(())
