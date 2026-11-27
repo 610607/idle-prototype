@@ -10,10 +10,12 @@ use std::path::{Path, PathBuf};
 
 pub mod bot;
 pub mod calib;
+pub mod game;
 pub mod model;
 pub mod payoff;
 pub mod power;
 pub mod price;
+pub mod probes;
 pub mod registry;
 pub mod review;
 pub mod run;

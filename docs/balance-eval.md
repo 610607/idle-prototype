@@ -311,7 +311,7 @@ L1 实战（`calibrate field greedy`，机器人第 6/12/24/48 小时的真实�
 0. **词条**：新特质、装备、学说跑 `eval price --bless`，看它落在同类的什么位置；`cargo test` 会拦漏测价的。
 1. **数值进数据**：常数放 `balance.json` 或内容数据（`CLAUDE.md` 已有规定）。
 2. **L0**：如果它有随环、随时间变化的曲线，在 `numbers` 里加一行，打印曲线和相邻倍数。
-3. **L2 指标**：在 `evalkit/src/run.rs` 里加 id。按事件计的结果走 `GameState::trace` 钩子（不存档，`None` 时没有开销），不要靠轮询状态去猜。
+3. **L2 指标**：在 `evalkit/src/probes.rs` 里加 id：属于已有探针（`Pace` 节奏、`Fights` 战斗与来潮、`Economy` 经济）的读数加进那个探针，自成一块的系统新写一个探针，挂进 `Probes` 的 `step` / `hour` / `finish`。`run::measure` 只推进时间、让驾驶者行动，不放读数。按事件计的结果走 `GameState::trace` 钩子（不存档，`None` 时没有开销），不要靠轮询状态去猜。
 4. **有人用**：给 `evalkit/src/bot.rs` 加一条会用它的规则，或者加一个人格；否则它会出现在 `commands.never`，等于没被评估。
 5. **目标和区间**：在 `goals.json` 里把它挂到相关的设计目标下（或起草新目标），区间写明依据（来自哪条曲线或哪个参考游戏），没把握的先用 `watch`。可以用 `docs/prompts/declare.md` 起草。
 6. **战斗相关的**：在 `calibrate` 里加一个开关对照（像 `no_doctrines`），用“开 vs 关”的胜率差给它定价；如果它改变了 AUC 或 ρ50，说明指数需要加项。

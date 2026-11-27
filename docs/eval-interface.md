@@ -151,7 +151,7 @@ cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --session
 
 `eval session` 对每个会话目录：读 manifest 和命令日志，从同一个种子开局，按时刻重放命令，期间和 `eval run` 一样每 5 分钟记一次测量，算出同名的全部指标（`owned.h*`、`reach_h.*`、`payoff.*`……）；再从 visits.jsonl 算 `llm.*` 指标。结果是一个 RunFile，人格名 `llm:<player>`（`player` 本身是机器人人格名时就用人格名，如 `greedy`），可以直接 `eval check`、`eval compare`（和同种子的 `greedy` 比），也可以和机器人的结果一起交给 `eval review`。
 
-重放的细节（代码在 `engine/evalkit/src/run.rs` 的 `measure` 和 `Replay`、`session.rs`）：
+重放的细节（代码在 `engine/evalkit/src/run.rs` 的 `measure` 和 `Replay`、`session.rs`；指标由 `probes.rs` 的探针算）：
 
 - 机器人和重放走同一个测量循环，只是行动的一方不同。两者开局相同：`Engine::new(seed, T0, "agent")`，再加 `textui::setup` 的四条设定命令（选第 1 张地图、开三条规章）。日志开头是这四条时，重放先执行它们，不算玩家第 1 小时发出的命令（和机器人一样）。
 - 每 5 分钟一步。每条命令在自己的时刻执行：时刻落在一步中间，就先推进到那一刻、执行、再推进到这一步结束；同一秒的几条命令之间不推进时间（`sim::advance` 即使没有经过时间也会让空闲小队出发）。每小时交给爽点时间轴的“发出的命令”就是这一小时里日志中的命令，按名字计数。

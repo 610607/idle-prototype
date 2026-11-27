@@ -1,7 +1,7 @@
 //! Combat-side payoff sizes (docs/balance-eval.md §爽点时间轴, docs/payoff-pacing-research.md
 //! §六–七): the strongest squad's model strength over time against a fixed yardstick, how much each
 //! doctrine moves it and how many tiles it flips from loss to win, and combat walls (hours when no
-//! frontier tile can be won). Fed by `run::play_full` alongside `payoff::Timeline`.
+//! frontier tile can be won). Fed by the probes (`probes.rs`) alongside `payoff::Timeline`.
 //!
 //! - Yardstick strength S(state) (`strength`): the combat model's strength (min of the output and
 //!   survival margins, `model::margins`) of a squad against every ladder encounter of rungs 1..=7
@@ -32,13 +32,14 @@
 //!   the best squad wins at least one of them in a simulated one-tile battle; a wall is a run of
 //!   hours with the frontier closed → `payoff.wall.*`, and `payoff.frontier.margin.h<N>` says how
 //!   close the gate is by the model.
+use crate::game::{deepest_owned, fightable};
 use crate::model::{self, Profile};
 use crate::run::{Metrics, CHECKPOINTS, T0};
 use crate::synergy;
 use idle_engine::api::Engine;
 use idle_engine::combat::{self, BattleInput, BattleKind, UnitSpec};
 use idle_engine::geom::{neighbors, ring};
-use idle_engine::state::{GameState, Terrain, Trace};
+use idle_engine::state::{GameState, Trace};
 use idle_engine::{doctrine, operative, routes};
 use std::sync::OnceLock;
 
@@ -204,29 +205,6 @@ pub fn ladder_size() -> usize {
 #[allow(dead_code)]
 pub fn strength(st: &GameState) -> Option<f64> {
     best(&squads(st), &st.cycle.doctrines).map(|(_, s)| s)
-}
-
-fn deepest_owned(st: &GameState) -> i32 {
-    st.cycle
-        .tiles
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| t.owned)
-        .map(|(i, _)| ring(i as u16))
-        .max()
-        .unwrap_or(0)
-}
-
-/// Tiles a route could fight on: unowned, with enemies, not barrier or HQ.
-fn fightable(st: &GameState) -> impl Iterator<Item = u16> + '_ {
-    st.cycle
-        .tiles
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| {
-            !t.owned && !t.waves.is_empty() && !matches!(t.terrain, Terrain::Barrier | Terrain::Hq)
-        })
-        .map(|(i, _)| i as u16)
 }
 
 /// The frontier: fightable tiles of ring M + 1 next to an owned tile (M = deepest owned ring).

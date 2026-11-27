@@ -5,14 +5,19 @@
 //! encounter ladder of rings 1–7 and ring 7 at higher strength) and the field (the bot's actual
 //! squads at hours 6/12/24/48 against every tile they could fight on, doctrines included).
 //! `numbers` prints the encounter curve D(r) and where the reference team stands on it.
+use crate::game::{fightable, squad_units};
 use crate::power::{self, Sample};
 use crate::run::{self, Persona};
 use crate::synergy;
+use idle_engine::api::Engine;
 use idle_engine::combat::{BattleInput, BattleKind, UnitSpec};
 use idle_engine::geom::ring;
 use idle_engine::operative;
+use idle_engine::routes;
 
 pub const FIELD_HOURS: [i64; 4] = [6, 12, 24, 48];
+/// What `calibrate` switches off in the field, to price it (on/off comparison).
+pub const VARIANTS: [&str; 4] = ["full", "no_doctrines", "no_traits", "neither"];
 const BINS: [f64; 8] = [0.25, 0.5, 0.7, 1.0, 1.5, 2.0, 4.0, 8.0];
 /// The reference team of docs/balance-curves-research.md: vanguard, marksman, medic.
 const REFERENCE: [usize; 3] = [0, 1, 2];
@@ -89,9 +94,7 @@ pub fn field(persona: Persona, seeds: &[u64]) -> Vec<(i64, &'static str, Sample)
                             }
                             e.advance(run::T0 + h * 3600);
                             if FIELD_HOURS.contains(&h) {
-                                out.extend(
-                                    run::field_samples(&e).into_iter().map(|(v, x)| (h, v, x)),
-                                );
+                                out.extend(field_samples(&e).into_iter().map(|(v, x)| (h, v, x)));
                             }
                         }
                     }
@@ -210,7 +213,7 @@ pub fn field_by_hour(samples: &[(i64, &str, Sample)]) {
         print!(" {:>6}", format!("r{r}"));
     }
     println!();
-    for v in run::VARIANTS {
+    for v in VARIANTS {
         for h in FIELD_HOURS {
             print!("{:<20}", format!("{v} h{h}"));
             for r in 1..=7 {
@@ -332,7 +335,7 @@ pub fn field_model(
                             }
                             e.advance(run::T0 + h * 3600);
                             if FIELD_HOURS.contains(&h) {
-                                out.extend(run::field_model_rows(&e, p));
+                                out.extend(field_model_rows(&e, p));
                             }
                         }
                     }
@@ -342,4 +345,46 @@ pub fn field_model(
             .collect();
         hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
     })
+}
+
+/// Every squad against every tile it could fight on, each as a one-tile route (L1 field data),
+/// once per variant.
+fn field_samples(e: &Engine) -> Vec<(&'static str, Sample)> {
+    let mut plain = e.state.clone();
+    plain.cycle.doctrines.clear();
+    let mut out = Vec::new();
+    for v in VARIANTS {
+        let state = if v == "full" || v == "no_traits" {
+            &e.state
+        } else {
+            &plain
+        };
+        for specs in squad_units(&e.state, v == "no_traits" || v == "neither") {
+            for tile in fightable(&e.state) {
+                let input = routes::route_battle(state, &specs, tile, false);
+                out.push((v, power::sample(&input, ring(tile))));
+            }
+        }
+    }
+    out
+}
+
+/// Every squad against every tile, scored by the combat model and by simulation.
+fn field_model_rows(e: &Engine, p: &crate::model::Profile) -> Vec<(crate::model::Margins, Sample)> {
+    let st = &e.state;
+    let class = |u: &UnitSpec| {
+        let id: u32 = u.key.strip_prefix("op:")?.parse().ok()?;
+        st.op(id).map(|o| o.class.clone())
+    };
+    let mut out = Vec::new();
+    for specs in squad_units(st, false) {
+        for tile in fightable(st) {
+            let input = routes::route_battle(st, &specs, tile, false);
+            out.push((
+                crate::model::margins(p, &input, &class),
+                power::sample(&input, ring(tile)),
+            ));
+        }
+    }
+    out
 }

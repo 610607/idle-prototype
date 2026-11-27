@@ -3,9 +3,9 @@
 //! holding by itself, a first-time system — as a timed event with a size, and shape metrics over
 //! the whole timeline (`payoff.*`).
 //!
-//! `run::play_full` feeds a `Timeline` every 5-minute step (the engine's trace: event-log entries,
-//! battles, surges) and every hour (commands the bot issued that hour), then `finish` turns it into
-//! metrics. Numeric sizes that need the combat model (a doctrine's strength gain) come from
+//! The probes (`probes.rs`) feed a `Timeline` every 5-minute step (the engine's trace: event-log
+//! entries, battles, surges) and every hour (commands accepted that hour), then `finish` turns it
+//! into metrics. Numeric sizes that need the combat model (a doctrine's strength gain) come from
 //! `strength::Series` as `Mag`s.
 //!
 //! Event classes (`Ev::class`):
@@ -222,7 +222,7 @@ fn hours_since_start(t: i64) -> f64 {
     (t - T0) as f64 / 3600.0
 }
 
-/// Builds the timeline while `run::play_full` plays a seed.
+/// Builds the timeline while a game is measured (`probes::Probes`).
 pub struct Timeline {
     evs: Vec<Ev>,
     /// Deepest ring owned so far (only the HQ, ring 0, is owned at the start).
