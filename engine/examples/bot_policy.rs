@@ -250,9 +250,14 @@ pub fn step_with(e: &mut Engine, staffing: bool) {
         }
     }
     research(e);
+    // Counter only what the preview says wins, like the engine's auto_counter rule: a lost counter
+    // costs nothing but still counts its reactions, so blind retries farm the codex.
     let v = e.view();
     for t in v.tiles.iter().filter(|t| t.alert) {
-        let _ = act(e, &Command::Counter { tile: t.i });
+        let cmd = Command::Counter { tile: t.i };
+        if e.dry_run(&cmd).ok {
+            let _ = act(e, &cmd);
+        }
     }
 }
 
