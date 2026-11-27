@@ -1,0 +1,10 @@
+{
+  "protocol": 1,
+  "build": "55354353",
+  "seed": 0,
+  "player": "haiku-collector",
+  "schedule": "week-decay",
+  "hours": 168,
+  "lang": "zh-CN",
+  "research": true
+}
