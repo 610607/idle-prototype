@@ -119,6 +119,10 @@ export function App({ game }: { game: Game }) {
       return top && sameSheet(top, s) ? st : [...st, s];
     });
   }, []);
+  // Dev builds only: lets scripts/text_dump.mjs open every sheet.
+  useEffect(() => {
+    if (import.meta.env.DEV) Object.assign(window, { __idle: { open, game, view: () => game.view() } });
+  }, [open, game]);
   const popTo = useCallback(
     (n: number) => {
       setPages((st) => st.slice(0, n));

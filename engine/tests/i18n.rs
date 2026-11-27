@@ -215,3 +215,27 @@ fn counter_skips_comments() {
     );
     assert_eq!(count("<p>中文 text 中文</p>"), 2);
 }
+
+/// The web reads engine.json together with its own web.json, so a web key may not reuse any
+/// engine key; and every language has the same web keys.
+#[test]
+fn web_keys_are_their_own() {
+    let read = |lang: &str| -> BTreeMap<String, serde_json::Value> {
+        let p = root().join(format!("locales/{lang}/web.json"));
+        serde_json::from_str(&fs::read_to_string(&p).unwrap())
+            .unwrap_or_else(|e| panic!("{}: {e}", p.display()))
+    };
+    let base = read(idle_engine::i18n::DEFAULT);
+    let clash: Vec<&String> = base.keys().filter(|k| idle_engine::i18n::has(k)).collect();
+    assert!(
+        clash.is_empty(),
+        "web.json keys also in the engine catalogs: {clash:?}"
+    );
+    for lang in idle_engine::i18n::locales() {
+        let other = read(lang);
+        assert!(
+            other.keys().eq(base.keys()),
+            "locales/{lang}/web.json keys differ"
+        );
+    }
+}
