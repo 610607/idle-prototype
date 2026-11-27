@@ -1,6 +1,6 @@
 # idle-prototype
 
-一个只给自己玩的挂机游戏原型：小队冒险加基地建设，一边夺回被异界渗透的街区，一边组织探索异界。最新设计是 [v1](docs/design-v1.md)；之前的 [v0 设计定稿](docs/design-v0.md)、早期概念草案和调研都在 [docs/](docs/README.md) 里。
+一个只给自己玩的挂机游戏原型：小队冒险加基地建设，一边夺回被异界渗透的街区，一边组织探索异界。最新设计是 [v1](docs/design-v1.md)，怎么玩见 [玩法说明](docs/play-guide.md)；之前的 [v0 设计定稿](docs/design-v0.md)、早期概念草案和调研都在 [docs/](docs/README.md) 里。
 
 ## 目录
 
