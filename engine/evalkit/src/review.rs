@@ -7,13 +7,15 @@
 //! metric shows up as "cannot judge" instead of a silent pass. `eval check` prints the goal checks
 //! of one run; `eval review` writes the whole report as markdown, for people and for the analyst
 //! prompt (`docs/prompts/analyst.md`).
-use crate::registry;
+//!
+//! Judging and writing are apart: `judge` returns a `Judgment` (every check with its baseline
+//! reading, typed findings, coverage, moves) and `report.rs` only formats it, so another output
+//! (JSON, a dashboard) can reuse the same decisions.
 use crate::run::RunFile;
 use crate::stats::{self, Summary};
-use crate::{fmt, read_run};
+use crate::{read_run, registry, report};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write;
 
 /// The design goals (`engine/eval/goals.json`).
 pub fn goals_path() -> String {
@@ -27,8 +29,6 @@ pub fn baseline_dir() -> String {
 /// A model ÷ measurement ratio this far from 1 means the model is missing a mechanism
 /// (`CLAUDE.md`: "模型和机器人对不上超过两成，要补模型或写明原因").
 const MODEL_TOLERANCE: f64 = 0.2;
-/// Rows in the "changes against the baseline" section.
-const MAX_MOVES: usize = 40;
 
 /// A pass band on one statistic of one metric across seeds.
 #[derive(Deserialize, Clone, Debug)]
@@ -117,25 +117,6 @@ pub enum Status {
     Na,
 }
 
-impl Status {
-    fn word(self) -> &'static str {
-        match self {
-            Status::Pass => "pass",
-            Status::Watch => "watch",
-            Status::Fail => "FAIL",
-            Status::Na => "n/a",
-        }
-    }
-    fn zh(self) -> &'static str {
-        match self {
-            Status::Pass => "过",
-            Status::Watch => "未达（观察）",
-            Status::Fail => "**不过**",
-            Status::Na => "无法判断",
-        }
-    }
-}
-
 /// One goal check on one run.
 pub struct Outcome<'a> {
     pub goal: &'a Goal,
@@ -147,7 +128,7 @@ pub struct Outcome<'a> {
     pub value: f64,
 }
 
-fn stat(s: &Summary, name: &str) -> f64 {
+pub fn stat(s: &Summary, name: &str) -> f64 {
     match name {
         "p10" => s.p10,
         "p50" => s.p50,
@@ -199,40 +180,12 @@ pub fn evaluate<'a>(goals: &'a [Goal], f: &RunFile) -> Vec<Outcome<'a>> {
     out
 }
 
-fn band_text(b: &Band) -> String {
-    format!(
-        "[{}, {}]",
-        b.min.map(fmt).unwrap_or("-".into()),
-        b.max.map(fmt).unwrap_or("-".into())
-    )
-}
-
 /// `eval check`: the goal checks of one run, one line each; false when a gate check fails.
 pub fn check(f: &RunFile, goals_path: &str) -> bool {
     let goals = load(goals_path);
-    println!("# check {} against {goals_path}", f.persona);
-    let mut ok = true;
-    for o in evaluate(&goals, f) {
-        ok &= o.status != Status::Fail;
-        match &o.summary {
-            None => println!(
-                "{:<5} {} (no such metric)  [{}]",
-                "n/a", o.metric, o.goal.id
-            ),
-            Some(s) => println!(
-                "{:<5} {} {} = {} in {}  ({}/{} seeds)  [{}]",
-                o.status.word(),
-                o.metric,
-                o.band.stat,
-                fmt(o.value),
-                band_text(o.band),
-                s.reached,
-                s.n,
-                o.goal.id
-            ),
-        }
-    }
-    ok
+    let outcomes = evaluate(&goals, f);
+    print!("{}", report::check(&f.persona, goals_path, &outcomes));
+    outcomes.iter().all(|o| o.status != Status::Fail)
 }
 
 /// Median of the seed-by-seed differences B − A and its 90% bootstrap interval.
@@ -304,94 +257,122 @@ fn verdict(outcomes: &[&Outcome]) -> Status {
     }
 }
 
-struct Run<'a> {
-    f: &'a RunFile,
-    base: Option<(String, RunFile)>,
+/// One run under review, with its baseline when one exists.
+pub struct Run<'a> {
+    pub f: &'a RunFile,
+    /// The baseline's path and contents.
+    pub base: Option<(String, RunFile)>,
 }
 
 impl Run<'_> {
     /// The baseline, when it can be paired with this run (same length, three or more shared
     /// seeds).
-    fn comparable(&self) -> Option<&RunFile> {
+    pub fn comparable(&self) -> Option<&RunFile> {
         let (_, b) = self.base.as_ref()?;
         let shared = self.f.seeds.iter().filter(|s| b.seeds.contains(s)).count();
         (b.hours == self.f.hours && shared >= 3).then_some(b)
     }
 }
 
-fn goal_section(
-    out: &mut String,
-    goals: &[Goal],
-    kind: &str,
-    runs: &[Run],
-    all: &[(usize, Outcome)],
-) {
-    for g in goals.iter().filter(|g| g.kind == kind) {
-        let mine: Vec<&(usize, Outcome)> = all.iter().filter(|(_, o)| o.goal.id == g.id).collect();
-        let v = verdict(&mine.iter().map(|(_, o)| o).collect::<Vec<_>>());
-        let level = if g.level == "gate" {
-            "门槛"
-        } else {
-            "观察"
-        };
-        let _ = writeln!(out, "### `{}` {} · {}\n", g.id, v.zh(), level);
-        let _ = writeln!(out, "{}（依据：{}）\n", g.text, g.doc);
-        if mine.is_empty() {
-            let _ = writeln!(out, "没有适用的运行。\n");
-            continue;
-        }
-        let _ = writeln!(
-            out,
-            "| 指标 | 人格 | 统计 | 值 | 区间 | 结果 | 基线 | 变化（90% 区间） |\n|---|---|---|---|---|---|---|---|"
-        );
-        for (i, o) in mine {
-            let r = &runs[*i];
-            let (base, change) = match r.comparable() {
-                Some(b) => {
-                    let bv = b
-                        .metrics
-                        .get(o.metric)
-                        .map(|v| fmt(stat(&registry::summary(o.metric, v), &o.band.stat)))
-                        .unwrap_or("-".into());
-                    let d = delta(b, r.f, o.metric)
-                        .map(|d| {
-                            format!(
-                                "{} [{}, {}]{}",
-                                fmt(d.med),
-                                fmt(d.lo),
-                                fmt(d.hi),
-                                if d.moved() { " *" } else { "" }
-                            )
-                        })
-                        .unwrap_or("-".into());
-                    (bv, d)
-                }
-                None => ("-".into(), "-".into()),
-            };
-            let value = match &o.summary {
-                Some(s) => format!("{}（{}/{}）", fmt(o.value), s.reached, s.n),
-                None => "没有这项指标".into(),
-            };
-            let _ = writeln!(
-                out,
-                "| `{}` | {} | {} | {} | {} | {} | {} | {} |",
-                o.metric,
-                r.f.persona,
-                o.band.stat,
-                value,
-                band_text(o.band),
-                o.status.zh(),
-                base,
-                change
-            );
-        }
-        let _ = writeln!(out);
+/// One goal check on one run, with the comparable baseline's reading of it.
+pub struct Judged<'a> {
+    /// Index into `Judgment::runs`.
+    pub run: usize,
+    pub outcome: Outcome<'a>,
+    /// The baseline's value of the band's statistic (`None` without a comparable baseline or
+    /// when the baseline lacks the metric).
+    pub base: Option<f64>,
+    /// The paired change against the baseline (`None` without a comparable baseline or with
+    /// fewer than three pairs).
+    pub change: Option<Delta>,
+}
+
+/// What the reviewer checks without the goals file asking (the "自动发现" of the report).
+pub enum Finding {
+    /// A model ÷ measurement ratio no goal binds is more than `MODEL_TOLERANCE` off 1.
+    ModelOff { run: usize, id: String, p50: f64 },
+    /// A metric id the registry does not know.
+    Unregistered { run: usize, id: String },
+    /// The simulated yardstick won its whole ladder (`size` encounters) at these checkpoints, so
+    /// later growth cannot show.
+    LadderCeiling {
+        run: usize,
+        ids: Vec<String>,
+        size: f64,
+    },
+    /// Sessions whose replay went stale (the game changed after they were played).
+    Stale { run: usize, sessions: usize },
+    /// Metrics the comparable baseline has and the run lacks.
+    Gone { run: usize, ids: Vec<String> },
+    /// Metrics the run has and the comparable baseline lacks.
+    New { run: usize, ids: Vec<String> },
+}
+
+/// A metric that moved against the comparable baseline: the paired 90% interval excludes 0, or
+/// the number of seeds where it happened changed.
+pub struct Move<'a> {
+    pub run: usize,
+    pub id: &'a str,
+    pub base: Summary,
+    pub now: Summary,
+    pub change: Delta,
+    /// |change| ÷ |baseline p50| (infinite when the baseline median is): the sort key.
+    pub rel: f64,
+    /// Goals that check this metric.
+    pub goals: Vec<&'a str>,
+}
+
+/// Everything `eval review` decides, before it is written up (`report::markdown`).
+pub struct Judgment<'a> {
+    pub goals: &'a [Goal],
+    pub runs: Vec<Run<'a>>,
+    /// Every check of every goal on every run it applies to.
+    pub checks: Vec<Judged<'a>>,
+    pub findings: Vec<Finding>,
+    /// Commands no run used (what they do was not measured).
+    pub never: Vec<String>,
+    /// Goals no run applies to.
+    pub idle_goals: Vec<&'a str>,
+    /// Registry patterns of result and probe metrics no goal checks.
+    pub unbound: Vec<String>,
+    /// Moves against the baselines, largest relative change first.
+    pub moves: Vec<Move<'a>>,
+}
+
+impl<'a> Judgment<'a> {
+    /// A goal's verdict over all its checks.
+    pub fn verdict(&self, goal: &Goal) -> Status {
+        let mine: Vec<&Outcome> = self
+            .checks
+            .iter()
+            .filter(|c| c.outcome.goal.id == goal.id)
+            .map(|c| &c.outcome)
+            .collect();
+        verdict(&mine)
+    }
+
+    /// No check failed.
+    pub fn ok(&self) -> bool {
+        self.checks.iter().all(|c| c.outcome.status != Status::Fail)
+    }
+
+    /// Goals with a failed check.
+    pub fn failed(&self) -> Vec<&'a str> {
+        self.goals
+            .iter()
+            .filter(|g| {
+                self.checks
+                    .iter()
+                    .any(|c| c.outcome.goal.id == g.id && c.outcome.status == Status::Fail)
+            })
+            .map(|g| g.id.as_str())
+            .collect()
     }
 }
 
-/// `eval review`: the full report (markdown) and whether every gate check passed.
-pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (String, bool) {
-    let goals = load(goals_path);
+/// Reviews `files` against `goals`. Each run is compared with `base` when it is the only run,
+/// else with its persona's blessed baseline (`baseline_path`), when that file exists.
+pub fn judge<'a>(files: &'a [RunFile], goals: &'a [Goal], base: Option<&str>) -> Judgment<'a> {
     let reg = registry::load();
     let runs: Vec<Run> = files
         .iter()
@@ -406,86 +387,54 @@ pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (Strin
             Run { f, base }
         })
         .collect();
-    let all: Vec<(usize, Outcome)> = runs
+    let checks: Vec<Judged> = runs
         .iter()
         .enumerate()
-        .flat_map(|(i, r)| evaluate(&goals, r.f).into_iter().map(move |o| (i, o)))
+        .flat_map(|(i, r)| {
+            evaluate(goals, r.f).into_iter().map(move |o| {
+                let (base, change) = match r.comparable() {
+                    Some(b) => (
+                        b.metrics
+                            .get(o.metric)
+                            .map(|v| stat(&registry::summary(o.metric, v), &o.band.stat)),
+                        delta(b, r.f, o.metric),
+                    ),
+                    None => (None, None),
+                };
+                Judged {
+                    run: i,
+                    outcome: o,
+                    base,
+                    change,
+                }
+            })
+        })
         .collect();
-    let ok = all.iter().all(|(_, o)| o.status != Status::Fail);
-
-    let mut out = String::new();
-    let _ = writeln!(out, "# 评估报告\n");
-    let _ = writeln!(
-        out,
-        "目标：`{}`（{} 条）。\n\n| 运行 | 种子 | 小时 | 补丁 | 版本 | 基线 |\n|---|---|---|---|---|---|",
-        goals_path.rsplit("/engine/").next().unwrap_or(goals_path),
-        goals.len()
-    );
-    for r in &runs {
-        let base = match (&r.base, r.comparable()) {
-            (None, _) => "无".to_string(),
-            (Some((p, b)), c) => format!(
-                "`{}`（版本 {}，{} 个种子 × {} 小时{}）",
-                p.rsplit("/engine/").next().unwrap_or(p),
-                b.build.as_deref().unwrap_or("?"),
-                b.seeds.len(),
-                b.hours,
-                if c.is_none() { "，不可比" } else { "" }
-            ),
-        };
-        let _ = writeln!(
-            out,
-            "| {} | {} | {} | {} | {} | {} |",
-            r.f.persona,
-            r.f.seeds.len(),
-            r.f.hours,
-            r.f.patch.as_deref().unwrap_or("-"),
-            r.f.build.as_deref().unwrap_or("?"),
-            base
-        );
-    }
-
-    // Verdicts per goal, for the summary line.
-    let count = |kind: &str| {
-        let mut n: BTreeMap<&str, usize> = BTreeMap::new();
-        for g in goals.iter().filter(|g| g.kind == kind) {
-            let mine: Vec<&Outcome> = all
-                .iter()
-                .filter(|(_, o)| o.goal.id == g.id)
-                .map(|(_, o)| o)
-                .collect();
-            *n.entry(verdict(&mine).zh()).or_default() += 1;
-        }
-        n.iter()
-            .map(|(k, v)| format!("{k} {v}"))
-            .collect::<Vec<_>>()
-            .join("，")
-    };
 
     // Self-checks the goals file does not have to list.
-    let mut auto: Vec<String> = Vec::new();
+    let mut findings: Vec<Finding> = Vec::new();
     let bound: BTreeSet<&str> = goals
         .iter()
         .flat_map(|g| g.checks.keys().map(String::as_str))
         .collect();
-    for r in &runs {
+    for (run, r) in runs.iter().enumerate() {
         for (id, v) in &r.f.metrics {
             let class = registry::find(&reg, id).map(|e| e.class.as_str());
             if class == Some("model") && !bound.contains(id.as_str()) {
                 let p50 = registry::summary(id, v).p50;
                 if p50.is_finite() && (p50 - 1.0).abs() > MODEL_TOLERANCE {
-                    auto.push(format!(
-                        "模型比值 `{id}` = {}（{}），偏离 1 超过两成：模型漏了机制，或者机器人做了模型没想到的事。",
-                        fmt(p50),
-                        r.f.persona
-                    ));
+                    findings.push(Finding::ModelOff {
+                        run,
+                        id: id.clone(),
+                        p50,
+                    });
                 }
             }
             if registry::find(&reg, id).is_none() {
-                auto.push(format!(
-                    "`{id}` 没有登记在 `eval/metrics.json`（{}）。",
-                    r.f.persona
-                ));
+                findings.push(Finding::Unregistered {
+                    run,
+                    id: id.clone(),
+                });
             }
         }
         // A yardstick at its ceiling cannot show later growth.
@@ -494,7 +443,7 @@ pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (Strin
                 .get("payoff.ladder.size")
                 .map(|v| registry::summary("payoff.ladder.size", v).p50)
         {
-            let top =
+            let ids: Vec<String> =
                 r.f.metrics
                     .iter()
                     .filter(|(id, _)| id.starts_with("payoff.ladder.h"))
@@ -504,91 +453,72 @@ pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (Strin
                         let p50 = registry::summary(id, v).p50;
                         p50.is_finite() && p50 >= size
                     })
-                    .map(|(id, _)| id.as_str())
-                    .collect::<Vec<_>>();
-            if !top.is_empty() {
-                auto.push(format!(
-                    "模拟标尺封顶（{}）：{} 已经赢满 {} 场，之后的成长量不出来。",
-                    r.f.persona,
-                    top.join("、"),
-                    fmt(size)
-                ));
+                    .map(|(id, _)| id.clone())
+                    .collect();
+            if !ids.is_empty() {
+                findings.push(Finding::LadderCeiling { run, ids, size });
             }
         }
         if let Some(v) = r.f.metrics.get("session.stale") {
-            let stale = v.iter().filter(|x| **x == Some(1.0)).count();
-            if stale > 0 {
-                auto.push(format!(
-                    "{} 个会话过期（{}）：游戏在试玩之后改过，这些会话只算玩家反馈，不算对局指标。",
-                    stale, r.f.persona
-                ));
+            let sessions = v.iter().filter(|x| **x == Some(1.0)).count();
+            if sessions > 0 {
+                findings.push(Finding::Stale { run, sessions });
             }
         }
         if let Some(b) = r.comparable() {
-            let gone: Vec<&String> = b
+            let gone: Vec<String> = b
                 .metrics
                 .keys()
                 .filter(|id| !r.f.metrics.contains_key(*id))
+                .cloned()
                 .collect();
-            let new: Vec<&String> =
+            let new: Vec<String> =
                 r.f.metrics
                     .keys()
                     .filter(|id| !b.metrics.contains_key(*id))
+                    .cloned()
                     .collect();
             if !gone.is_empty() {
-                auto.push(format!(
-                    "基线有、这次没有的指标 {} 项（{}）：{}。改名或退役的指标要同步目标。",
-                    gone.len(),
-                    r.f.persona,
-                    list(&gone)
-                ));
+                findings.push(Finding::Gone { run, ids: gone });
             }
             if !new.is_empty() {
-                auto.push(format!(
-                    "这次新增的指标 {} 项（{}）：{}。",
-                    new.len(),
-                    r.f.persona,
-                    list(&new)
-                ));
+                findings.push(Finding::New { run, ids: new });
             }
         }
     }
 
     // Coverage.
     let never = never_used(&runs.iter().map(|r| r.f).collect::<Vec<_>>());
-    let na: Vec<String> = all
-        .iter()
-        .filter(|(_, o)| o.summary.is_none())
-        .map(|(i, o)| format!("`{}`（{}，{}）", o.metric, o.goal.id, runs[*i].f.persona))
-        .collect();
     let idle_goals: Vec<&str> = goals
         .iter()
-        .filter(|g| !all.iter().any(|(_, o)| o.goal.id == g.id))
+        .filter(|g| !checks.iter().any(|c| c.outcome.goal.id == g.id))
         .map(|g| g.id.as_str())
         .collect();
-    let unbound: Vec<&str> = reg
+    let unbound: Vec<String> = reg
         .iter()
         .filter(|e| e.class == "result" || e.class == "probe")
         .filter(|e| !bound.iter().any(|id| registry::matches(&e.pattern, id)))
-        .map(|e| e.pattern.as_str())
+        .map(|e| e.pattern.clone())
         .collect();
 
     // Changes against the baseline.
-    let mut moves: Vec<(f64, String)> = Vec::new();
-    for r in &runs {
+    let mut moves: Vec<Move> = Vec::new();
+    for (run, r) in runs.iter().enumerate() {
         let Some(b) = r.comparable() else { continue };
         for id in r.f.metrics.keys() {
-            let Some(d) = delta(b, r.f, id) else { continue };
-            let (sa, sb) = (
+            let Some(change) = delta(b, r.f, id) else {
+                continue;
+            };
+            let (base, now) = (
                 registry::summary(id, &b.metrics[id]),
                 registry::summary(id, &r.f.metrics[id]),
             );
-            if !d.moved() && sa.reached == sb.reached {
+            if !change.moved() && base.reached == now.reached {
                 continue;
             }
-            let scale = sa.p50.abs().max(1e-9);
-            let rel = if sa.p50.is_finite() {
-                (d.med / scale).abs()
+            let scale = base.p50.abs().max(1e-9);
+            let rel = if base.p50.is_finite() {
+                (change.med / scale).abs()
             } else {
                 f64::INFINITY
             };
@@ -597,129 +527,36 @@ pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (Strin
                 .filter(|g| g.checks.contains_key(id))
                 .map(|g| g.id.as_str())
                 .collect();
-            moves.push((
+            moves.push(Move {
+                run,
+                id,
+                base,
+                now,
+                change,
                 rel,
-                format!(
-                    "| `{id}` | {} | {} | {} | {} [{}, {}] | {}/{} → {}/{} | {} |",
-                    r.f.persona,
-                    fmt(sa.p50),
-                    fmt(sb.p50),
-                    fmt(d.med),
-                    fmt(d.lo),
-                    fmt(d.hi),
-                    sa.reached,
-                    sa.n,
-                    sb.reached,
-                    sb.n,
-                    goals_of.join("、")
-                ),
-            ));
+                goals: goals_of,
+            });
         }
     }
-    moves.sort_by(|a, b| b.0.total_cmp(&a.0));
+    moves.sort_by(|a, b| b.rel.total_cmp(&a.rel));
 
-    let gates: Vec<&str> = goals
-        .iter()
-        .filter(|g| {
-            all.iter()
-                .any(|(_, o)| o.goal.id == g.id && o.status == Status::Fail)
-        })
-        .map(|g| g.id.as_str())
-        .collect();
-    let _ = writeln!(
-        out,
-        "\n**结论**：设计目标 {}；自检目标 {}；另有自动自检提示 {} 条；没人用过的命令 {} 个；和基线比显著变化 {} 项。{}\n",
-        count("experience"),
-        count("selfcheck"),
-        auto.len(),
-        never.len(),
-        moves.len(),
-        if gates.is_empty() {
-            "门槛全部通过。".to_string()
-        } else {
-            format!("不过的门槛：{}。", gates.join("、"))
-        }
-    );
-
-    let _ = writeln!(out, "## 一、设计目标\n");
-    goal_section(&mut out, &goals, "experience", &runs, &all);
-    let _ = writeln!(out, "## 二、自检\n");
-    let _ = writeln!(
-        out,
-        "评估工具本身还可不可信。游戏一改，最先出问题的应该是这一节。\n"
-    );
-    goal_section(&mut out, &goals, "selfcheck", &runs, &all);
-    let _ = writeln!(out, "### 自动发现\n");
-    if auto.is_empty() {
-        let _ = writeln!(out, "没有。\n");
+    Judgment {
+        goals,
+        runs,
+        checks,
+        findings,
+        never,
+        idle_goals,
+        unbound,
+        moves,
     }
-    for a in &auto {
-        let _ = writeln!(out, "- {a}");
-    }
-    let _ = writeln!(out, "\n## 三、覆盖\n");
-    let _ = writeln!(
-        out,
-        "- 没人用过的命令（它们做的事没被评估）：{}",
-        if never.is_empty() {
-            "无".into()
-        } else {
-            never.join("、")
-        }
-    );
-    let _ = writeln!(
-        out,
-        "- 目标里引用、但运行里没有的指标：{}",
-        if na.is_empty() {
-            "无".into()
-        } else {
-            na.join("、")
-        }
-    );
-    let _ = writeln!(
-        out,
-        "- 没有适用运行的目标：{}",
-        if idle_goals.is_empty() {
-            "无".into()
-        } else {
-            idle_goals.join("、")
-        }
-    );
-    let _ = writeln!(
-        out,
-        "- 没有目标约束的指标（结果量和局面探针，共 {} 类）：{}\n",
-        unbound.len(),
-        unbound
-            .iter()
-            .map(|p| format!("`{p}`"))
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
-    let _ = writeln!(out, "## 四、和基线比\n");
-    if moves.is_empty() {
-        let _ = writeln!(out, "没有可比的基线，或没有显著变化。\n");
-    } else {
-        let _ = writeln!(
-            out,
-            "90% 区间不含 0，或者“发生了几局”变了的指标，按相对变化排序（最多 {MAX_MOVES} 项，共 {} 项）。一次比几十项，纯噪声也会冒出几个，只当线索。\n",
-            moves.len()
-        );
-        let _ = writeln!(
-            out,
-            "| 指标 | 人格 | 基线 p50 | 这次 p50 | 变化（90% 区间） | 发生 | 相关目标 |\n|---|---|---|---|---|---|---|"
-        );
-        for (_, row) in moves.iter().take(MAX_MOVES) {
-            let _ = writeln!(out, "{row}");
-        }
-    }
-    (out, ok)
 }
 
-fn list(ids: &[&String]) -> String {
-    let mut s: Vec<String> = ids.iter().take(12).map(|id| format!("`{id}`")).collect();
-    if ids.len() > 12 {
-        s.push(format!("等 {} 项", ids.len()));
-    }
-    s.join(" ")
+/// `eval review`: the full report (markdown) and whether every gate check passed.
+pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (String, bool) {
+    let goals = load(goals_path);
+    let j = judge(files, &goals, base);
+    (report::markdown(&j, goals_path), j.ok())
 }
 
 #[cfg(test)]

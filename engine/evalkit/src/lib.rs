@@ -17,6 +17,7 @@ pub mod power;
 pub mod price;
 pub mod probes;
 pub mod registry;
+pub mod report;
 pub mod review;
 pub mod run;
 pub mod session;
