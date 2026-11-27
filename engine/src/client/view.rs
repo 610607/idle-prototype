@@ -130,6 +130,8 @@ pub struct TileView {
     pub special: Option<SpecialKind>,
     pub special_done: bool,
     pub natives: i32,
+    /// 巢穴强度 in percent (100 = as the ring says).
+    pub danger_pct: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_surge: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1193,6 +1195,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 special: if t.revealed { t.special } else { None },
                 special_done: t.special_done,
                 natives: if t.revealed { t.natives } else { 0 },
+                danger_pct: if t.revealed { t.danger() / 100 } else { 100 },
                 next_surge: is_border
                     .then(|| crate::mech::defense::next_surge_after(i, state.time)),
                 surge_source: if is_border {

@@ -107,6 +107,10 @@ pub struct Tile {
     /// is abandoned and retaken.
     #[serde(default)]
     pub ever_owned: bool,
+    /// 巢穴强度: its enemies' HP and attack on top of the ring, in basis points (0 reads as
+    /// 10000). Rolled at map generation from `tile_danger_bp`; routes only, not surges.
+    #[serde(default)]
+    pub danger_bp: i32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rift: Option<RiftState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -121,6 +125,15 @@ pub struct Tile {
 }
 
 impl Tile {
+    /// 巢穴强度 in basis points (10000 = as the ring says).
+    pub fn danger(&self) -> i32 {
+        if self.danger_bp > 0 {
+            self.danger_bp
+        } else {
+            10_000
+        }
+    }
+
     pub fn alert(&self) -> bool {
         self.owned && self.warden <= 0
     }

@@ -81,7 +81,7 @@ pub fn route_battle(
         waves: t
             .waves
             .iter()
-            .map(|w| w.iter().map(|id| enemy_spec(id, r, 10_000)).collect())
+            .map(|w| w.iter().map(|id| enemy_spec(id, r, t.danger())).collect())
             .collect(),
         ally_tags: m.map(|m| m.ally_tags.clone()).unwrap_or_default(),
         enemy_tags: m.map(|m| m.enemy_tags.clone()).unwrap_or_default(),

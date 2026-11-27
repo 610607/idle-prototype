@@ -62,6 +62,8 @@ function Status({ t }: { t: TileView }) {
   if (t.revealed && t.terrain !== 'barrier') {
     items.push([tr('tile.status.warden'), <span className={t.alert ? 'bad' : ''}>{t.warden} / 100{t.owned ? '' : tr('tile.status.warden_claimable')}</span>]);
   }
+  if (t.revealed && !t.owned && t.terrain !== 'barrier' && t.terrain !== 'hq' && t.danger_pct !== 100)
+    items.push([tr('tile.status.danger'), <span className={t.danger_pct > 100 ? 'bad' : 'good'}>{tr('tile.status.danger_value', { n: t.danger_pct })}</span>]);
   if (t.revealed && t.natives) items.push([tr('tile.status.natives'), tr('tile.status.natives_value', { n: t.natives })]);
   if (t.owned && t.workers) items.push([tr('tile.status.workers'), `${t.workers[0]} / ${t.workers[1]}`]);
   if (t.frozen) items.push([tr('tile.status.frozen'), t.frozen]);

@@ -28,6 +28,7 @@ fn blank_tile(terrain: Terrain) -> Tile {
         usage: TileUse::None,
         frozen: None,
         ever_owned: false,
+        danger_bp: 0,
         rift: None,
         special: None,
         special_done: false,
@@ -300,6 +301,9 @@ pub fn generate(seed: u64, modifier: &str) -> GeneratedMap {
     }
     place_special(&mut rng, &mut tiles, SpecialKind::Clue, (3, 6));
     let districts = build_districts(&mut rng, &mut tiles);
+    // 巢穴强度 draws from its own stream so the rest of the map stays as the seed made it.
+    let mut danger_rng = Rng::new(seed ^ 0x9e37_79b9_7f4a_7c15);
+    let [danger_lo, danger_hi] = b.tile_danger_bp;
 
     for i in 0..TILES as u16 {
         let r = ring(i);
@@ -315,6 +319,7 @@ pub fn generate(seed: u64, modifier: &str) -> GeneratedMap {
             Terrain::Barrier => {}
             Terrain::City | Terrain::Special | Terrain::Rift => {
                 t.warden = b.start_warden_by_ring[r as usize];
+                t.danger_bp = danger_rng.range(danger_lo, danger_hi);
                 if t.terrain == Terrain::City {
                     t.natives =
                         b.natives_base + r * b.natives_per_ring + rng.range(0, b.natives_rand);

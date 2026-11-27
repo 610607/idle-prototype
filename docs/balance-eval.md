@@ -90,6 +90,7 @@ L2 指标按 id 记，每个种子一个值；`None` 表示这件事在这局没
 | `stock_h.{scrap,parts,intel}.hN` | 库存折合几小时的收入（用最近 6 小时净增） | 库存水位 |
 | `spend_gap.max_h`、`spend_hours.share` | 最长的“无事可花”间隔；有花钱的小时占比 | |
 | `research.draws`、`hired` | 研究次数、招募人数 | |
+| `armory.level.hN`、`armory.breaks.hN` | 军械三条线的等级合计、突破次数合计（`docs/prototype-v2.md`） | |
 
 指标按受策略影响的程度分三类，能设的区间也不同：
 

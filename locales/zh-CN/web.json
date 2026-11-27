@@ -379,6 +379,8 @@
   "tile.status.ring_value": "第 {n} 圈",
   "tile.status.warden": "镇守度",
   "tile.status.warden_claimable": "（满了可占领）",
+  "tile.status.danger": "巢穴强度",
+  "tile.status.danger_value": "{n}%",
   "tile.status.natives": "原住民",
   "tile.status.natives_value": "{n} 人",
   "tile.status.workers": "在岗",

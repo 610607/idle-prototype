@@ -888,6 +888,9 @@ pub struct ArmoryDef {
     pub atk_bp: i32,
     pub every: i32,
     pub breakthrough: Resources,
+    /// Each breakthrough after the first costs this much more, in basis points of the first.
+    #[serde(default = "default_breakthrough_step_bp")]
+    pub breakthrough_step_bp: i32,
     pub breakthrough_bp: i32,
     /// Highest level in one cycle.
     pub max: i32,
@@ -965,6 +968,10 @@ pub struct Balance {
     /// The same for the enemies of a surge (in place of `enemy_ring_bp`): the tide that washes
     /// over the border is weaker than the nests a squad assaults.
     pub surge_ring_bp: Vec<i32>,
+    /// 巢穴强度: each tile's enemies get a multiplier drawn from this range (basis points, both
+    /// ends included), so a ring has soft and hard nests.
+    #[serde(default = "default_tile_danger_bp")]
+    pub tile_danger_bp: [i32; 2],
     pub talent_per_candidate: i32,
     pub otherworld_talent_per_candidate: i32,
     pub pool_cap: usize,
@@ -1084,6 +1091,12 @@ fn default_reroll_step() -> i64 {
 }
 fn default_archive_slots() -> usize {
     1
+}
+fn default_breakthrough_step_bp() -> i32 {
+    10_000
+}
+fn default_tile_danger_bp() -> [i32; 2] {
+    [10_000, 10_000]
 }
 fn default_score_pop_div() -> i32 {
     20

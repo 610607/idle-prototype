@@ -8,6 +8,7 @@
     "atk_bp": 600,
     "every": 8,
     "breakthrough": { "crystal": 30, "parts": 40 },
+    "breakthrough_step_bp": 10000,
     "breakthrough_bp": 2500,
     "max": 40
   },
@@ -20,6 +21,7 @@
     "hp_bp": 800,
     "every": 10,
     "breakthrough": { "crystal": 30, "parts": 40 },
+    "breakthrough_step_bp": 10000,
     "breakthrough_bp": 2500,
     "max": 40
   },
@@ -33,6 +35,7 @@
     "atk_bp": 900,
     "every": 6,
     "breakthrough": { "crystal": 20, "parts": 30 },
+    "breakthrough_step_bp": 10000,
     "breakthrough_bp": 2500,
     "max": 40
   }

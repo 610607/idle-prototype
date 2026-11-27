@@ -1,8 +1,8 @@
 {
   "archive_habit": {
     "kind": "trait",
-    "mean": 0.02,
-    "best": 0.08
+    "mean": 0.0,
+    "best": 0.0
   },
   "barrier_runner": {
     "kind": "trait",
@@ -11,28 +11,43 @@
   },
   "bloodhound": {
     "kind": "doctrine",
-    "mean": 0.2,
-    "best": 0.2
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "bounty": {
+    "kind": "doctrine",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "bulwark": {
+    "kind": "doctrine",
+    "mean": 0.0,
+    "best": 0.0
   },
   "burst": {
     "kind": "doctrine",
-    "mean": 0.1,
-    "best": 0.1
+    "mean": 0.0,
+    "best": 0.0
   },
   "capacitor": {
     "kind": "equipment",
+    "mean": 0.08,
+    "best": 0.2
+  },
+  "cascade": {
+    "kind": "doctrine",
     "mean": 0.03,
-    "best": 0.13
+    "best": 0.03
   },
   "chain": {
     "kind": "doctrine",
-    "mean": 0.05,
-    "best": 0.05
+    "mean": 0.03,
+    "best": 0.03
   },
   "conductor": {
     "kind": "trait",
-    "mean": 0.03,
-    "best": 0.13
+    "mean": 0.08,
+    "best": 0.2
   },
   "decoy": {
     "kind": "trait",
@@ -41,23 +56,23 @@
   },
   "defuser": {
     "kind": "trait",
-    "mean": -0.03,
-    "best": 0.0
+    "mean": 0.01,
+    "best": 0.03
   },
   "electrician_roots": {
     "kind": "trait",
-    "mean": 0.02,
-    "best": 0.05
+    "mean": 0.01,
+    "best": 0.03
   },
   "erosion_feeder": {
     "kind": "trait",
-    "mean": 0.02,
+    "mean": 0.03,
     "best": 0.05
   },
   "etch": {
     "kind": "doctrine",
-    "mean": 0.03,
-    "best": 0.03
+    "mean": -0.03,
+    "best": -0.03
   },
   "field_dressing": {
     "kind": "doctrine",
@@ -71,8 +86,8 @@
   },
   "fog_walker": {
     "kind": "trait",
-    "mean": 0.0,
-    "best": 0.05
+    "mean": 0.03,
+    "best": 0.08
   },
   "ionize": {
     "kind": "doctrine",
@@ -81,18 +96,23 @@
   },
   "iron_lung": {
     "kind": "trait",
-    "mean": 0.02,
+    "mean": 0.03,
+    "best": 0.05
+  },
+  "last_stand": {
+    "kind": "doctrine",
+    "mean": 0.05,
     "best": 0.05
   },
   "mist_pathfinder": {
     "kind": "trait",
-    "mean": 0.02,
-    "best": 0.05
+    "mean": 0.01,
+    "best": 0.03
   },
   "night_market_voice": {
     "kind": "trait",
     "mean": 0.03,
-    "best": 0.1
+    "best": 0.08
   },
   "night_watch": {
     "kind": "trait",
@@ -101,18 +121,18 @@
   },
   "overclock": {
     "kind": "doctrine",
-    "mean": 0.3,
-    "best": 0.3
+    "mean": 0.08,
+    "best": 0.08
   },
   "overclock_nerve": {
     "kind": "trait",
-    "mean": 0.09,
-    "best": 0.25
+    "mean": 0.03,
+    "best": 0.08
   },
   "overflow": {
     "kind": "doctrine",
-    "mean": -0.05,
-    "best": -0.05
+    "mean": 0.0,
+    "best": 0.0
   },
   "party_line": {
     "kind": "trait",
@@ -121,122 +141,142 @@
   },
   "plating": {
     "kind": "doctrine",
-    "mean": 0.2,
-    "best": 0.2
+    "mean": 0.1,
+    "best": 0.1
   },
   "precise": {
     "kind": "trait",
-    "mean": -0.01,
-    "best": 0.03
-  },
-  "quick_draw": {
-    "kind": "trait",
-    "mean": -0.01,
+    "mean": 0.02,
     "best": 0.05
   },
-  "radio_tinker": {
-    "kind": "trait",
-    "mean": 0.02,
-    "best": 0.08
-  },
-  "react": {
-    "kind": "doctrine",
-    "mean": 0.23,
-    "best": 0.23
-  },
-  "resonance": {
-    "kind": "trait",
-    "mean": 0.04,
-    "best": 0.13
-  },
-  "resonance_coil": {
-    "kind": "equipment",
-    "mean": 0.04,
-    "best": 0.13
-  },
-  "rift_ink": {
-    "kind": "equipment",
-    "mean": 0.15,
-    "best": 0.28
-  },
-  "rift_neighbor": {
+  "quick_draw": {
     "kind": "trait",
     "mean": 0.03,
     "best": 0.08
   },
+  "radio_tinker": {
+    "kind": "trait",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "react": {
+    "kind": "doctrine",
+    "mean": 0.05,
+    "best": 0.05
+  },
+  "resonance": {
+    "kind": "trait",
+    "mean": 0.01,
+    "best": 0.03
+  },
+  "resonance_coil": {
+    "kind": "equipment",
+    "mean": 0.01,
+    "best": 0.03
+  },
+  "resonant_core": {
+    "kind": "doctrine",
+    "mean": 0.03,
+    "best": 0.03
+  },
+  "rift_ink": {
+    "kind": "equipment",
+    "mean": 0.03,
+    "best": 0.08
+  },
+  "rift_neighbor": {
+    "kind": "trait",
+    "mean": 0.01,
+    "best": 0.03
+  },
   "rift_sensitive": {
     "kind": "trait",
-    "mean": 0.15,
-    "best": 0.28
+    "mean": 0.03,
+    "best": 0.08
   },
   "riot_shield": {
     "kind": "equipment",
     "mean": 0.03,
-    "best": 0.1
+    "best": 0.08
   },
   "riot_veteran": {
     "kind": "trait",
-    "mean": 0.08,
-    "best": 0.25
+    "mean": 0.07,
+    "best": 0.15
   },
   "road_veteran": {
     "kind": "trait",
-    "mean": 0.06,
-    "best": 0.15
+    "mean": 0.05,
+    "best": 0.08
   },
   "rooftop_watcher": {
     "kind": "trait",
-    "mean": 0.08,
-    "best": 0.2
+    "mean": 0.06,
+    "best": 0.08
   },
   "scarred": {
     "kind": "trait",
-    "mean": 0.01,
-    "best": 0.03
-  },
-  "scavenger_eye": {
-    "kind": "trait",
-    "mean": 0.08,
-    "best": 0.13
-  },
-  "shield_burst": {
-    "kind": "trait",
-    "mean": 0.06,
-    "best": 0.15
-  },
-  "silver_tongue": {
-    "kind": "trait",
-    "mean": 0.01,
-    "best": 0.05
-  },
-  "spall": {
-    "kind": "doctrine",
-    "mean": 0.03,
-    "best": 0.03
-  },
-  "spotter": {
-    "kind": "doctrine",
-    "mean": 0.03,
-    "best": 0.03
-  },
-  "spotter_scope": {
-    "kind": "equipment",
     "mean": 0.02,
     "best": 0.05
   },
+  "scavenger_eye": {
+    "kind": "trait",
+    "mean": 0.01,
+    "best": 0.05
+  },
+  "shield_burst": {
+    "kind": "trait",
+    "mean": 0.0,
+    "best": 0.03
+  },
+  "shock_drill": {
+    "kind": "doctrine",
+    "mean": 0.08,
+    "best": 0.08
+  },
+  "silver_tongue": {
+    "kind": "trait",
+    "mean": 0.02,
+    "best": 0.05
+  },
+  "siphon": {
+    "kind": "doctrine",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "spall": {
+    "kind": "doctrine",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "spotter": {
+    "kind": "doctrine",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "spotter_scope": {
+    "kind": "equipment",
+    "mean": 0.0,
+    "best": 0.0
+  },
   "steady_hand": {
     "kind": "trait",
-    "mean": 0.03,
-    "best": 0.05
+    "mean": 0.0,
+    "best": 0.0
   },
   "street_smart": {
     "kind": "trait",
-    "mean": 0.0,
-    "best": 0.05
+    "mean": 0.03,
+    "best": 0.08
   },
   "tuning_fork": {
     "kind": "equipment",
     "mean": 0.04,
-    "best": 0.08
+    "best": 0.05
+  },
+  "veteran_kit": {
+    "kind": "doctrine",
+    "mean": 0.1,
+    "best": 0.1
   }
 }

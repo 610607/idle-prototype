@@ -1032,6 +1032,7 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
                     "cli.route.option",
                     route = labels.join("→"),
                     ring = ring,
+                    danger = tv.danger_pct,
                     warden = tv.warden,
                     terrain = terrain(tv.terrain),
                     foes = if foes.is_empty() {

@@ -89,6 +89,7 @@
 - [ ] 第二批 LLM 试玩：每种性格 3 个种子，加一组换模型对照（第二节 4）
 - [x] 逐条确认 `goals.json`，重定 `score_curve`（第二节 5）：峰值 56～112 小时，门槛只由 `greedy` 判
 - [x] 跑数文件的浮点数逐位往返：`evalkit` 的 serde_json 开了 `float_roundtrip`，`review --bless` 写出的基线和原运行文件逐字节相同；六份基线已按原运行文件重写（只差最后一位的 289 处）。`cargo test` 里的 `baselines_round_trip_exactly` 会拦。引擎的状态和内容里没有浮点数，这个特性即使随工作区一起编进引擎也不影响规则。
+- [ ] 节奏模型（`eval pace`）和 L0 遭遇曲线还没有军械这一项：模型里小队强度只含学说和特质，军械只在强度模型（`strength.rs`）和机器人里（`docs/prototype-v2.md`“还没解决的”）
 - [ ] 资源按来源记账：情报有档案馆、线索格、见习任务三个来源，现在只记总数，查不出后半周靠哪个（`docs/game-issues.md` 第 3 条）
 
 ## 五、最近修掉的工具问题

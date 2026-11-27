@@ -99,7 +99,7 @@
   "cli.cmd.claim_task": "领取完成的见习任务奖励（文字版自动领）",
   "cli.cmd.upgrade": "军械走一步：平时升一级（花废材），到突破点时改为突破（花晶体和零件）",
   "cli.route.foe_tags": "{name}(会挂{tags})",
-  "cli.route.option": "路线 {route}（目标第{ring}圈，镇守度{warden}，{terrain}；敌人：{foes}；预演：{outcome}，{minutes}分钟，关注度{before}→{after}）",
+  "cli.route.option": "路线 {route}（目标第{ring}圈，巢穴强度{danger}%，镇守度{warden}，{terrain}；敌人：{foes}；预演：{outcome}，{minutes}分钟，关注度{before}→{after}）",
   "cli.menu.research": "研究：花 {cost} 情报抽三条条令（之后会出现三选一）",
   "cli.menu.links": "（接得上：{links}）",
   "cli.menu.pick": "要条令「{name}」{links}：{desc}",

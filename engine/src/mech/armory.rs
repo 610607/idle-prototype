@@ -50,12 +50,13 @@ fn scaled(base: &Resources, growth_bp: i32, k: i32) -> Resources {
     }
 }
 
-fn times(base: &Resources, n: i64) -> Resources {
+fn times_bp(base: &Resources, bp: i64) -> Resources {
+    let f = |v: i64| v * bp / 10_000;
     Resources {
-        scrap: base.scrap * n,
-        parts: base.parts * n,
-        intel: base.intel * n,
-        crystal: base.crystal * n,
+        scrap: f(base.scrap),
+        parts: f(base.parts),
+        intel: f(base.intel),
+        crystal: f(base.crystal),
     }
 }
 
@@ -65,7 +66,8 @@ pub fn next(def: &ArmoryDef, t: &Track) -> Next {
         return Next::Maxed;
     }
     if def.every > 0 && t.level > 0 && t.level % def.every == 0 && t.breaks < t.level / def.every {
-        return Next::Breakthrough(times(&def.breakthrough, t.breaks as i64 + 1));
+        let bp = 10_000 + t.breaks as i64 * def.breakthrough_step_bp as i64;
+        return Next::Breakthrough(times_bp(&def.breakthrough, bp));
     }
     Next::Level(scaled(&def.cost, def.growth_bp, t.level))
 }

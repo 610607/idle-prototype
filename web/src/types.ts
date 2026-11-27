@@ -169,6 +169,8 @@ export interface TileView {
   special?: SpecialKind;
   special_done: boolean;
   natives: number;
+  /** 巢穴强度 in percent (100 = as the ring says). */
+  danger_pct: number;
   next_surge?: number;
   surge_source?: number;
   enemies: EnemyBrief[][];
