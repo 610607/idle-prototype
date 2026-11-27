@@ -13,7 +13,7 @@
   "battle.log.retreat_emergency": "{name} 按战术规则下令紧急撤退，小队立刻脱战。",
   "battle.log.retreat_planned": "第 {wave} 波清空后，{name} 按计划收队，带回全部所得。",
   "battle.log.timeout": "第 {wave} 波拖满 {rounds} 回合没打下来，判负。",
-  "battle.log.wipe": "第 {wave} 波全员倒下。",
+  "battle.log.wipe": "第 {wave} 波全灭。",
   "battle.log.victory": "{waves} 波全部肃清。",
   "battle.log.breather": "波次间隙，街坊给 {name} 包扎，回复 {hp} 生命",
   "battle.log.regen": "{name} 缓过一口气，回复 {hp} 生命",

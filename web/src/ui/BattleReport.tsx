@@ -206,7 +206,7 @@ function UnitBox({ u, actor, target }: { u: SnapUnit; actor?: string; target?: s
         <Icon id={u.icon} />
         <span className="grow ellipsis">
           {u.name}
-          <span className="faint tiny"> {u.front ? t('report.unit.front') : t('report.unit.back')}</span>
+          <span className="faint tiny"> {u.front ? t('row.front') : t('row.back')}</span>
         </span>
         <span className="num tiny">
           {u.hp}/{u.max_hp}

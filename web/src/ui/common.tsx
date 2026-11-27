@@ -102,13 +102,13 @@ export function fmtRate(v: number): string {
 }
 
 export const OUTCOME_NAMES: Record<string, string> = {
-  victory: t('common.outcome.victory'),
+  victory: t('outcome.victory'),
   planned: t('outcome.planned'),
   emergency: t('outcome.emergency'),
-  wipe: t('common.outcome.wipe'),
+  wipe: t('outcome.wipe'),
 };
 
-export const DIAL_NAMES: Record<string, string> = { mine: t('dial.mine'), balance: t('dial.balance'), seal: t('common.dial.seal') };
+export const DIAL_NAMES: Record<string, string> = { mine: t('dial.mine'), balance: t('dial.balance'), seal: t('dial.seal') };
 
 export const SQUAD_HEX = ['#5ea3d6', '#e58cab'];
 

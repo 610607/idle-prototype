@@ -6,12 +6,12 @@ import type { Command, Dial, DryRun, GarrisonOption, TileView } from '../types';
 import { Cost, DIAL_NAMES, DryRunView, fmtIn, Page, Section, TagIO, useCtx } from './common';
 
 const TERRAIN_NAMES: Record<string, string> = {
-  unknown: tr('tile.terrain.unknown'),
+  unknown: tr('terrain.unknown'),
   hq: tr('terrain.hq'),
   city: tr('terrain.city'),
   rift: tr('terrain.rift'),
-  special: tr('tile.terrain.special'),
-  barrier: tr('tile.terrain.barrier'),
+  special: tr('terrain.special'),
+  barrier: tr('terrain.barrier'),
 };
 const SPECIAL_NAMES: Record<string, string> = {
   landmark: tr('tile.special.landmark'),
