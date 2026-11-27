@@ -3,9 +3,9 @@
 ......CCCC......
 .....CCCCCC.....
 ..p..CCCCCC..p..
+.pp.CCCCCCCC.pp.
 .p..CCCCCCCC..p.
-.p..CCCCCCCC..p.
-.p..CCCCCCCC..p.
+.pp.CCCCCCCC.pp.
 ..p.CCCCCCCC.p..
 ...CCCCCCCCCC...
 ..CCCCCCCCCCCC..
