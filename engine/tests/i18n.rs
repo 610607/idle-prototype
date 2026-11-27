@@ -245,7 +245,12 @@ fn web_keys_are_their_own() {
 /// (`content.json`) are not covered yet. Allowed: command examples in the text harness.
 #[test]
 fn runtime_text_quotes_no_numbers() {
-    const EXAMPLES: [&str; 3] = ["cli.run.usage", "cli.menu.other", "cli.info.commands"];
+    const EXAMPLES: [&str; 4] = [
+        "cli.run.usage",
+        "cli.menu.other",
+        "cli.session.menu_other",
+        "cli.info.commands",
+    ];
     let placeholder = |s: &str| -> String {
         let mut out = String::new();
         let mut rest = s;

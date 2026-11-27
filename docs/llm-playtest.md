@@ -20,6 +20,19 @@ cargo run --release --example agent_cli -- autoplay <存档> <种子> 72 4
 - Haiku 只许用这个工具，不读仓库。72 小时，约 18 个决策点。
 - 同时最多跑 3 局（3 个子代理，见 `CLAUDE.md`），多局分批跑。
 
+以后的试玩用**会话**（协议见 `docs/eval-interface.md`，逻辑在 `engine/src/textui/session.rs`）：回访时刻由日程定，玩家不能自己选等多久；菜单项用由命令内容算出的 id，旧 id 只会被拒绝；每次回访记一个感受，阶段结束后的第一次回访先打分；结果落成会话目录，给 `eval session` 重放算指标。
+
+```bash
+cargo run --release --example agent_cli -- session new <目录> --seed 0 [--schedule week-decay|every:N] [--hours 168] [--player haiku] [--no-research]
+cargo run --release --example agent_cli -- session obs <目录> [--json]
+cargo run --release --example agent_cli -- session act <目录> --pick a1b2c3 --feel flat --why '一句话' [--score growth=3:'依据' …]
+cargo run --release --example agent_cli -- session serve <目录>    # 外部程序驱动：一行观察 JSON 出，一行行动 JSON 进
+```
+
+- 默认日程 `week-decay`：168 小时，第 1 天每 3 小时、第 2～3 天每 4 小时、之后每 8 小时回访一次，共 33 次；第 24、72 小时和终局要先打分（八个维度，1～5 分）。
+- 被拒的行动（id 不在菜单里、感受标签不对、该打分时没打齐）不改变任何东西，同一次回访的观察会把原因写在最前面；引擎拒绝的单条命令只算这次回访里失败的一项。
+- 命令参考还是 `agent_cli info <目录>/save.json`。
+
 跑了两轮。第一轮之后修了文字版漏掉、网页上有的信息（建设施的预演差异），又给引擎的预演差异加了「住房」一行，再跑第二轮（含不研究的对照组）。
 
 ## 结果（第 72 小时）

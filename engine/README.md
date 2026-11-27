@@ -48,6 +48,7 @@ cargo run --release --example midsave 1 60 $(date +%s)  # 自动玩家玩 60 小
 cargo run --release --example agent_cli -- new <存档> <种子>   # 文字版（src/textui.rs）局面 + 编号菜单，给 LLM 玩家用（docs/llm-playtest.md）；不带参数看用法
 cargo run --release --example agent_cli -- do <存档> 1 3 --wait 4 --note "理由"
 cargo run --release --example agent_cli -- autoplay <存档> <种子> 72 4   # 同节奏的脚本玩家对照（BOT_NORESEARCH=1 关研究）
+cargo run --release --example agent_cli -- session new <目录> --seed 0  # 试玩会话（src/textui/session.rs，docs/eval-interface.md）：固定日程、菜单 id、感受和打分；obs / act / serve
 ```
 
 `population` 和 `custcost` 可以多给一个 JSON 参数临时改数值（`content::patch_balance`，只在内容第一次加载前有效），比如复现人口改稀缺之前的旧数值：

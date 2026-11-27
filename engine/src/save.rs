@@ -31,7 +31,9 @@ pub struct SaveInfo {
     pub saved_at: i64,
 }
 
-fn fnv64(bytes: &[u8]) -> String {
+/// FNV-1a 64 as 16 lowercase hex digits: the save checksum, and the stable hash behind play
+/// session menu ids, build fingerprints and final save digests (docs/eval-interface.md).
+pub fn fnv64(bytes: &[u8]) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in bytes {
         h ^= *b as u64;
