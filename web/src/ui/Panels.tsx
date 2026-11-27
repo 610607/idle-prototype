@@ -583,7 +583,7 @@ export function HQPanel() {
             {org.history.map((h) => (
               <div key={h.number} className="row small">
                 <span className="grow">
-                  {t('panels.history.cycle', { n: h.number, modifier: h.modifier })}
+                  {t('panels.history.cycle', { n: h.number, modifier: h.modifier_name })}
                 </span>
                 <span className="num">+{h.exp}</span>
               </div>

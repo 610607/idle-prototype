@@ -47,7 +47,7 @@ pub enum Reach {
     Json,
     /// Done for the player (rules the harness turns on, finished tasks).
     Auto,
-    /// Between cycles; the harness plays one cycle.
+    /// Ends the cycle. The harness plays one cycle to `Options::hours` and does not offer it.
     BetweenCycles,
 }
 
@@ -64,7 +64,8 @@ pub fn reach(cmd: &Command) -> Reach {
         | Command::SetPolicy { .. }
         | Command::Research
         | Command::Reroll
-        | Command::PickDoctrine { .. } => Reach::Menu,
+        | Command::PickDoctrine { .. }
+        | Command::ChooseMap { .. } => Reach::Menu,
         Command::SetSquad { .. }
         | Command::SetDial { .. }
         | Command::Dismiss { .. }
@@ -77,7 +78,7 @@ pub fn reach(cmd: &Command) -> Reach {
         | Command::Lock { .. }
         | Command::Archive { .. } => Reach::Json,
         Command::SetRule { .. } | Command::ClaimTask { .. } => Reach::Auto,
-        Command::ChooseMap { .. } | Command::Collapse => Reach::BetweenCycles,
+        Command::Collapse => Reach::BetweenCycles,
     }
 }
 
@@ -257,7 +258,11 @@ pub fn parse_json(j: &str) -> Result<Command, String> {
     serde_json::from_value(v).map_err(|e| t!("cli.bad_json", err = e))
 }
 
+/// Hours into the cycle; 0 between cycles.
 pub fn hour(e: &Engine, v: &View) -> i64 {
+    if v.phase != Phase::Active {
+        return 0;
+    }
     (e.state.time - v.started_at) / 3600
 }
 
@@ -477,6 +482,111 @@ fn org(o: &mut String, v: &View) {
     }
 }
 
+/// The rest of the web's 总部 page: rules, special operatives, sealed items, past cycles.
+fn hq(o: &mut String, v: &View) {
+    let g = &v.org;
+    org(o, v);
+    line(o, t!("cli.rules.title"));
+    for r in &g.rules {
+        line(
+            o,
+            t!(
+                if r.on {
+                    "cli.rules.on"
+                } else {
+                    "cli.rules.off"
+                },
+                name = r.name,
+                id = r.id,
+                desc = r.desc
+            ),
+        );
+    }
+    line(o, t!("cli.specials.title"));
+    for x in &g.specials {
+        line(
+            o,
+            t!(
+                "cli.specials.one",
+                name = x.name,
+                side = x.side,
+                state = if x.recruited {
+                    t!("cli.specials.recruited")
+                } else if x.met {
+                    t!("cli.specials.met")
+                } else {
+                    String::new()
+                },
+                rule = x.rule,
+                hint = x.hint,
+                have = x.have.min(x.need),
+                need = x.need
+            ),
+        );
+    }
+    let sealed: Vec<String> = v.sealed.iter().map(|x| x.name.clone()).collect();
+    line(
+        o,
+        t!(
+            "cli.sealed",
+            n = sealed.len(),
+            slots = g.sealed_slots,
+            list = none_or(&sealed, &t!("cli.sep.list"))
+        ),
+    );
+    if !g.history.is_empty() {
+        line(o, t!("cli.history.title"));
+        for h in &g.history {
+            let s = &h.summary;
+            line(
+                o,
+                t!(
+                    "cli.history.one",
+                    n = s.number,
+                    modifier = h.modifier_name,
+                    exp = s.exp,
+                    m = s.management,
+                    d = s.defense,
+                    x = s.exploration
+                ),
+            );
+        }
+    }
+}
+
+/// The 知识库: every doctrine researched so far; the archived ones start the next cycle held.
+fn library(o: &mut String, v: &View) {
+    let r = &v.research;
+    line(
+        o,
+        t!(
+            "cli.library.title",
+            n = r.archive.len(),
+            slots = r.archive_slots,
+            have = r.library.len(),
+            total = r.total
+        ),
+    );
+    if r.library.is_empty() {
+        line(o, t!("cli.library.empty"));
+    }
+    for d in &r.library {
+        line(
+            o,
+            t!(
+                if d.archived {
+                    "cli.library.on"
+                } else {
+                    "cli.library.off"
+                },
+                name = d.name,
+                id = d.id,
+                desc = d.desc
+            ),
+        );
+    }
+}
+
 /// Events after `since`, the latest few.
 fn events(o: &mut String, v: &View, since: i64) {
     let ev: Vec<String> = v
@@ -500,11 +610,17 @@ fn events(o: &mut String, v: &View, since: i64) {
     }
 }
 
-/// Between cycles there is no map, only the organisation and what just happened (collapse).
+/// Between cycles (the web's map choice): the maps on offer, the 知识库, the 总部 page and what
+/// just happened. The maps themselves are menu items.
 fn between(v: &View, since: i64) -> String {
     let mut o = String::new();
     line(&mut o, t!("cli.between.title", n = v.org.cycles));
-    org(&mut o, v);
+    line(
+        &mut o,
+        t!("cli.between.maps", cycle = v.cycle, n = v.previews.len()),
+    );
+    library(&mut o, v);
+    hq(&mut o, v);
     events(&mut o, v, since);
     o
 }
@@ -526,6 +642,9 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             cycle = v.cycle
         ),
     );
+    if let Some((_, name, desc)) = &v.modifier {
+        line(&mut o, t!("cli.board.climate", name = name, desc = desc));
+    }
     line(
         &mut o,
         t!(
@@ -867,8 +986,8 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     o
 }
 
-/// Full skill and trait text, candidates, facilities, policies, the organisation's levels and
-/// the command reference.
+/// Full skill and trait text, candidates, facilities, policies, the 总部 page (organisation,
+/// rules, special operatives, sealed items, past cycles), the 知识库 and the command reference.
 pub fn info(e: &mut Engine) -> String {
     let v = e.view();
     let mut o = String::new();
@@ -916,7 +1035,8 @@ pub fn info(e: &mut Engine) -> String {
             );
         }
     }
-    org(&mut o, &v);
+    hq(&mut o, &v);
+    library(&mut o, &v);
     line(&mut o, t!("cli.info.commands"));
     for c in samples() {
         if reach(&c) == Reach::BetweenCycles {
@@ -1029,6 +1149,23 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
 pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
     let v = e.view();
     let mut m: Vec<Item> = vec![];
+    if v.phase != Phase::Active {
+        for p in &v.previews {
+            m.push(Item {
+                label: t!(
+                    "cli.menu.map",
+                    cycle = v.cycle,
+                    name = p.modifier_name,
+                    desc = p.modifier_desc,
+                    rifts = p.rifts,
+                    specials = p.specials,
+                    districts = p.districts
+                ),
+                cmd: Command::ChooseMap { index: p.index },
+            });
+        }
+        return m;
+    }
     let r = &v.research;
     if opts.research {
         if r.offers.is_empty() {
@@ -1251,15 +1388,15 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
 
 pub fn menu_text(e: &mut Engine, items: &[Item]) -> String {
     let v = e.view();
-    if v.phase != Phase::Active {
-        // Nothing to pick between cycles; the hints below are about the map.
-        return String::new();
-    }
     let sq = v.squads.first().map(|s| s.id).unwrap_or(1);
     let mut o = String::new();
     line(&mut o, t!("cli.menu.header"));
     for (i, it) in items.iter().enumerate() {
         line(&mut o, format!("  {}. {}", i + 1, it.label));
+    }
+    if v.phase != Phase::Active {
+        // The hints below are about the map.
+        return o;
     }
     line(
         &mut o,
@@ -1362,10 +1499,10 @@ mod tests {
         }
     }
 
-    /// The organisation shows on the board in a cycle (one line), in `info` (every perk) and on
-    /// the board between cycles, which used to index an empty map.
+    /// The HQ page shows in a cycle (a line on the board, everything in info) and between
+    /// cycles, where the board used to index an empty map and the maps are now menu items.
     #[test]
-    fn org_is_shown_in_and_between_cycles() {
+    fn hq_is_shown_in_and_between_cycles() {
         let opts = Options::default();
         let mut e = new_game(0);
         let now = e.state.time;
@@ -1377,21 +1514,37 @@ mod tests {
             exp = v.org.exp,
             next = v.org.next.unwrap()
         );
-        assert!(board(&mut e, now, &opts).contains(&line));
+        let text = board(&mut e, now, &opts);
+        assert!(text.contains(&line));
+        assert!(text.contains(&v.modifier.as_ref().unwrap().1));
         let text = info(&mut e);
         assert!(v.org.perks.iter().all(|p| text.contains(&p.text)));
+        assert!(v.org.rules.iter().all(|r| text.contains(&r.desc)));
+        assert!(v.org.specials.iter().all(|x| text.contains(&x.rule)));
+        assert!(v.research.library.iter().all(|d| text.contains(&d.desc)));
 
         e.command(&Command::Collapse).unwrap();
         let v = e.view();
         assert!(v.org.exp > 0);
+        assert_eq!(hour(&e, &v), 0);
         let text = board(&mut e, now, &opts);
         assert!(!text.contains("cli."), "unresolved key in:\n{text}");
         assert!(text.contains(&t!("cli.between.title", n = v.org.cycles)));
         assert!(v.org.perks.iter().all(|p| text.contains(&p.text)));
+        assert!(text.contains(&v.org.history[0].modifier_name));
         assert!(v.events.iter().any(|x| text.contains(&x.text)));
         let items = menu(&mut e, &opts);
-        assert!(items.is_empty());
-        assert!(menu_text(&mut e, &items).is_empty());
+        assert_eq!(items.len(), v.previews.len());
+        assert!(!menu_text(&mut e, &items).contains("cli."));
+        for it in &items {
+            assert!(matches!(it.cmd, Command::ChooseMap { .. }));
+            assert!(e.dry_run(&it.cmd).ok, "{}", it.label);
+        }
+        run(&mut e, &items[1].cmd, &opts).unwrap();
+        let v = e.view();
+        assert_eq!(v.phase, Phase::Active);
+        assert_eq!(hour(&e, &v), 0);
+        assert!(board(&mut e, now, &opts).contains(&v.modifier.as_ref().unwrap().1));
     }
 
     #[test]
