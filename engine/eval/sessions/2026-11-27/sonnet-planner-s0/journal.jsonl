@@ -102,3 +102,5 @@
 {"t":432000,"cmd":{"cmd":"garrison","op":310,"tile":67}}
 {"t":460800,"cmd":{"cmd":"set_route","squad":4,"route":[94]}}
 {"t":489600,"cmd":{"cmd":"set_route","squad":4,"route":[100]}}
+{"t":518400,"cmd":{"cmd":"set_route","squad":4,"route":[109]}}
+{"t":547200,"cmd":{"cmd":"set_route","squad":4,"route":[115]}}
