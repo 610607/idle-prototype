@@ -1,0 +1,39 @@
+[
+  {
+    "id": "arms",
+    "icon": "atk",
+    "target": "squad",
+    "cost": { "scrap": 40 },
+    "growth_bp": 11500,
+    "atk_bp": 600,
+    "every": 8,
+    "breakthrough": { "crystal": 30, "parts": 40 },
+    "breakthrough_bp": 2500,
+    "max": 40
+  },
+  {
+    "id": "armor",
+    "icon": "def",
+    "target": "squad",
+    "cost": { "scrap": 40 },
+    "growth_bp": 11500,
+    "hp_bp": 800,
+    "every": 10,
+    "breakthrough": { "crystal": 30, "parts": 40 },
+    "breakthrough_bp": 2500,
+    "max": 40
+  },
+  {
+    "id": "drills",
+    "icon": "militia",
+    "target": "militia",
+    "cost": { "scrap": 30 },
+    "growth_bp": 11500,
+    "hp_bp": 1200,
+    "atk_bp": 900,
+    "every": 6,
+    "breakthrough": { "crystal": 20, "parts": 30 },
+    "breakthrough_bp": 2500,
+    "max": 40
+  }
+]

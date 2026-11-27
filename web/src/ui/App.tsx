@@ -189,9 +189,11 @@ export function App({ game }: { game: Game }) {
       return n ? <span className="badge ink">{n}</span> : null;
     }
     if (t === 'research') {
-      if (view.research.offers.length) return <span className="badge ink">3</span>;
+      if (view.research.offers.length) return <span className="badge ink">{view.research.offers.length}</span>;
       return view.research.affordable && view.research.left ? <span className="badge ink">!</span> : null;
     }
+    // A breakthrough the player can pay for is a big moment: flag it on the HQ tab.
+    if (t === 'hq' && view.phase === 'active' && view.armory.some((a) => a.next === 'breakthrough' && a.affordable)) return <span className="badge hazard">!</span>;
     return null;
   };
   const pick = (t: Tab) => {
@@ -251,7 +253,12 @@ export function App({ game }: { game: Game }) {
         )}
       </div>
       {ask ? <ConfirmDialog ask={ask} onDone={() => setAsk(null)} /> : null}
-      {toastMsg ? <div className={'toast' + (toastMsg.error ? ' error' : '')}>{toastMsg.text}</div> : null}
+      {toastMsg ? (
+        <div className={'toast' + (toastMsg.error ? ' error' : '')} role="status">
+          <Icon id={toastMsg.error ? 'warn' : 'check'} />
+          {toastMsg.text}
+        </div>
+      ) : null}
     </GameCtx.Provider>
   );
 }
@@ -309,10 +316,12 @@ function TopBar() {
           ) : null}
         </div>
       ) : null}
-      <span className="clock muted">
+      <span className="clock">
         {game.offset ? <span className="chip warn">{t('app.fast_forward', { h: Math.round(game.offset / 3600) })}</span> : null}
-        <Icon id="clock" />
-        <span className="num">{fmtClock(now)}</span>
+        <span className="readout">
+          <Icon id="clock" />
+          <span className="num">{fmtClock(now)}</span>
+        </span>
       </span>
     </header>
   );
@@ -418,14 +427,14 @@ function MiniMap({ barriers }: { barriers: number[] }) {
   const s = 8;
   return (
     <svg viewBox={`0 0 ${N * s} ${N * s}`} style={{ width: '100%', maxWidth: 180, alignSelf: 'center' }} shapeRendering="crispEdges">
-      <rect width={N * s} height={N * s} fill="#1d201a" />
+      <rect width={N * s} height={N * s} fill="var(--map-bg)" />
       {Array.from({ length: N * N }, (_, i) => (
         <rect key={i} x={(i % N) * s} y={Math.floor(i / N) * s} width={s - 1} height={s - 1} fill={WASH[(Math.floor((i % N) / 5) + Math.floor(i / N / 5) * 3) % WASH.length]} opacity={0.35} />
       ))}
       {barriers.map((i) => (
-        <rect key={'b' + i} x={(i % N) * s} y={Math.floor(i / N) * s} width={s - 1} height={s - 1} fill="#4a463d" />
+        <rect key={'b' + i} x={(i % N) * s} y={Math.floor(i / N) * s} width={s - 1} height={s - 1} fill="var(--map-barrier-hi)" />
       ))}
-      <rect x={7 * s} y={7 * s} width={s - 1} height={s - 1} fill="#e0b43c" />
+      <rect x={7 * s} y={7 * s} width={s - 1} height={s - 1} fill="var(--hazard)" />
     </svg>
   );
 }

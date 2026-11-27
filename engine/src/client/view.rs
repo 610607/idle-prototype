@@ -506,6 +506,9 @@ pub struct ResearchView {
     pub affordable: bool,
     /// Doctrines still drawable this cycle.
     pub left: usize,
+    /// The next ring whose doctrines join the pool once a tile of it is owned, and how many.
+    pub unlock_ring: Option<i32>,
+    pub unlock_count: usize,
     pub offers: Vec<DoctrineView>,
     pub held: Vec<DoctrineView>,
     pub archive: Vec<DoctrineView>,
@@ -567,6 +570,10 @@ pub fn research_view(state: &GameState) -> ResearchView {
         } else {
             0
         },
+        unlock_ring: crate::mech::doctrine::next_unlock(state).map(|x| x.0),
+        unlock_count: crate::mech::doctrine::next_unlock(state)
+            .map(|x| x.1)
+            .unwrap_or(0),
         offers: cy.research_offers.iter().filter_map(dv).collect(),
         held: cy.doctrines.iter().filter_map(dv).collect(),
         archive: state.org.archive.iter().filter_map(dv).collect(),
@@ -598,6 +605,68 @@ pub fn research_view(state: &GameState) -> ResearchView {
         known: state.org.known_doctrines.len(),
         total: c.doctrines.len(),
     }
+}
+
+/// 军械: one track, its level and what the next press does.
+#[derive(Serialize, Clone, Debug)]
+pub struct ArmoryView {
+    pub id: String,
+    pub name: String,
+    pub desc: String,
+    pub icon: String,
+    pub target: crate::data::ArmoryTarget,
+    pub level: i32,
+    pub breaks: i32,
+    pub max: i32,
+    /// Levels between breakthroughs.
+    pub every: i32,
+    /// "level", "breakthrough" or "maxed".
+    pub next: String,
+    pub cost: Resources,
+    pub affordable: bool,
+    /// The track's bonus now and after the next step, in percent above the base (HP, attack).
+    pub hp_pct: i64,
+    pub atk_pct: i64,
+    pub next_hp_pct: i64,
+    pub next_atk_pct: i64,
+}
+
+pub fn armory_view(state: &GameState) -> Vec<ArmoryView> {
+    use crate::mech::armory::{mult_bp, next, stepped, track, Next};
+    let cy = &state.cycle;
+    let active = cy.phase == Phase::Active;
+    content()
+        .armory
+        .iter()
+        .map(|d| {
+            let t = track(&cy.armory, &d.id);
+            let (kind, cost) = match next(d, &t) {
+                Next::Level(c) => ("level", c),
+                Next::Breakthrough(c) => ("breakthrough", c),
+                Next::Maxed => ("maxed", Resources::default()),
+            };
+            let (hp, atk) = mult_bp(d, &t);
+            let (nh, na) = mult_bp(d, &stepped(d, &t));
+            ArmoryView {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                desc: d.desc.clone(),
+                icon: d.icon.clone(),
+                target: d.target,
+                level: t.level,
+                breaks: t.breaks,
+                max: d.max,
+                every: d.every,
+                next: kind.to_string(),
+                affordable: active && kind != "maxed" && cy.resources.covers(&cost),
+                cost,
+                hp_pct: (hp - 10_000) / 100,
+                atk_pct: (atk - 10_000) / 100,
+                next_hp_pct: (nh - 10_000) / 100,
+                next_atk_pct: (na - 10_000) / 100,
+            }
+        })
+        .collect()
 }
 
 #[derive(Serialize)]
@@ -645,6 +714,7 @@ pub struct View {
     pub results: CycleResults,
     pub hire_cost: i64,
     pub research: ResearchView,
+    pub armory: Vec<ArmoryView>,
     pub tasks: TasksView,
 }
 
@@ -1061,6 +1131,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             results: sim::cycle_results(state),
             hire_cost: b.hire_cost_scrap,
             research: research_view(state),
+            armory: armory_view(state),
             tasks: tasks_view(state),
         };
     }
@@ -1468,6 +1539,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         results: sim::cycle_results(state),
         hire_cost: b.hire_cost_scrap,
         research: research_view(state),
+        armory: armory_view(state),
         tasks: tasks_view(state),
     }
 }

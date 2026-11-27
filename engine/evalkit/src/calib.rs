@@ -17,7 +17,7 @@ use idle_engine::mech::routes;
 
 pub const FIELD_HOURS: [i64; 4] = [6, 12, 24, 48];
 /// What `calibrate` switches off in the field, to price it (on/off comparison).
-pub const VARIANTS: [&str; 4] = ["full", "no_doctrines", "no_traits", "neither"];
+pub const VARIANTS: [&str; 5] = ["full", "no_doctrines", "no_traits", "neither", "no_armory"];
 const BINS: [f64; 8] = [0.25, 0.5, 0.7, 1.0, 1.5, 2.0, 4.0, 8.0];
 /// The reference team of docs/balance-curves-research.md: vanguard, marksman, medic.
 const REFERENCE: [usize; 3] = [0, 1, 2];
@@ -205,7 +205,8 @@ pub fn class_residuals(samples: &[([usize; 3], Sample)]) {
 }
 
 /// Field only: win share by ring and checkpoint hour, for the full squads and with doctrines
-/// and/or traits switched off: what each layer is worth, measured instead of estimated.
+/// and/or traits switched off, or the 军械 levels taken away: what each layer is worth,
+/// measured instead of estimated.
 pub fn field_by_hour(samples: &[(i64, &str, Sample)]) {
     println!("# field: win share by ring (all squads × all fightable tiles)");
     print!("{:<20}", "variant hour");
@@ -352,12 +353,14 @@ pub fn field_model(
 fn field_samples(e: &Engine) -> Vec<(&'static str, Sample)> {
     let mut plain = e.state.clone();
     plain.cycle.doctrines.clear();
+    let mut unarmed = e.state.clone();
+    unarmed.cycle.armory.clear();
     let mut out = Vec::new();
     for v in VARIANTS {
-        let state = if v == "full" || v == "no_traits" {
-            &e.state
-        } else {
-            &plain
+        let state = match v {
+            "full" | "no_traits" => &e.state,
+            "no_armory" => &unarmed,
+            _ => &plain,
         };
         for specs in squad_units(&e.state, v == "no_traits" || v == "neither") {
             for tile in fightable(&e.state) {

@@ -22,5 +22,21 @@
   { "id": "overclock", "icon": "trait-bolt", "rarity": 2, "level": 2, "links": ["react"],
     "effects": [{ "type": "stat", "atk": 3, "spd": 2 }] },
   { "id": "spotter", "icon": "trait-eye", "rarity": 3, "level": 3, "links": ["react", "bloodhound"],
-    "effects": [{ "type": "stat", "pp": 1 }] }
+    "effects": [{ "type": "stat", "pp": 1 }] },
+  { "id": "shock_drill", "icon": "tag-shock", "rarity": 1, "ring": 2, "links": ["react", "ionize"],
+    "effects": [{ "type": "on_hit_apply", "tag": "shock", "stacks": 1 }] },
+  { "id": "bounty", "icon": "tag-mark", "rarity": 2, "ring": 2, "links": ["ionize", "bloodhound"],
+    "effects": [{ "type": "bonus_vs_tag", "tag": "mark", "bp": 2500 }] },
+  { "id": "last_stand", "icon": "trait-scar", "rarity": 2, "ring": 3, "links": [],
+    "effects": [{ "type": "low_hp_bonus", "below": 40, "bp": 4000 }] },
+  { "id": "resonant_core", "icon": "trait-resonance", "rarity": 3, "ring": 3, "links": ["react", "burst"],
+    "effects": [{ "type": "resonance", "threshold": 3 }] },
+  { "id": "siphon", "icon": "skill-bloom", "rarity": 2, "ring": 4, "links": ["react", "burst"],
+    "effects": [{ "type": "consume_heal", "bp": 400 }] },
+  { "id": "veteran_kit", "icon": "trait-gear", "rarity": 2, "ring": 4, "links": [],
+    "effects": [{ "type": "stat", "hp": 20, "atk": 4, "def": 2 }] },
+  { "id": "bulwark", "icon": "tag-shield", "rarity": 2, "ring": 5, "links": ["spall"],
+    "effects": [{ "type": "start_tag", "tag": "shield", "stacks": 3 }] },
+  { "id": "cascade", "icon": "tag-overload", "rarity": 3, "ring": 5, "links": ["react", "ionize", "etch"],
+    "effects": [{ "type": "transmute", "on": "applied", "from": "shock", "to": "erosion", "stacks": 1 }] }
 ]

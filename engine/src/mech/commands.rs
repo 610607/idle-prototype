@@ -108,6 +108,10 @@ pub enum Command {
     ClaimTask {
         task: String,
     },
+    /// Next step on a 军械 track: a level (scrap), or the breakthrough it waits for.
+    Upgrade {
+        track: String,
+    },
     Collapse,
 }
 
@@ -181,6 +185,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         Command::PickDoctrine { doctrine } => crate::mech::doctrine::pick(state, doctrine),
         Command::Archive { doctrine, on } => crate::mech::doctrine::archive(state, doctrine, *on),
         Command::ClaimTask { task } => crate::mech::tasks::claim(state, task),
+        Command::Upgrade { track } => crate::mech::armory::upgrade(state, track),
         Command::Collapse => sim::collapse(state),
     };
     if r.is_ok() {

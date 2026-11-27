@@ -3,7 +3,7 @@
 //! A [`Bot`] plays one game by a [`Policy`] and counts the commands the engine accepted (`eval`
 //! reports the ones no persona ever uses, its blind spots). Each [`Bot::step`] is one turn:
 //! claim, district settings, hire, garrison lost tiles, fill squads and send them on routes,
-//! squad care, build, research, counter, defend. Nothing is kept between games except what the
+//! squad care, build, research, armory, counter, defend. Nothing is kept between games except what the
 //! caller holds.
 //!
 //! The policy's focus changes what the bot builds first and how it runs its districts
@@ -14,6 +14,7 @@ mod tactics;
 
 use idle_engine::client::api::Engine;
 use idle_engine::client::view::{OpView, TideView, View};
+use idle_engine::data::ArmoryTarget;
 use idle_engine::kernel::geom;
 use idle_engine::mech::commands::Command;
 use idle_engine::mech::state::Assignment;
@@ -369,6 +370,7 @@ impl Bot {
             }
         }
         self.research(e);
+        self.arm(e);
         // Counter only what the preview says wins, like the engine's auto_counter rule: a lost counter
         // costs nothing but still counts its reactions, so blind retries farm the codex.
         let v = e.view();
@@ -433,6 +435,10 @@ fn build_order(focus: Focus) -> [&'static str; 8] {
 
 /// Turns in a row the defensive focus may hold its claims for a losing forecast.
 const CLAIM_WAIT: u32 = 12;
+/// Scrap the armory leaves for builds and hires.
+const ARM_RESERVE: i64 = 120;
+/// Most armory steps in one turn.
+const ARM_STEPS: usize = 6;
 
 /// Scrap the bot keeps after hiring.
 const HIRE_RESERVE: i64 = 40;
@@ -583,6 +589,30 @@ impl Bot {
 
     /// Claims finished tasks; then, when the policy researches, researches whenever intel allows and
     /// keeps the offer that wires into the most held doctrines, the hub first on ties.
+    /// 军械: spend what is left after builds, hires and research, cheapest step first. A
+    /// breakthrough is taken as soon as it is affordable (it unblocks the track); the militia
+    /// tracks weigh double while the forecast loses nothing, the squad tracks while it does.
+    fn arm(&mut self, e: &mut Engine) {
+        for _ in 0..ARM_STEPS {
+            let v = e.view();
+            let losing = lost_in(&v.tide) > 0;
+            let pick = v
+                .armory
+                .iter()
+                .filter(|a| a.affordable && v.resources.scrap - a.cost.scrap >= ARM_RESERVE)
+                .min_by_key(|a| {
+                    let militia = a.target == ArmoryTarget::Militia;
+                    let weight = if militia != losing { 2 } else { 1 };
+                    (a.next != "breakthrough", a.cost.scrap * weight)
+                })
+                .map(|a| a.id.clone());
+            let Some(track) = pick else { return };
+            if self.act(e, &Command::Upgrade { track }).is_err() {
+                return;
+            }
+        }
+    }
+
     fn research(&mut self, e: &mut Engine) {
         let done: Vec<String> = e
             .view()

@@ -36,12 +36,13 @@
       "id": "growth_in_cycle",
       "kind": "experience",
       "level": "watch",
-      "text": "局内有成长：研究是主线，一周能研究约 9 次，小队强度在一轮里明显变强",
-      "doc": "docs/payoff-pacing-research.md 八、一周骨架；docs/balance-model.md 研究时刻",
+      "text": "局内有成长：研究是主线，一周能研究约 9 次，小队强度在一轮里明显变强；军械在后半周还有突破",
+      "doc": "docs/payoff-pacing-research.md 八、一周骨架；docs/balance-model.md 研究时刻；docs/prototype-v2.md 军械",
       "checks": {
         "research.draws": [{ "stat": "p50", "min": 9 }],
         "payoff.growth.power": [{ "stat": "p50", "min": 1 }],
-        "payoff.research.ladder_gain": [{ "stat": "p50", "min": 1 }]
+        "payoff.research.ladder_gain": [{ "stat": "p50", "min": 1 }],
+        "armory.breaks.h168": [{ "stat": "p50", "min": 6 }]
       }
     },
     {

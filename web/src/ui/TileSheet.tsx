@@ -119,7 +119,7 @@ function ClaimBlock({ t }: { t: TileView }) {
   const dry = useMemo(() => game.dryRun({ cmd: 'claim', tile: t.i }), [game, t.i]);
   return (
     <div className="card striped good">
-      <Section title={t.terrain === 'rift' ? tr('tile.claim.title_rift') : tr('tile.claim.title')} icon="check" hint={tr('tile.claim.hint')}>
+      <Section title={t.terrain === 'rift' ? tr('tile.claim.title_rift') : tr('tile.claim.title')} icon="check" tone="good" hint={tr('tile.claim.hint')}>
         <DryRunView dry={dry} />
         <div className="row" style={{ marginTop: 8 }}>
           <ClaimButton tile={t.i} ok={dry.ok} />
@@ -143,7 +143,7 @@ function AlertBlock({ t }: { t: TileView }) {
   const report = useMemo(() => game.previewSurge(t.i, undefined), [game, t.i]);
   return (
     <div className="card striped bad">
-      <Section title={tr('tile.alert.title')} icon="alert" hint={tr('tile.alert.hint')}>
+      <Section title={tr('tile.alert.title')} icon="alert" tone="bad" hint={tr('tile.alert.hint')}>
         <p className="small muted" style={{ margin: 0 }}>
           {tr('tile.alert.body', { n: game.balance.warden_counter_restore, clinic: game.balance.warden_counter_restore_clinic })}
         </p>
@@ -173,14 +173,15 @@ function DefenseBlock({ t }: { t: TileView }) {
   const tide = view.tide.filter((e) => e.tile === t.i);
   const load = () => setOpts(game.garrisonOptions(t.i));
   return (
-    <Section title={tr('tile.defense.title')} icon="garrison" hint={current ? tr('tile.defense.held_by', { name: current.name }) : tr('tile.defense.none')}>
+    <Section title={tr('tile.defense.title')} icon="garrison" tone="hazard" hint={current ? tr('tile.defense.held_by', { name: current.name }) : tr('tile.defense.none')}>
       {tide.length ? (
         <div className="row wrap small" style={{ gap: 6, marginBottom: 8 }}>
           <span className="muted">{tr('tile.defense.tide', { h: game.balance.tide_horizon / 3600 })}</span>
           {tide.map((e, k) => (
-            <span key={k} className={'chip ' + (e.held ? 'good' : 'bad')}>
+            // A surge on a tile already on alert is skipped (no wave is fought), so it has no lost wave.
+            <span key={k} className={'chip ' + (e.skipped ? '' : e.held ? 'good' : 'bad')} style={e.skipped ? { color: 'var(--ink-3)' } : undefined}>
               <Icon id="wave" size={12} />
-              {e.held ? tr('tile.defense.tide_held') : tr('tile.defense.tide_lost', { wave: e.lost_wave! })}
+              {e.skipped ? tr('panels.tide.skipped') : e.held ? tr('tile.defense.tide_held') : tr('tile.defense.tide_lost', { wave: e.lost_wave ?? '?' })}
             </span>
           ))}
         </div>
@@ -248,7 +249,7 @@ function BuildBlock({ t }: { t: TileView }) {
   const usageName =
     current === 'housing' ? tr('tile.build.housing') : current === 'none' ? tr('tile.build.empty') : view.facilities.find((f) => f.id === current)?.name ?? current;
   return (
-    <Section title={tr('tile.build.title')} icon="housing" hint={tr('tile.build.now', { name: usageName })}>
+    <Section title={tr('tile.build.title')} icon="housing" tone="good" hint={tr('tile.build.now', { name: usageName })}>
       <div className="list">
         {current !== 'housing' ? (
           <button className={'list-item' + (pick === 'housing' ? ' selected' : '')} onClick={() => choose(null)}>
@@ -309,7 +310,7 @@ function DialBlock({ t }: { t: TileView }) {
   const dials: Dial[] = ['mine', 'balance', 'seal'];
   const [dry, setDry] = useState<{ d: Dial; r: DryRun } | null>(null);
   return (
-    <Section title={tr('tile.dial.title')} icon={`dial-${r.dial}`} hint={tr('tile.dial.talent', { pct: r.talent_pct })}>
+    <Section title={tr('tile.dial.title')} icon={`dial-${r.dial}`} tone="elec" hint={tr('tile.dial.talent', { pct: r.talent_pct })}>
       <p className="small muted" style={{ margin: '0 0 8px' }}>
         {tr('tile.dial.help')}
       </p>
@@ -340,7 +341,7 @@ function DialBlock({ t }: { t: TileView }) {
 function EnemyBlock({ t }: { t: TileView }) {
   const { view, setRouteEdit, open, toast, game } = useCtx();
   return (
-    <Section title={tr('tile.enemy.title')} icon="wave" hint={tr('tile.enemy.waves', { n: t.enemies.length })}>
+    <Section title={tr('tile.enemy.title')} icon="wave" tone="rift" hint={tr('tile.enemy.waves', { n: t.enemies.length })}>
       <div className="stack" style={{ gap: 4 }}>
         {t.enemies.map((w, k) => (
           <div key={k} className="row wrap small" style={{ gap: 10 }}>
@@ -415,7 +416,7 @@ function AbandonBlock({ t }: { t: TileView }) {
     );
   return (
     <div className="card flat bad">
-      <Section title={tr('tile.abandon.title')} icon="warn">
+      <Section title={tr('tile.abandon.title')} icon="warn" tone="bad">
         <Confirm cmd={{ cmd: 'abandon', tile: t.i }} label={tr('tile.abandon.confirm')} danger okText={tr('tile.abandon.done')} />
       </Section>
     </div>

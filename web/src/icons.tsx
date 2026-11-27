@@ -54,6 +54,8 @@ export function Icon({ id, size = 16, title, className }: { id: string; size?: n
   return (
     <svg
       className={'icon px ' + (className ?? '')}
+      // The id lets style.css tint icons by category (res-*, enemy-*, tag-* …) until the art carries colour.
+      data-icon={id}
       width={s}
       height={s}
       viewBox="0 0 16 16"

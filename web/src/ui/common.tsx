@@ -110,20 +110,22 @@ export const OUTCOME_NAMES: Record<string, string> = {
 
 export const DIAL_NAMES: Record<string, string> = { mine: t('dial.mine'), balance: t('dial.balance'), seal: t('dial.seal') };
 
-export const SQUAD_HEX = ['#5ea3d6', '#e58cab'];
+/** Squad colours; the values live in style.css (--squad-0, --squad-1). */
+export const SQUAD_HEX = ['var(--squad-0)', 'var(--squad-1)'];
 
 export function squadColor(view: View, squadId: number): string {
   const i = view.squads.findIndex((s) => s.id === squadId);
-  return SQUAD_HEX[i % SQUAD_HEX.length] ?? '#b6af98';
+  return SQUAD_HEX[i % SQUAD_HEX.length] ?? 'var(--ink-2)';
 }
 
+/** Tag colours; the values live in style.css (--tag-*). */
 export const TAG_HEX: Record<Tag, string> = {
-  shock: '#4f8fd6',
-  mark: '#d0503c',
-  overload: '#e08a2c',
-  erosion: '#8aa040',
-  shield: '#7a9cc0',
-  fortify: '#a07a50',
+  shock: 'var(--tag-shock)',
+  mark: 'var(--tag-mark)',
+  overload: 'var(--tag-overload)',
+  erosion: 'var(--tag-erosion)',
+  shield: 'var(--tag-shield)',
+  fortify: 'var(--tag-fortify)',
 };
 
 /** Short name of a workspace page, for breadcrumbs. */
@@ -323,15 +325,40 @@ export function ConfirmDialog({ ask, onDone }: { ask: ConfirmAsk; onDone: () => 
   );
 }
 
-export function Section({ title, icon, hint, children }: { title: ReactNode; icon?: string; hint?: ReactNode; children: ReactNode }) {
+/** Enamel colour of a section's badge: what kind of thing the plate holds. */
+export type Tone = 'hazard' | 'bad' | 'good' | 'rift' | 'elec' | 'rust' | 'steel';
+
+/** A steel plate with a stencilled header. `tone` paints the header badge; `flush` drops the plate
+ *  (for sections that sit inside a card of their own). */
+export function Section({
+  title,
+  icon,
+  hint,
+  tone,
+  flush,
+  id,
+  children,
+}: {
+  title: ReactNode;
+  icon?: string;
+  hint?: ReactNode;
+  tone?: Tone;
+  flush?: boolean;
+  id?: string;
+  children: ReactNode;
+}) {
   return (
-    <section>
+    <section id={id} className={'section tone-' + (tone ?? 'steel') + (flush ? ' flush' : '')}>
       <div className="section-title">
-        {icon ? <Icon id={icon} size={16} /> : null}
+        {icon ? (
+          <span className="section-badge">
+            <Icon id={icon} size={16} />
+          </span>
+        ) : null}
         <h3>{title}</h3>
         {hint ? <span className="hint">{hint}</span> : null}
       </div>
-      {children}
+      <div className="section-body">{children}</div>
     </section>
   );
 }

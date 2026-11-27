@@ -28,12 +28,33 @@ pub fn archive_slots(state: &GameState) -> usize {
 pub fn pool(state: &GameState) -> Vec<&'static DoctrineDef> {
     let level = crate::mech::sim::org_level(state);
     let cy = &state.cycle;
+    let ring = crate::mech::world::deepest_owned(cy);
     content()
         .doctrines
         .iter()
-        .filter(|d| d.level <= level)
+        .filter(|d| d.level <= level && d.ring <= ring)
         .filter(|d| !cy.doctrines.contains(&d.id) && !cy.research_offers.contains(&d.id))
         .collect()
+}
+
+/// The next ring that adds doctrines to this cycle's pool, and how many (at the current
+/// organisation level).
+pub fn next_unlock(state: &GameState) -> Option<(i32, usize)> {
+    let level = crate::mech::sim::org_level(state);
+    let ring = crate::mech::world::deepest_owned(&state.cycle);
+    let c = content();
+    let next = c
+        .doctrines
+        .iter()
+        .filter(|d| d.level <= level && d.ring > ring)
+        .map(|d| d.ring)
+        .min()?;
+    let n = c
+        .doctrines
+        .iter()
+        .filter(|d| d.level <= level && d.ring == next)
+        .count();
+    Some((next, n))
 }
 
 pub fn research(state: &mut GameState) -> ActResult {

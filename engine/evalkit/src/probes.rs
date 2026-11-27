@@ -135,6 +135,10 @@ impl Pace {
         let score = sim::cycle_results(&e.state).total;
         m.insert(format!("score.h{h}"), Some(score as f64));
         m.insert(format!("ops.h{h}"), Some(cy.operatives.len() as f64));
+        let level: i32 = cy.armory.values().map(|t| t.level).sum();
+        let breaks: i32 = cy.armory.values().map(|t| t.breaks).sum();
+        m.insert(format!("armory.level.h{h}"), Some(level as f64));
+        m.insert(format!("armory.breaks.h{h}"), Some(breaks as f64));
         m.insert(format!("frontier_win.h{h}"), winnable(e, deepest, 1));
         m.insert(format!("deep_win.h{h}"), winnable(e, deepest, 2));
         // Player strength S(t) and how it sits against the next ring's encounters.

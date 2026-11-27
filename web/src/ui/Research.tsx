@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { t, tn } from '../i18n';
 import { Icon } from '../icons';
 import type { DoctrineView, Tag } from '../types';
 import { Section, TagChip, useCtx } from './common';
@@ -41,7 +41,7 @@ function Draw() {
   const { view, run } = useCtx();
   const r = view.research;
   return (
-    <Section title={t('research.draw.title')} icon="trait-book" hint={t('research.draw.intel', { n: view.resources.intel })}>
+    <Section title={t('research.draw.title')} icon="trait-book" tone="elec" hint={t('research.draw.intel', { n: view.resources.intel })}>
       {r.offers.length ? (
         <>
           <div className="small muted" style={{ marginBottom: 6 }}>
@@ -83,6 +83,17 @@ function Draw() {
           ) : null}
         </div>
       )}
+      {r.unlock_ring !== null && r.unlock_count > 0 ? (
+        <div className="callout rift" style={{ marginTop: 10 }}>
+          <Icon id="lock" />
+          <span>
+            {tn('research.draw.unlock', {
+              ring: <span className="num">{r.unlock_ring}</span>,
+              n: <span className="num">{r.unlock_count}</span>,
+            })}
+          </span>
+        </div>
+      ) : null}
     </Section>
   );
 }
@@ -92,7 +103,7 @@ function Held() {
   const r = view.research;
   const full = r.archive.length >= r.archive_slots;
   return (
-    <Section title={t('research.held.title')} icon="rules" hint={t('research.held.hint', { n: r.held.length, known: r.known, total: r.total })}>
+    <Section title={t('research.held.title')} icon="rules" tone="good" hint={t('research.held.hint', { n: r.held.length, known: r.known, total: r.total })}>
       {r.held.length === 0 ? <div className="empty">{t('research.held.empty')}</div> : null}
       <div className="stack" style={{ gap: 8 }}>
         {r.held.map((d) => (
@@ -117,7 +128,7 @@ export function Archive() {
   const r = view.research;
   const full = r.archive.length >= r.archive_slots;
   return (
-    <Section title={t('research.archive.title')} icon="seal" hint={t('research.archive.hint', { n: r.archive.length, slots: r.archive_slots, have: r.library.length, total: r.total })}>
+    <Section title={t('research.archive.title')} icon="seal" tone="rift" hint={t('research.archive.hint', { n: r.archive.length, slots: r.archive_slots, have: r.library.length, total: r.total })}>
       {r.library.length === 0 ? (
         <div className="empty">
           {t('research.archive.empty', {
@@ -175,7 +186,7 @@ function Codex() {
   const r = view.research;
   const seen = r.codex.filter((e) => e.seen).length;
   return (
-    <Section title={t('research.codex.title')} icon="trait-resonance" hint={`${seen}/${r.codex.length}`}>
+    <Section title={t('research.codex.title')} icon="trait-resonance" tone="rift" hint={`${seen}/${r.codex.length}`}>
       {!r.reactions_on && view.phase === 'active' ? (
         <div className="small muted" style={{ marginBottom: 8 }}>
           {t('research.codex.locked')}

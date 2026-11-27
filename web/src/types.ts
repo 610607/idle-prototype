@@ -413,6 +413,7 @@ export interface View {
   results: CycleResults;
   hire_cost: number;
   research: ResearchView;
+  armory: ArmoryView[];
   tasks: TasksView;
 }
 
@@ -467,6 +468,9 @@ export interface ResearchView {
   reroll_ok: boolean;
   affordable: boolean;
   left: number;
+  /** The next ring whose doctrines join the pool once a tile of it is owned, and how many. */
+  unlock_ring: number | null;
+  unlock_count: number;
   offers: DoctrineView[];
   held: DoctrineView[];
   archive: DoctrineView[];
@@ -476,6 +480,28 @@ export interface ResearchView {
   codex: CodexEntry[];
   known: number;
   total: number;
+}
+
+/** 军械: one track, its level and what the next press does. */
+export interface ArmoryView {
+  id: string;
+  name: string;
+  desc: string;
+  icon: string;
+  target: 'squad' | 'militia';
+  level: number;
+  breaks: number;
+  max: number;
+  /** Levels between breakthroughs. */
+  every: number;
+  next: 'level' | 'breakthrough' | 'maxed';
+  cost: Resources;
+  affordable: boolean;
+  /** The track's bonus now and after the next step, in percent above the base. */
+  hp_pct: number;
+  atk_pct: number;
+  next_hp_pct: number;
+  next_atk_pct: number;
 }
 
 // ---- api.rs ----
@@ -648,4 +674,5 @@ export type Command =
   | { cmd: 'claim_task'; task: string }
   | { cmd: 'pick_doctrine'; doctrine: string }
   | { cmd: 'archive'; doctrine: string; on: boolean }
+  | { cmd: 'upgrade'; track: string }
   | { cmd: 'collapse' };

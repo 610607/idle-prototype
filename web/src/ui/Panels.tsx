@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { Icon } from '../icons';
-import type { OpView, PendingView, SquadView, TideView } from '../types';
+import type { ArmoryView, OpView, PendingView, SquadView, TideView } from '../types';
 import { WASH } from './Board';
-import { Bar, fmtAgo, fmtClock, fmtIn, OUTCOME_NAMES, RES_KEYS, RES_NAMES, Rarity, Section, SQUAD_HEX, TagIO, useCtx } from './common';
+import { Bar, Cost, fmtAgo, fmtClock, fmtIn, OUTCOME_NAMES, RES_KEYS, RES_NAMES, Rarity, Section, SQUAD_HEX, TagIO, useCtx } from './common';
 
 const PENDING_ICON: Record<string, string> = {
   map: 'map',
@@ -19,7 +19,7 @@ const PENDING_ICON: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// 指挥 tab: squads and what happened on the left, the full tide table on the right.
+// 指挥 tab: what to do (tasks, squads) on the left; what is coming and what happened on the right.
 
 export function CommandPanel() {
   return (
@@ -27,10 +27,10 @@ export function CommandPanel() {
       <div className="col">
         <Apprentice />
         <SquadsPanel />
-        <EventLog />
       </div>
       <div className="col">
-        <TideTable />
+        <TideTable limit={10} />
+        <EventLog />
       </div>
     </div>
   );
@@ -59,7 +59,9 @@ export function TideStrip() {
   return (
     <div className="tide-strip">
       <div className="head">
-        <Icon id="tide" />
+        <span className="section-badge">
+          <Icon id="tide" />
+        </span>
         <h4>{t('panels.tide_strip.title', { h: last })}</h4>
         <span className="grow">
           {t('panels.tide_strip.count', { n: view.tide.length })}
@@ -118,7 +120,7 @@ function Apprentice() {
   const tasks = view.tasks;
   if (!tasks.open.length) return null;
   return (
-    <Section title={t('panels.tasks.title')} icon="check" hint={`${tasks.claimed}/${tasks.total}`}>
+    <Section title={t('panels.tasks.title')} icon="check" tone="hazard" hint={`${tasks.claimed}/${tasks.total}`}>
       <div className="stack" style={{ gap: 6 }}>
         {tasks.open.map((x) => {
           const reward = RES_KEYS.filter((k) => x.reward[k] > 0).map((k) => `${RES_NAMES[k]} +${x.reward[k]}`);
@@ -159,7 +161,7 @@ export function PendingList() {
     } else if (p.tile !== undefined) open({ kind: 'tile', tile: p.tile }, true);
   };
   return (
-    <Section title={t('panels.pending.title')} icon="event" hint={items.length ? t('panels.pending.count', { n: items.length }) : t('panels.pending.none')}>
+    <Section title={t('panels.pending.title')} icon="event" tone={view.pending.some((p) => p.kind === 'alert' || p.kind === 'defend') ? 'bad' : 'hazard'} hint={items.length ? t('panels.pending.count', { n: items.length }) : t('panels.pending.none')}>
       {items.length === 0 ? (
         <div className="empty">{t('panels.pending.empty')}</div>
       ) : (
@@ -223,6 +225,7 @@ export function TideTable({ limit }: { limit?: number }) {
     <Section
       title={t('panels.tide.title')}
       icon="tide"
+      tone="rust"
       hint={
         <span>
           {t('panels.tide.hint', { n: view.tide.length, h: game.balance.tide_horizon / 3600 })}
@@ -251,7 +254,7 @@ export function TideTable({ limit }: { limit?: number }) {
 export function SquadsPanel() {
   const { view } = useCtx();
   return (
-    <Section title={t('panels.squads.title')} icon="squad" hint={t('panels.squads.attention', { n: view.attention[0], ring: view.attention[1] })}>
+    <Section title={t('panels.squads.title')} icon="squad" tone="elec" hint={t('panels.squads.attention', { n: view.attention[0], ring: view.attention[1] })}>
       <div className="stack">
         {view.squads.map((s, i) => (
           <SquadCard key={s.id} s={s} color={SQUAD_HEX[i % SQUAD_HEX.length]!} />
@@ -404,7 +407,7 @@ export function RosterPanel() {
     <div className="split">
       <div className="col">{roster}</div>
       <div className="col">
-        <Section title={t('panels.candidates.title')} icon="candidate" hint={view.queue ? t('panels.candidates.queue', { n: view.queue }) : t('panels.candidates.count', { n: view.candidates.length })}>
+        <Section title={t('panels.candidates.title')} icon="candidate" tone="good" hint={view.queue ? t('panels.candidates.queue', { n: view.queue }) : t('panels.candidates.count', { n: view.candidates.length })}>
           {view.candidates.length === 0 ? (
             <div className="empty">{t('panels.candidates.empty')}</div>
           ) : (
@@ -425,7 +428,7 @@ export function RosterPanel() {
             </div>
           ) : null}
         </Section>
-        <Section title={t('panels.inventory.title')} icon="equip" hint={t('panels.inventory.count', { n: view.inventory.length })}>
+        <Section title={t('panels.inventory.title')} icon="equip" tone="rust" hint={t('panels.inventory.count', { n: view.inventory.length })}>
           {view.inventory.length === 0 ? (
             <div className="empty">{t('panels.inventory.empty')}</div>
           ) : (
@@ -440,9 +443,13 @@ export function RosterPanel() {
                     <div className="small muted">{it.desc}</div>
                     <TagIO reads={it.reads} writes={it.writes} />
                   </div>
-                  <button className="btn small ghost" title={t('panels.inventory.seal_title')} onClick={() => run({ cmd: 'seal', item: it.id, on: true }, t('panels.inventory.sealed', { name: it.name }))}>
-                    <Icon id="seal" size={14} /> {t('panels.inventory.seal')}
-                  </button>
+                  {view.sealed.some((s) => s.id === it.id) ? (
+                    <span className="small muted">{t('panels.sealed.title')}</span>
+                  ) : (
+                    <button className="btn small ghost" title={t('panels.inventory.seal_title')} onClick={() => run({ cmd: 'seal', item: it.id, on: true }, t('panels.inventory.sealed', { name: it.name }))}>
+                      <Icon id="seal" size={14} /> {t('panels.inventory.seal')}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -460,7 +467,7 @@ export function DistrictsPanel() {
   const { view, open } = useCtx();
   const ds = [...view.districts].sort((a, b) => b.owned - a.owned || a.id - b.id);
   return (
-    <Section title={t('panels.districts.title')} icon="trust" hint={t('panels.districts.hint')}>
+    <Section title={t('panels.districts.title')} icon="trust" tone="good" hint={t('panels.districts.hint')}>
       <div className="district-grid">
         {ds.map((d) => (
           <button key={d.id} className="card district-card" onClick={() => open({ kind: 'district', district: d.id })} style={d.owned ? undefined : { opacity: 0.6 }}>
@@ -514,9 +521,11 @@ export function HQPanel() {
   const org = view.org;
   const [saveText, setSaveText] = useState('');
   return (
+    <>
+    {view.phase === 'active' && view.armory.length ? <ArmoryPanel /> : null}
     <div className="split">
       <div className="col">
-        <Section title={t('panels.org.title', { level: org.level })} icon="org" hint={org.next ? `${org.exp}/${org.next}` : `${org.exp}`}>
+        <Section title={t('panels.org.title', { level: org.level })} icon="org" tone="hazard" hint={org.next ? `${org.exp}/${org.next}` : `${org.exp}`}>
           {org.next ? <Bar value={org.exp} max={org.next} /> : null}
           <div className="stack" style={{ gap: 2, marginTop: 8 }}>
             {org.perks.map((p) => (
@@ -544,7 +553,7 @@ export function HQPanel() {
         {view.phase === 'active' ? <CycleBlock /> : null}
       </div>
       <div className="col">
-        <Section title={t('panels.specials.title')} icon="star" hint={t('panels.specials.hint')}>
+        <Section title={t('panels.specials.title')} icon="star" tone="hazard" hint={t('panels.specials.hint')}>
           <div className="stack" style={{ gap: 8 }}>
             {org.specials.map((s) => (
               <div key={s.id} className="card flat">
@@ -565,7 +574,7 @@ export function HQPanel() {
           </div>
         </Section>
 
-        <Section title={t('panels.sealed.title')} icon="seal" hint={`${view.sealed.length}/${org.sealed_slots}`}>
+        <Section title={t('panels.sealed.title')} icon="seal" tone="rift" hint={`${view.sealed.length}/${org.sealed_slots}`}>
           {view.sealed.length === 0 ? <div className="empty">{t('panels.sealed.empty')}</div> : null}
           {view.sealed.map((it, k) => (
             <div key={k} className="row small">
@@ -651,13 +660,173 @@ export function HQPanel() {
         </Section>
       </div>
     </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 军械: three tracks bought with scrap; every few levels a track stops until a breakthrough
+// (crystal + parts) multiplies it. Levels belong to the cycle. The engine prices every step and
+// says what it does (ArmoryView); this only lays it out.
+
+/** Combined bonus of every track on one target, multiplied the way the engine stacks them. */
+function armoryTotal(tracks: ArmoryView[], target: ArmoryView['target']): { hp: number; atk: number } {
+  let hp = 1;
+  let atk = 1;
+  for (const a of tracks.filter((a) => a.target === target)) {
+    hp *= 1 + a.hp_pct / 100;
+    atk *= 1 + a.atk_pct / 100;
+  }
+  return { hp: Math.round((hp - 1) * 100), atk: Math.round((atk - 1) * 100) };
+}
+
+export function ArmoryPanel() {
+  const { view } = useCtx();
+  const tracks = view.armory;
+  const targets = (['squad', 'militia'] as const).filter((x) => tracks.some((a) => a.target === x));
+  return (
+    <Section id="armory" title={t('panels.armory.title')} icon="atk" tone="rust" hint={t('panels.armory.hint')}>
+      <div className="armory-sum">
+        {targets.map((x) => {
+          const sum = armoryTotal(tracks, x);
+          return (
+            <span key={x}>
+              <b>{t(`panels.armory.target.${x}`)}</b>
+              <span className="faint">{t('sheets.stat.atk')}</span>
+              <span className="num">{t('panels.armory.pct', { v: sum.atk })}</span>
+              <span className="faint">{t('sheets.stat.hp')}</span>
+              <span className="num">{t('panels.armory.pct', { v: sum.hp })}</span>
+            </span>
+          );
+        })}
+      </div>
+      <div className="armory-grid">
+        {tracks.map((a) => (
+          <ArmoryCard key={a.id} a={a} />
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function ArmoryCard({ a }: { a: ArmoryView }) {
+  const { view, run } = useCtx();
+  // Flash the card once when a breakthrough lands.
+  const seen = useRef(a.breaks);
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    if (a.breaks > seen.current) {
+      setFlash(true);
+      const id = window.setTimeout(() => setFlash(false), 1300);
+      seen.current = a.breaks;
+      return () => window.clearTimeout(id);
+    }
+    seen.current = a.breaks;
+  }, [a.breaks]);
+  const gate = a.next === 'breakthrough';
+  const maxed = a.next === 'maxed';
+  // Levels inside the current stage, and how many breakthroughs the track has in all.
+  const stage = a.every > 0 ? a.level - a.breaks * a.every : a.level;
+  const cells = a.every > 0 ? a.every : a.max;
+  const gates = a.every > 0 ? Math.floor((a.max - 1) / a.every) : 0;
+  const rows: [string, number, number][] = [];
+  if (a.atk_pct || a.next_atk_pct) rows.push([t('sheets.stat.atk'), a.atk_pct, a.next_atk_pct]);
+  if (a.hp_pct || a.next_hp_pct) rows.push([t('sheets.stat.hp'), a.hp_pct, a.next_hp_pct]);
+  const kind = a.target === 'militia' ? 't-militia' : a.icon === 'def' ? 't-armor' : 't-arms';
+  return (
+    <div className={'arm ' + kind + (gate ? ' gate' : '') + (maxed ? ' maxed' : '') + (flash ? ' flash' : '')}>
+      <div className="arm-head">
+        <span className="arm-ico">
+          <Icon id={a.icon} size={32} />
+        </span>
+        <div className="grow">
+          <div className="arm-name ellipsis">{a.name}</div>
+          <span className="chip" style={{ color: 'var(--ink-3)' }}>
+            {t(`panels.armory.target.${a.target}`)}
+          </span>
+        </div>
+        <div className="arm-lv" title={t('panels.armory.level')}>
+          <span className="num">{a.level}</span>
+          <span className="of">/{a.max}</span>
+        </div>
+      </div>
+      <div className="arm-track" aria-hidden>
+        <div className="arm-cells">
+          {Array.from({ length: cells }, (_, k) => (
+            <i key={k} className={k < stage ? 'on' : ''} />
+          ))}
+        </div>
+        {gates > 0 && a.breaks < gates ? <span className={'arm-gate' + (gate ? ' ready' : '')} /> : null}
+      </div>
+      {gates > 0 ? (
+        <div className="arm-pips">
+          {t('panels.armory.breaks')}
+          {Array.from({ length: gates }, (_, k) => (
+            <i key={k} className={k < a.breaks ? 'on' : ''} />
+          ))}
+        </div>
+      ) : null}
+      <div className="arm-bonus">
+        {rows.map(([k, now, next]) => (
+          <BonusRow key={k} k={k} now={now} next={next} maxed={maxed} />
+        ))}
+      </div>
+      {gate ? (
+        <div className="arm-gate-note">
+          <Icon id="warn" />
+          <span>{t('panels.armory.gate_note')}</span>
+        </div>
+      ) : (
+        <div className="arm-desc">{a.desc}</div>
+      )}
+      <div className="arm-act">
+        {maxed ? (
+          <span className="maxed">{t('panels.armory.maxed')}</span>
+        ) : (
+          <button
+            className={'btn ' + (gate ? 'break' : '')}
+            disabled={!a.affordable}
+            onClick={() =>
+              run(
+                { cmd: 'upgrade', track: a.id },
+                gate ? t('panels.armory.broke', { name: a.name }) : t('panels.armory.upgraded', { name: a.name, level: a.level + 1 }),
+              )
+            }
+          >
+            {gate ? <Icon id="unlock" /> : <Icon id="plus" />}
+            {gate ? t('panels.armory.breakthrough') : t('panels.armory.upgrade')}
+            <Cost cost={a.cost} have={view.resources} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BonusRow({ k, now, next, maxed }: { k: string; now: number; next: number; maxed: boolean }) {
+  return (
+    <>
+      <span className="k">{k}</span>
+      <span className="num">{t('panels.armory.pct', { v: now })}</span>
+      {maxed || next === now ? (
+        <>
+          <span />
+          <span />
+        </>
+      ) : (
+        <>
+          <span className="arrow">→</span>
+          <span className="num after">{t('panels.armory.pct', { v: next })}</span>
+        </>
+      )}
+    </>
   );
 }
 
 function CycleBlock() {
   const { view, run, confirm } = useCtx();
   return (
-    <Section title={t('panels.cycle.title', { n: view.cycle })} icon="collapse" hint={view.modifier?.[1]}>
+    <Section title={t('panels.cycle.title', { n: view.cycle })} icon="collapse" tone="bad" hint={view.modifier?.[1]}>
       {view.modifier ? <div className="small muted">{view.modifier[2]}</div> : null}
       <div className="stack" style={{ gap: 2, marginTop: 6 }}>
         {view.results.lines.map(([k, v]) => (

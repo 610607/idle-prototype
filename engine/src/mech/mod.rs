@@ -2,6 +2,7 @@
 //! 引擎层的时钟推进（`crate::kernel::clock`，接入点在 [`sim`]），玩家操作从 [`commands`] 进来。
 
 pub mod actions;
+pub mod armory;
 pub mod combat;
 pub mod commands;
 pub mod defense;

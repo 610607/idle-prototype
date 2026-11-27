@@ -22,6 +22,8 @@ pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
     let terrain = t.terrain;
     let natives = t.natives;
     let district = t.district;
+    let first = !t.ever_owned;
+    let deepest_before = world::deepest_owned(&state.cycle);
     let frozen = t.frozen.clone();
     {
         let t = &mut state.cycle.tiles[i];
@@ -34,13 +36,17 @@ pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
         };
         t.frozen = None;
         t.revealed = true;
+        t.ever_owned = true;
     }
     if let Some(d) = district {
         state.cycle.districts[d as usize].population += natives;
     }
-    state.cycle.stats.tiles_claimed += 1;
-    if terrain == Terrain::Rift {
-        state.cycle.stats.rifts_suppressed += 1;
+    // Retaking an abandoned tile restores it but scores nothing new (docs/game-issues.md 17).
+    if first {
+        state.cycle.stats.tiles_claimed += 1;
+        if terrain == Terrain::Rift {
+            state.cycle.stats.rifts_suppressed += 1;
+        }
     }
     let label = geom::label(tile);
     let text = match terrain {
@@ -51,6 +57,25 @@ pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
     state.event(EventKind::Claimed, text, Some(tile), None, None);
     world::reveal_frontier(&mut state.cycle);
     check_contiguity(state);
+    // A new ring brings its doctrines into the research pool.
+    let deepest = world::deepest_owned(&state.cycle);
+    if deepest > deepest_before {
+        let level = crate::mech::sim::org_level(state);
+        let n = content()
+            .doctrines
+            .iter()
+            .filter(|d| d.level <= level && d.ring > deepest_before && d.ring <= deepest)
+            .count();
+        if n > 0 {
+            state.event(
+                EventKind::Info,
+                txt!("event.research.unlocked", ring = deepest, n = n),
+                Some(tile),
+                None,
+                None,
+            );
+        }
+    }
     Ok(())
 }
 
@@ -63,8 +88,12 @@ fn check_contiguity(state: &mut GameState) {
         }
         if d.tiles.iter().all(|t| state.cycle.tiles[*t as usize].owned) {
             let name = d.name.clone();
+            let first = !d.ever_contiguous;
             state.cycle.districts[di].contiguous = true;
-            state.cycle.stats.contiguous_districts += 1;
+            state.cycle.districts[di].ever_contiguous = true;
+            if first {
+                state.cycle.stats.contiguous_districts += 1;
+            }
             state.event(
                 EventKind::Contiguous,
                 txt!(
@@ -597,30 +626,33 @@ pub fn equip(state: &mut GameState, op_id: u32, item: Option<&str>) -> ActResult
 }
 
 pub fn seal(state: &mut GameState, item: &str, on: bool) -> ActResult {
+    // Sealing marks an item this cycle has (in the inventory or equipped) to come back at the
+    // start of every later cycle; it stays usable now. Unsealing only drops the mark, so the
+    // item never exists twice (docs/game-issues.md 18).
     let b = balance();
     let slots = b.sealed_slots
         + crate::data::OrgPerks::count(&b.org_perks.sealed, crate::mech::sim::org_level(state));
+    let sealed = state.org.sealed.iter().position(|x| x == item);
     if on {
+        if sealed.is_some() {
+            return Err(t!("err.already_sealed"));
+        }
         if state.org.sealed.len() >= slots {
             return Err(t!("err.seal_slots", n = slots));
         }
-        let pos = state
-            .cycle
-            .inventory
-            .iter()
-            .position(|x| x == item)
-            .ok_or_else(|| t!("err.no_item"))?;
-        state.cycle.inventory.remove(pos);
+        let have = state.cycle.inventory.iter().any(|x| x == item)
+            || state
+                .cycle
+                .operatives
+                .iter()
+                .any(|o| o.equipment.as_deref() == Some(item));
+        if !have {
+            return Err(t!("err.no_item"));
+        }
         state.org.sealed.push(item.to_string());
     } else {
-        let pos = state
-            .org
-            .sealed
-            .iter()
-            .position(|x| x == item)
-            .ok_or_else(|| t!("err.not_sealed"))?;
+        let pos = sealed.ok_or_else(|| t!("err.not_sealed"))?;
         state.org.sealed.remove(pos);
-        state.cycle.inventory.push(item.to_string());
     }
     Ok(())
 }

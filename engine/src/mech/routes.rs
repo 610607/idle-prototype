@@ -90,6 +90,7 @@ pub fn route_battle(
         record,
     };
     crate::mech::doctrine::apply(&cy.doctrines, &mut input);
+    crate::mech::armory::apply(&cy.armory, &mut input);
     input
 }
 

@@ -121,7 +121,7 @@ export function OpDetail({ o }: { o: OpView }) {
           ))}
         </div>
       </details>
-      <Section title={t('sheets.op.traits')} icon="trait" hint={t('sheets.op.traits_hint')}>
+      <Section title={t('sheets.op.traits')} icon="trait" tone="hazard" hint={t('sheets.op.traits_hint')}>
         <div className="stack" style={{ gap: 6 }}>
           {o.traits.map((tr) => (
             <div key={tr.id} className={'trait' + (tr.exp ? ' exp' : '')}>
@@ -151,7 +151,7 @@ export function OpDetail({ o }: { o: OpView }) {
           ))}
         </div>
       </Section>
-      <Section title={t('sheets.op.skills')} icon="skill">
+      <Section title={t('sheets.op.skills')} icon="skill" tone="rust">
         <div className="stack" style={{ gap: 6 }}>
           {o.skills.map((s) => (
             <div key={s.id} className="trait">
@@ -175,7 +175,7 @@ function AssignBlock({ o }: { o: OpView }) {
   const { view, run, open } = useCtx();
   const a = o.assignment;
   return (
-    <Section title={t('sheets.assign.title')} icon="squad" hint={o.status}>
+    <Section title={t('sheets.assign.title')} icon="squad" tone="elec" hint={o.status}>
       <div className="row wrap">
         {view.squads.map((s, i) => {
           const inIt = s.members.includes(o.id);
@@ -218,7 +218,7 @@ function AssignBlock({ o }: { o: OpView }) {
 function EquipBlock({ o }: { o: OpView }) {
   const { view, run } = useCtx();
   return (
-    <Section title={t('sheets.equip.title')} icon="equip">
+    <Section title={t('sheets.equip.title')} icon="equip" tone="rust">
       {o.equipment ? (
         <div className="trait">
           <div className="row" style={{ gap: 6 }}>
@@ -360,7 +360,7 @@ export function CandidateSheet({ candidate, onClose }: { candidate: number; onCl
       onClose={onClose}
       aside={
         <div className="card striped">
-          <Section title={t('sheets.candidate.hire_title')} icon="hire" hint={c.source}>
+          <Section title={t('sheets.candidate.hire_title')} icon="hire" tone="good" hint={c.source}>
             <DryRunView dry={dry} />
             <div className="row" style={{ marginTop: 10 }}>
             <button className="btn primary" disabled={!dry?.ok} onClick={() => run({ cmd: 'hire', candidate }, t('sheets.candidate.hired', { name: c.op.name })) && onClose()}>
@@ -426,7 +426,7 @@ export function DistrictSheet({ district, onClose }: { district: number; onClose
         <div className="tiny muted">{d.flavor.desc}</div>
       </div>
 
-      <Section title={t('sheets.district.trust', { n: d.trust })} icon="trust" hint={t('sheets.district.trust_hint', { n: d.trust_target })}>
+      <Section title={t('sheets.district.trust', { n: d.trust })} icon="trust" tone="good" hint={t('sheets.district.trust_hint', { n: d.trust_target })}>
         <Bar value={d.trust} max={100} tone={d.trust >= 60 ? 'good' : d.trust < 35 ? 'bad' : undefined} />
         <div className="stack" style={{ gap: 2, marginTop: 6 }}>
           {d.trust_factors.map(([k, v]) => (
@@ -506,7 +506,7 @@ function DistrictPolicy({ d }: { d: DistrictView }) {
   const { game, run } = useCtx();
   const [dry, setDry] = useState<{ id: string | null; r: DryRun } | null>(null);
   return (
-    <Section title={t('sheets.policy.title')} icon="policy" hint={d.policy_unlocked ? (d.policy ? t('sheets.policy.set') : t('sheets.policy.open')) : t('sheets.policy.locked', { n: game.balance.trust_policy })}>
+    <Section title={t('sheets.policy.title')} icon="policy" tone="hazard" hint={d.policy_unlocked ? (d.policy ? t('sheets.policy.set') : t('sheets.policy.open')) : t('sheets.policy.locked', { n: game.balance.trust_policy })}>
       <div className="stack" style={{ gap: 6 }}>
         {d.policy_options.map((p) => (
           <button
@@ -722,7 +722,7 @@ export function SquadSheet({ squad, onClose }: { squad: number; onClose: () => v
           </div>
         ) : null}
       </Section>
-      <Section title={t('sheets.squad.route')} icon="route" hint={t('sheets.squad.trips', { n: s.trips })}>
+      <Section title={t('sheets.squad.route')} icon="route" tone="elec" hint={t('sheets.squad.trips', { n: s.trips })}>
         <div className="small">{s.route.length ? s.route.map((i) => view.tiles[i]!.label).join(' → ') : t('sheets.squad.no_route')}</div>
         <button className="btn small" style={{ marginTop: 6 }} onClick={() => setRouteEdit({ squad, route: s.route })} disabled={!s.members.length}>
           {t('sheets.squad.edit_route')}

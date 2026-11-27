@@ -845,12 +845,52 @@ pub struct DoctrineDef {
     /// Organisation level at which the doctrine enters the research pool.
     #[serde(default)]
     pub level: u32,
+    /// Ring the cycle must have reached (deepest tile owned) before it enters the pool.
+    #[serde(default)]
+    pub ring: i32,
     /// Doctrines it wires into (shown on the offer when you already hold them).
     #[serde(default)]
     pub links: Vec<String>,
     pub effects: Vec<TraitEffect>,
     #[serde(default)]
     pub desc: String,
+}
+
+/// Who an armory track strengthens.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArmoryTarget {
+    /// Operatives, in route fights, surges and counters.
+    Squad,
+    /// The defenders that are not operatives: district militia and the HQ guard.
+    Militia,
+}
+
+/// 军械：一条用资源逐级升级的全局加成（`content/armory_tracks.json`），一轮之内有效、轮初清零。
+/// Level k (from 0) costs `cost` × (`growth_bp` / 10000)^k of each resource. Every `every`
+/// levels the track stops until a breakthrough (`breakthrough` × the number of breakthroughs so
+/// far plus one), which multiplies the whole track by (1 + `breakthrough_bp` / 10000).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ArmoryDef {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub desc: String,
+    pub icon: String,
+    pub target: ArmoryTarget,
+    pub cost: Resources,
+    pub growth_bp: i32,
+    /// Added per level to the target's max HP and attack (basis points of their base).
+    #[serde(default)]
+    pub hp_bp: i32,
+    #[serde(default)]
+    pub atk_bp: i32,
+    pub every: i32,
+    pub breakthrough: Resources,
+    pub breakthrough_bp: i32,
+    /// Highest level in one cycle.
+    pub max: i32,
 }
 
 /// 见习任务: a "do it once" task attached to one system, with a small reward.
@@ -919,7 +959,12 @@ pub struct Balance {
     pub squad_size: usize,
     pub attention_free_ring: i32,
     pub attention_step_bp: i32,
-    pub enemy_ring_step_bp: i32,
+    /// Enemy HP and attack by the ring they stand on (basis points; index = ring, the last entry
+    /// holds for deeper rings). Applies wherever they fight: routes, surges, counters.
+    pub enemy_ring_bp: Vec<i32>,
+    /// The same for the enemies of a surge (in place of `enemy_ring_bp`): the tide that washes
+    /// over the border is weaker than the nests a squad assaults.
+    pub surge_ring_bp: Vec<i32>,
     pub talent_per_candidate: i32,
     pub otherworld_talent_per_candidate: i32,
     pub pool_cap: usize,
@@ -976,6 +1021,9 @@ pub struct Balance {
     /// Cycle score: one point per this many residents.
     #[serde(default = "default_score_pop_div")]
     pub score_pop_div: i32,
+    /// Cycle score weights for the other lines (成果, docs/prototype-v2.md).
+    #[serde(default)]
+    pub score: ScoreDef,
     /// Customised recruits (docs/ideas.md): residents drawn from the district. The profession
     /// needs at least `customize_base` workers there; choosing the mixed class, locking a trait
     /// and a rarity floor (indexed N/R/SR/SSR) each cost more.
@@ -1039,6 +1087,40 @@ fn default_archive_slots() -> usize {
 }
 fn default_score_pop_div() -> i32 {
     20
+}
+
+/// Points per unit of each cycle stat. Management also counts trust and residents
+/// (`score_pop_div`).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScoreDef {
+    /// Per district first joined into the contiguous network.
+    pub contiguous: i64,
+    /// Per surge held, in basis points of a point (rounded down on the total).
+    pub surge_held_bp: i64,
+    /// One point per this many hours the line fed itself.
+    pub self_sufficient_div: i64,
+    /// Per ring of the deepest tile reached.
+    pub max_ring: i64,
+    /// Per rift first suppressed.
+    pub rift: i64,
+    /// Per tile first claimed.
+    pub tile: i64,
+    /// For sealing the core.
+    pub core: i64,
+}
+
+impl Default for ScoreDef {
+    fn default() -> Self {
+        ScoreDef {
+            contiguous: 5,
+            surge_held_bp: 10_000,
+            self_sufficient_div: 2,
+            max_ring: 10,
+            rift: 15,
+            tile: 0,
+            core: 120,
+        }
+    }
 }
 
 /// Two different tags meeting on one enemy (prototype, see docs/gameplay-exploration.md).
@@ -1129,6 +1211,7 @@ pub struct Content {
     pub rules: Vec<RuleDef>,
     pub reactions: Vec<ReactionDef>,
     pub doctrines: Vec<DoctrineDef>,
+    pub armory: Vec<ArmoryDef>,
     pub tasks: Vec<TaskDef>,
     pub balance: Balance,
 }
@@ -1167,6 +1250,9 @@ impl Content {
     pub fn rule(&self, id: &str) -> Option<&RuleDef> {
         self.rules.iter().find(|r| r.id == id)
     }
+    pub fn armory_track(&self, id: &str) -> Option<&ArmoryDef> {
+        self.armory.iter().find(|a| a.id == id)
+    }
 }
 
 /// Every content file, embedded once: `load` parses them and `fingerprint` hashes them.
@@ -1199,6 +1285,10 @@ const FILES: &[(&str, &str)] = &[
         include_str!("../../content/doctrines.json"),
     ),
     ("tasks.json", include_str!("../../content/tasks.json")),
+    (
+        "armory_tracks.json",
+        include_str!("../../content/armory_tracks.json"),
+    ),
 ];
 
 fn parse<T: for<'de> Deserialize<'de>>(name: &str) -> T {
@@ -1259,6 +1349,7 @@ fn load() -> Content {
     let reactions: Vec<ReactionDef> = parse("reactions.json");
     let doctrines: Vec<DoctrineDef> = parse("doctrines.json");
     let tasks: Vec<TaskDef> = parse("tasks.json");
+    let armory: Vec<ArmoryDef> = parse("armory_tracks.json");
     let mut c = Content {
         tags,
         tag_num,
@@ -1279,6 +1370,7 @@ fn load() -> Content {
         rules: world.rules,
         reactions,
         doctrines,
+        armory,
         tasks,
         balance,
     };
@@ -1367,6 +1459,10 @@ fn localize(c: &mut Content) {
     for d in &mut c.doctrines {
         d.name = text("doctrine", &d.id, "name");
         d.desc = text("doctrine", &d.id, "desc");
+    }
+    for a in &mut c.armory {
+        a.name = text("armory", &a.id, "name");
+        a.desc = text("armory", &a.id, "desc");
     }
     for t in &mut c.tasks {
         t.group = text("task", &t.id, "group");

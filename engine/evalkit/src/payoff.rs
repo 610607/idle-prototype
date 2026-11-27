@@ -13,7 +13,8 @@
 //!   m = board area ratio), `research` (a doctrine picked; size, flips and ladder gain from the
 //!   matching "research" `Mag`, a category event without one), `contiguous` (m = the district's
 //!   output bonus), `core`, `self_sufficient` (each false → true transition, polled hourly), the
-//!   gifts `special`, `drop`, `trait`, `codex`, `rift`, every other `Mag` class (e.g.
+//!   gifts `special`, `drop`, `trait`, `codex`, `rift`, `armory` (a breakthrough; a plain level is
+//!   trickle), every other `Mag` class (e.g.
 //!   `frontier_open`), and `novelty` (see below);
 //! - trickle (tier 0, kept for `print`, never felt): `candidate`, `cache`, `clue`, `claimable`,
 //!   `task`, `trip`, `surge`, `claimed`, `hired`, `counter`, `salvage`, `retired`, `abandoned`,
@@ -61,8 +62,9 @@ const PERIODS: [(&str, f64, f64); 3] = [
     ("d4_7", 72.0, 168.0),
 ];
 /// Growth lines for `payoff.lines.*` (one per felt class except novelty).
-const LINES: [&str; 11] = [
+const LINES: [&str; 12] = [
     "ring",
+    "armory",
     "research",
     "contiguous",
     "self_sufficient",
@@ -142,8 +144,9 @@ pub fn classes_path() -> String {
 }
 
 /// Every class the file may name.
-const KNOWN: [&str; 23] = [
+const KNOWN: [&str; 24] = [
     "research",
+    "armory",
     "contiguous",
     "core",
     "special",

@@ -8,7 +8,7 @@ use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SAVE_VERSION: u32 = 4;
+pub const SAVE_VERSION: u32 = 5;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -103,6 +103,10 @@ pub struct Tile {
     /// Building kept while the tile is abandoned; restored when retaken.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frozen: Option<TileUse>,
+    /// Owned at some point this cycle: results count a tile (and a rift) once, however often it
+    /// is abandoned and retaken.
+    #[serde(default)]
+    pub ever_owned: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rift: Option<RiftState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -159,6 +163,9 @@ pub struct District {
     pub flavor: String,
     #[serde(default)]
     pub contiguous: bool,
+    /// Joined up at some point this cycle (results count a district once).
+    #[serde(default)]
+    pub ever_contiguous: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
@@ -375,6 +382,9 @@ pub struct Cycle {
     /// Tag reactions set off this cycle, by id.
     #[serde(default)]
     pub reactions: BTreeMap<String, u32>,
+    /// 军械 levels this cycle, by track id.
+    #[serde(default)]
+    pub armory: BTreeMap<String, crate::mech::armory::Track>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

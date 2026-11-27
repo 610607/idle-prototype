@@ -121,6 +121,7 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         research_count: 0,
         rerolls: 0,
         reactions: Default::default(),
+        armory: Default::default(),
     }
 }
 
@@ -285,19 +286,26 @@ pub fn cycle_results(state: &GameState) -> CycleResults {
         / balance().score_pop_div.max(1) as i64;
     lines.push((t!("results.trust"), trust));
     lines.push((t!("results.population"), pop));
-    lines.push((t!("results.contiguous"), s.contiguous_districts as i64 * 5));
-    let management = trust + pop + s.contiguous_districts as i64 * 5;
-    lines.push((t!("results.surges_held"), s.surges_held as i64));
-    lines.push((
-        t!("results.self_sufficient"),
-        s.self_sufficient_hours as i64 / 2,
-    ));
-    let defense = s.surges_held as i64 + s.self_sufficient_hours as i64 / 2;
-    let core = if s.core_sealed { 120 } else { 0 };
-    lines.push((t!("results.max_ring"), s.max_ring as i64 * 10));
-    lines.push((t!("results.rifts"), s.rifts_suppressed as i64 * 15));
+    let w = &balance().score;
+    let contiguous = s.contiguous_districts as i64 * w.contiguous;
+    lines.push((t!("results.contiguous"), contiguous));
+    let management = trust + pop + contiguous;
+    let held = s.surges_held as i64 * w.surge_held_bp / 10_000;
+    let fed = s.self_sufficient_hours as i64 / w.self_sufficient_div.max(1);
+    lines.push((t!("results.surges_held"), held));
+    lines.push((t!("results.self_sufficient"), fed));
+    let defense = held + fed;
+    let ring = s.max_ring as i64 * w.max_ring;
+    let rifts = s.rifts_suppressed as i64 * w.rift;
+    let tiles = s.tiles_claimed as i64 * w.tile;
+    let core = if s.core_sealed { w.core } else { 0 };
+    lines.push((t!("results.max_ring"), ring));
+    lines.push((t!("results.rifts"), rifts));
+    if w.tile > 0 {
+        lines.push((t!("results.tiles"), tiles));
+    }
     lines.push((t!("results.core"), core));
-    let exploration = s.max_ring as i64 * 10 + s.rifts_suppressed as i64 * 15 + core;
+    let exploration = ring + rifts + tiles + core;
     CycleResults {
         management,
         defense,

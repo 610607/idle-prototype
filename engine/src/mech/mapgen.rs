@@ -27,6 +27,7 @@ fn blank_tile(terrain: Terrain) -> Tile {
         natives: 0,
         usage: TileUse::None,
         frozen: None,
+        ever_owned: false,
         rift: None,
         special: None,
         special_done: false,
@@ -237,6 +238,7 @@ fn build_districts(rng: &mut Rng, tiles: &mut [Tile]) -> Vec<District> {
             policy: None,
             flavor,
             contiguous: false,
+            ever_contiguous: false,
         });
     }
     out

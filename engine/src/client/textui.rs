@@ -70,7 +70,8 @@ pub fn reach(cmd: &Command) -> Reach {
         | Command::SetPolicy { .. }
         | Command::Research
         | Command::Reroll
-        | Command::PickDoctrine { .. } => Reach::Menu,
+        | Command::PickDoctrine { .. }
+        | Command::Upgrade { .. } => Reach::Menu,
         Command::SetSquad { .. }
         | Command::SetDial { .. }
         | Command::Dismiss { .. }
@@ -164,6 +165,9 @@ pub fn samples() -> Vec<Command> {
         Command::ClaimTask {
             task: "route".into(),
         },
+        Command::Upgrade {
+            track: "arms".into(),
+        },
         Command::Collapse,
     ]
 }
@@ -213,6 +217,27 @@ pub fn outcome(o: Option<Outcome>) -> String {
         Some(Outcome::Wipe) => "outcome.wipe",
         None => "outcome.none",
     })
+}
+
+/// A cost as "废材120 晶体30": the nonzero resources only.
+fn cost_text(c: &crate::data::Resources) -> String {
+    let parts: Vec<String> = [
+        ("scrap", c.scrap),
+        ("parts", c.parts),
+        ("intel", c.intel),
+        ("crystal", c.crystal),
+    ]
+    .iter()
+    .filter(|(_, n)| *n > 0)
+    .map(|(k, n)| {
+        t!(
+            "cli.armory.cost",
+            name = t!(&format!("delta.res.{k}")),
+            n = n
+        )
+    })
+    .collect();
+    parts.join(" ")
 }
 
 fn tags(t: &[Tag]) -> String {
@@ -708,6 +733,12 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             t!("cli.board.doctrine", name = d.name, desc = d.desc),
         );
     }
+    if let Some(ring) = r.unlock_ring {
+        line(
+            &mut o,
+            t!("cli.board.doctrine_unlock", ring = ring, n = r.unlock_count),
+        );
+    }
     if !r.offers.is_empty() && opts.research {
         line(&mut o, t!("cli.board.offers"));
     }
@@ -736,6 +767,40 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             .map(|d| d.name.clone())
             .unwrap_or_default();
         line(&mut o, t!("cli.board.codex_off", doctrine = hub));
+    }
+    let pct = |target: crate::data::ArmoryTarget| {
+        let (hp, atk) = crate::mech::armory::total_bp(&e.state.cycle.armory, target);
+        ((hp - 10_000) / 100, (atk - 10_000) / 100)
+    };
+    let (shp, satk) = pct(crate::data::ArmoryTarget::Squad);
+    let (mhp, matk) = pct(crate::data::ArmoryTarget::Militia);
+    line(
+        &mut o,
+        t!(
+            "cli.board.armory",
+            satk = satk,
+            shp = shp,
+            matk = matk,
+            mhp = mhp
+        ),
+    );
+    for a in &v.armory {
+        let next = match a.next.as_str() {
+            "level" => t!("cli.armory.next.level", cost = cost_text(&a.cost)),
+            "breakthrough" => t!("cli.armory.next.breakthrough", cost = cost_text(&a.cost)),
+            _ => t!("cli.armory.next.maxed"),
+        };
+        line(
+            &mut o,
+            t!(
+                "cli.board.armory_track",
+                name = a.name,
+                level = a.level,
+                max = a.max,
+                breaks = a.breaks,
+                next = next
+            ),
+        );
     }
     line(&mut o, t!("cli.board.districts"));
     let empty = v
@@ -1021,6 +1086,29 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
                 });
             }
         }
+    }
+    // Armory steps the player can pay for.
+    for a in v.armory.iter().filter(|a| a.affordable) {
+        let key = if a.next == "breakthrough" {
+            "cli.menu.breakthrough"
+        } else {
+            "cli.menu.upgrade"
+        };
+        m.push(Item {
+            label: t!(
+                key,
+                name = a.name,
+                level = a.level + 1,
+                cost = cost_text(&a.cost),
+                atk = a.atk_pct,
+                hp = a.hp_pct,
+                natk = a.next_atk_pct,
+                nhp = a.next_hp_pct
+            ),
+            cmd: Command::Upgrade {
+                track: a.id.clone(),
+            },
+        });
     }
     // Claims the auto rule leaves to the player.
     for p in v.pending.iter().filter(|p| p.kind == "claim") {

@@ -94,11 +94,13 @@ fn yardstick() -> &'static Yardstick {
     })
 }
 
-/// One squad with members: battle units before doctrines (traits and equipment in) and each
-/// unit's class for the model's rates.
+/// One squad with members: battle units before doctrines (traits and equipment in), each
+/// unit's class for the model's rates, and the cycle's 军械 levels (applied after the doctrines,
+/// as `route_battle` does).
 struct Squad {
     specs: Vec<UnitSpec>,
     classes: Vec<(String, String)>,
+    armory: idle_engine::mech::armory::Levels,
 }
 
 impl Squad {
@@ -123,14 +125,19 @@ fn squads(st: &GameState) -> Vec<Squad> {
                 .zip(&ops)
                 .map(|(u, op)| (u.key.clone(), op.class.clone()))
                 .collect();
-            Squad { specs, classes }
+            Squad {
+                specs,
+                classes,
+                armory: st.cycle.armory.clone(),
+            }
         })
         .filter(|s| !s.specs.is_empty())
         .collect()
 }
 
-/// The squad's battle units with `doctrines` held. Doctrines only change the allies
-/// (`doctrine::apply`), so they are applied once rather than on every ladder battle.
+/// The squad's battle units with `doctrines` held and the cycle's 军械. Both only change the
+/// allies (`doctrine::apply`, `armory::apply`), so they are applied once rather than on every
+/// ladder battle.
 fn armed(sq: &Squad, doctrines: &[String]) -> Vec<UnitSpec> {
     let mut input = BattleInput {
         kind: BattleKind::Route,
@@ -143,6 +150,7 @@ fn armed(sq: &Squad, doctrines: &[String]) -> Vec<UnitSpec> {
         record: false,
     };
     doctrine::apply(doctrines, &mut input);
+    idle_engine::mech::armory::apply(&sq.armory, &mut input);
     input.allies
 }
 

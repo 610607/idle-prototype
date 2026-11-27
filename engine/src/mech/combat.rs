@@ -220,7 +220,12 @@ impl BattleReport {
 pub fn enemy_spec(id: &str, ring: i32, mult_bp: i32) -> UnitSpec {
     let c = content();
     let e = &c.enemies[id];
-    let ring_bp = 10_000 + (ring - 1).max(0) * balance().enemy_ring_step_bp;
+    let table = &balance().enemy_ring_bp;
+    let ring_bp = table
+        .get(ring.max(0) as usize)
+        .or(table.last())
+        .copied()
+        .unwrap_or(10_000);
     let scale = |v: i32| -> i32 {
         ((v as i64 * ring_bp as i64 / 10_000) * mult_bp as i64 / 10_000).max(1) as i32
     };

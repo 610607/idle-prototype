@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { t } from '../i18n';
 import { BoardIcon } from '../icons';
 import type { TileView, View } from '../types';
@@ -8,19 +8,22 @@ const N = 15;
 const C = 32; // cell size: one 16px pixel icon sits at 1:1 in the middle
 const M = 14; // margin for coordinates
 
-/** District paint: muted, dark enough that enamel-white icons read on top. */
-export const WASH = ['#6a6340', '#4b6646', '#47636d', '#6d4c43', '#5b5175', '#6b6745', '#466a5c', '#705a42', '#505a76', '#665a50'];
+/** District paint; the values live in style.css (--wash-0 … --wash-9). */
+export const WASH = Array.from({ length: 10 }, (_, k) => `var(--wash-${k})`);
 
+/** Board colours, all CSS variables from style.css. */
 const COL = {
-  sunk: '#161913',
-  ground: '#23261f',
-  ink: '#e8e0c8',
-  ink2: '#b6af98',
-  ink3: '#858270',
-  hazard: '#e0b43c',
-  bad: '#db5e42',
-  good: '#98b96f',
-  rift: '#a99bd0',
+  sunk: 'var(--map-bg)',
+  ink: 'var(--ink)',
+  ink2: 'var(--ink-2)',
+  ink3: 'var(--ink-3)',
+  hazard: 'var(--hazard)',
+  bad: 'var(--bad)',
+  good: 'var(--good)',
+  rift: 'var(--rift-lt)',
+  riftDk: 'var(--rift-dk)',
+  token: 'var(--map-token)',
+  ground: 'var(--map-ground)',
 };
 
 function xy(i: number): [number, number] {
@@ -142,20 +145,26 @@ export function Board() {
     <div className="board-frame">
       <svg className="board" viewBox={`${-M} ${-M} ${size + M + 2} ${size + M + 2}`} role="img" aria-label={t('board.map_label')}>
         <defs>
-          {/* fog: an ordered dither, darker than anything known */}
-          <pattern id="fog" width="4" height="4" patternUnits="userSpaceOnUse">
-            <rect width="4" height="4" fill="#1d201a" />
-            <rect width="1" height="1" fill="#2c3027" />
-            <rect x="2" y="2" width="1" height="1" fill="#2c3027" />
+          {/* fog: one continuous sheet with a faint diagonal hatch, darker than anything known */}
+          <pattern id="fog" width="6" height="6" patternUnits="userSpaceOnUse">
+            <rect width="6" height="6" fill="var(--map-fog)" />
+            <rect x="0" y="5" width="1" height="1" fill="var(--map-fog-2)" />
+            <rect x="1" y="4" width="1" height="1" fill="var(--map-fog-2)" />
+            <rect x="2" y="3" width="1" height="1" fill="var(--map-fog-2)" />
+            <rect x="3" y="2" width="1" height="1" fill="var(--map-fog-2)" />
+            <rect x="4" y="1" width="1" height="1" fill="var(--map-fog-2)" />
+            <rect x="5" y="0" width="1" height="1" fill="var(--map-fog-2)" />
           </pattern>
-          {/* rubble: chunky blocks */}
-          <pattern id="rubble" width="8" height="8" patternUnits="userSpaceOnUse">
-            <rect width="8" height="8" fill="#34312b" />
-            <rect x="0" y="0" width="3" height="2" fill="#4a463d" />
-            <rect x="4" y="1" width="3" height="3" fill="#423e36" />
-            <rect x="1" y="4" width="2" height="3" fill="#4a463d" />
-            <rect x="5" y="5" width="3" height="2" fill="#2a2823" />
-            <rect x="3" y="3" width="1" height="1" fill="#57524a" />
+          {/* rubble: chunky broken concrete inside a raised block */}
+          <pattern id="rubble" width="9" height="9" patternUnits="userSpaceOnUse">
+            <rect width="9" height="9" fill="var(--map-barrier)" />
+            <rect x="0" y="0" width="4" height="3" fill="var(--map-chunk)" />
+            <rect x="0" y="3" width="4" height="1" fill="var(--map-chunk-dk)" />
+            <rect x="5" y="1" width="3" height="3" fill="var(--map-chunk-dk)" />
+            <rect x="1" y="5" width="3" height="3" fill="var(--map-chunk)" />
+            <rect x="1" y="8" width="3" height="1" fill="var(--map-chunk-dk)" />
+            <rect x="6" y="6" width="3" height="2" fill="var(--map-chunk-dk)" />
+            <rect x="5" y="5" width="1" height="1" fill="var(--map-barrier-hi)" />
           </pattern>
           {/* concrete grain over owned ground */}
           <pattern id="grain" width="6" height="6" patternUnits="userSpaceOnUse">
@@ -165,16 +174,16 @@ export function Board() {
           </pattern>
           {/* rift: violet cracks */}
           <pattern id="crack" width="8" height="8" patternUnits="userSpaceOnUse">
-            <rect x="1" y="2" width="2" height="1" fill="#7a68a8" opacity="0.6" />
-            <rect x="3" y="3" width="1" height="2" fill="#7a68a8" opacity="0.6" />
-            <rect x="5" y="6" width="2" height="1" fill="#7a68a8" opacity="0.45" />
+            <rect x="1" y="2" width="2" height="1" fill="var(--map-crack)" opacity="0.7" />
+            <rect x="3" y="3" width="1" height="2" fill="var(--map-crack)" opacity="0.7" />
+            <rect x="5" y="6" width="2" height="1" fill="var(--map-crack)" opacity="0.5" />
           </pattern>
           <pattern id="alert" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <rect width="3" height="8" fill={COL.bad} opacity="0.4" />
           </pattern>
           <pattern id="hq" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <rect width="3" height="6" fill={COL.hazard} />
-            <rect x="3" width="3" height="6" fill={COL.sunk} />
+            <rect x="3" width="3" height="6" fill="var(--hazard-ink)" />
           </pattern>
         </defs>
 
@@ -199,61 +208,93 @@ export function Board() {
           const py = y * C;
           const w = C - 1;
           const hidden = !t.revealed && t.terrain !== 'barrier';
-          const wash = t.district !== undefined ? WASH[t.district % WASH.length]! : '#4a4a3e';
+          const wash = t.district !== undefined ? WASH[t.district % WASH.length]! : 'var(--steel)';
           const icon = tileIcon(t, view);
           const tide = nextTide.get(t.i);
           const soon = t.next_surge !== undefined && t.next_surge - now < 1800;
           let ground: React.ReactNode;
-          if (hidden) ground = <rect x={px} y={py} width={w} height={w} fill="url(#fog)" />;
-          else if (t.terrain === 'barrier') ground = <rect x={px} y={py} width={w} height={w} fill="url(#rubble)" />;
+          // Fog fills the whole cell so the unknown reads as one sheet; known tiles keep a 1px gutter.
+          if (hidden) ground = <rect x={px} y={py} width={C} height={C} fill="url(#fog)" />;
+          else if (t.terrain === 'barrier')
+            ground = (
+              <>
+                <rect x={px} y={py} width={w} height={w} fill="url(#rubble)" />
+                <rect x={px} y={py} width={w} height={2} fill="var(--map-barrier-hi)" />
+                <rect x={px} y={py} width={2} height={w} fill="var(--map-barrier-hi)" />
+                <rect x={px} y={py + w - 3} width={w} height={3} fill="var(--map-barrier-lo)" />
+                <rect x={px + w - 2} y={py} width={2} height={w} fill="var(--map-barrier-lo)" />
+              </>
+            );
           else if (t.terrain === 'rift')
             ground = (
               <>
-                <rect x={px} y={py} width={w} height={w} fill={t.owned ? '#4d4268' : '#352d48'} />
+                <rect x={px} y={py} width={w} height={w} fill={t.owned ? 'var(--map-rift-own)' : 'var(--map-rift)'} />
                 <rect x={px} y={py} width={w} height={w} fill="url(#crack)" />
+                <rect x={px + 0.5} y={py + 0.5} width={w - 1} height={w - 1} fill="none" stroke="var(--map-crack)" strokeOpacity={0.45} />
               </>
             );
           else if (t.terrain === 'hq')
             ground = (
               <>
                 <rect x={px} y={py} width={w} height={w} fill="url(#hq)" />
-                <rect x={px + 3} y={py + 3} width={w - 6} height={w - 6} fill="#5d5f4c" />
+                <rect x={px + 3} y={py + 3} width={w - 6} height={w - 6} fill="var(--map-hq)" />
+                <rect x={px + 3} y={py + 3} width={w - 6} height={1} fill="#fff" opacity={0.18} />
               </>
             );
           else if (t.owned)
+            // our land: the district's paint at full strength, lit from the top-left like a plate
             ground = (
               <>
                 <rect x={px} y={py} width={w} height={w} fill={wash} />
                 <rect x={px} y={py} width={w} height={w} fill="url(#grain)" />
-                <rect x={px} y={py} width={w} height={1} fill="#fff" opacity={0.08} />
+                <rect x={px} y={py} width={w} height={1} fill="#fff" opacity={0.16} />
+                <rect x={px} y={py} width={1} height={w} fill="#fff" opacity={0.08} />
+                <rect x={px} y={py + w - 1} width={w} height={1} fill="#000" opacity={0.3} />
               </>
             );
           else
+            // known ground, not ours: flat concrete with a hint of the district's paint
             ground = (
               <>
                 <rect x={px} y={py} width={w} height={w} fill={COL.ground} />
-                <rect x={px} y={py} width={w} height={w} fill={wash} opacity={0.32} />
+                <rect x={px} y={py} width={w} height={w} fill={wash} opacity={0.3} />
+                <rect x={px} y={py} width={w} height={1} fill="#fff" opacity={0.05} />
               </>
             );
-          const iconColor = t.owned || t.terrain === 'hq' ? COL.ink : t.terrain === 'city' || t.terrain === 'rift' ? COL.rift : COL.ink2;
+          // icon colour by what the thing is: enemies violet, points of interest hazard, our buildings enamel
+          const enemy = !t.owned && t.terrain === 'city' && !!icon;
+          const iconColor =
+            t.terrain === 'hq'
+              ? 'var(--hazard-ink)'
+              : t.terrain === 'special'
+                ? COL.hazard
+                : t.terrain === 'rift'
+                  ? COL.rift
+                  : enemy
+                    ? COL.rift
+                    : t.usage === 'housing'
+                      ? COL.ink2
+                      : COL.ink;
           return (
             <g key={t.i} className="tile" onClick={() => onTile(t)}>
               {ground}
               {t.alert ? <rect x={px} y={py} width={w} height={w} fill="url(#alert)" /> : null}
               {icon ? (
-                <g opacity={t.owned || t.terrain !== 'city' ? 1 : 0.8}>
-                  <BoardIcon id={icon} x={px + C / 2} y={py + C / 2 - 2} size={16} color={iconColor} />
+                <g>
+                  {/* enemies sit on a dark token so the otherworld reads as pieces on the board */}
+                  {enemy ? <rect x={px + 6.5} y={py + 3.5} width={19} height={19} fill={COL.token} stroke={COL.riftDk} strokeWidth={1} /> : null}
+                  <BoardIcon id={icon} x={px + C / 2} y={py + C / 2 - 3} size={16} color={iconColor} accent={t.terrain === 'hq' ? 'var(--hazard-ink)' : undefined} />
                 </g>
               ) : null}
               {/* wardenship: progress toward claim on unowned tiles, stability on owned ones */}
               {t.revealed && t.terrain !== 'barrier' && t.terrain !== 'hq' && (t.owned || t.warden > 0) ? (
                 <g pointerEvents="none">
-                  <rect x={px + 4} y={py + C - 6} width={C - 9} height={3} fill={COL.sunk} />
+                  <rect x={px + 4} y={py + C - 7} width={C - 9} height={4} fill={COL.sunk} />
                   <rect
-                    x={px + 4}
+                    x={px + 5}
                     y={py + C - 6}
-                    width={Math.round(((C - 9) * Math.max(0, Math.min(100, t.warden))) / 100)}
-                    height={3}
+                    width={Math.round(((C - 11) * Math.max(0, Math.min(100, t.warden))) / 100)}
+                    height={2}
                     fill={t.owned ? (t.warden <= 25 ? COL.bad : COL.ink2) : COL.good}
                   />
                 </g>
@@ -285,7 +326,8 @@ export function Board() {
         })}
 
         {/* district and territory lines */}
-        <path d={edges.district} stroke={COL.ink3} strokeOpacity={0.7} strokeWidth={1} fill="none" strokeDasharray="2 2" pointerEvents="none" />
+        <path d={edges.district} stroke={COL.ink3} strokeOpacity={0.55} strokeWidth={1} fill="none" strokeDasharray="2 2" pointerEvents="none" />
+        <path d={edges.territory} stroke="var(--hazard-ink)" strokeWidth={4} fill="none" strokeLinecap="square" pointerEvents="none" />
         <path d={edges.territory} stroke={COL.hazard} strokeWidth={2} fill="none" strokeLinecap="square" pointerEvents="none" />
 
         {/* transit-map routes */}
@@ -356,61 +398,124 @@ export function Board() {
   );
 }
 
-function Legend() {
+/** A little tile for the legend, painted with the board's own patterns. */
+function Swatch({ children }: { children: React.ReactNode }) {
   return (
-    <div className="board-legend">
-      <span>
-        <svg width="18" height="6">
-          <rect y="1" width="18" height="4" fill={COL.hazard} />
-        </svg>
-        {t('board.legend.border')}
-      </span>
-      <span>
-        <svg width="16" height="6">
-          <rect y="1" width="16" height="3" fill={SQUAD_HEX[0]} />
-        </svg>
-        {t('board.legend.squad_a')}
-      </span>
-      <span>
-        <svg width="16" height="6">
-          <rect y="1" width="16" height="3" fill={SQUAD_HEX[1]} />
-        </svg>
-        {t('board.legend.squad_b')}
-      </span>
-      <span>
-        <svg width="12" height="12">
-          <rect x="1" y="1" width="10" height="10" fill="none" stroke={COL.good} strokeWidth="2" strokeDasharray="3 2" />
-        </svg>
-        {t('board.legend.claimable')}
-      </span>
-      <span>
-        <svg width="10" height="12">
-          <rect width="9" height="11" fill={COL.bad} />
-          <rect x="4" y="2" width="2" height="5" fill={COL.ink} />
-          <rect x="4" y="8" width="2" height="2" fill={COL.ink} />
-        </svg>
-        {t('board.legend.alert')}
-      </span>
-      <span>
-        <svg width="10" height="10">
+    <svg width="16" height="16" viewBox="0 0 16 16" shapeRendering="crispEdges" aria-hidden>
+      {children}
+    </svg>
+  );
+}
+
+function Legend() {
+  const row = (swatch: React.ReactNode, text: string) => (
+    <span>
+      {swatch}
+      {text}
+    </span>
+  );
+  // Open on wide screens; phones start with it folded to keep the map and the tide strip in view.
+  const [open] = useState(() => !window.matchMedia('(max-width: 900px)').matches);
+  return (
+    <details className="legend" open={open}>
+      <summary>{t('board.legend.title')}</summary>
+      <div className="board-legend">
+      {row(
+        <Swatch>
+          <rect width="16" height="16" fill="url(#fog)" />
+        </Swatch>,
+        t('terrain.unknown'),
+      )}
+      {row(
+        <Swatch>
+          <rect width="16" height="16" fill={COL.ground} />
+          <rect width="16" height="16" fill={WASH[1]} opacity={0.3} />
+        </Swatch>,
+        t('terrain.city'),
+      )}
+      {row(
+        <Swatch>
+          <rect width="16" height="16" fill={WASH[1]} />
+          <rect width="16" height="1" fill="#fff" opacity={0.16} />
+          <path d="M1 16V1H16" stroke={COL.hazard} strokeWidth="2" fill="none" />
+        </Swatch>,
+        t('board.legend.owned'),
+      )}
+      {row(
+        <Swatch>
+          <rect width="16" height="16" fill="url(#rubble)" />
+          <rect width="16" height="2" fill="var(--map-barrier-hi)" />
+          <rect width="2" height="16" fill="var(--map-barrier-hi)" />
+          <rect y="13" width="16" height="3" fill="var(--map-barrier-lo)" />
+        </Swatch>,
+        t('terrain.barrier'),
+      )}
+      {row(
+        <Swatch>
+          <rect width="16" height="16" fill="var(--map-rift)" />
+          <rect width="16" height="16" fill="url(#crack)" />
+          <rect x="0.5" y="0.5" width="15" height="15" fill="none" stroke="var(--map-crack)" strokeOpacity={0.5} />
+        </Swatch>,
+        t('terrain.rift'),
+      )}
+      {row(
+        <Swatch>
+          <rect x="0.5" y="0.5" width="15" height="15" fill={COL.token} stroke={COL.riftDk} />
+          <rect x="5" y="4" width="6" height="8" fill={COL.rift} />
+          <rect x="6" y="6" width="1" height="2" fill={COL.token} />
+          <rect x="9" y="6" width="1" height="2" fill={COL.token} />
+        </Swatch>,
+        t('board.legend.enemy'),
+      )}
+      <i className="sep" />
+      {row(
+        <Swatch>
+          <rect x="2" y="2" width="12" height="12" fill="none" stroke={COL.good} strokeWidth="2" strokeDasharray="3 2" />
+        </Swatch>,
+        t('board.legend.claimable'),
+      )}
+      {row(
+        <Swatch>
+          <rect x="3" y="2" width="9" height="12" fill={COL.bad} />
+          <rect x="7" y="4" width="2" height="5" fill={COL.ink} />
+          <rect x="7" y="10" width="2" height="2" fill={COL.ink} />
+        </Swatch>,
+        t('board.legend.alert'),
+      )}
+      {row(
+        <Swatch>
+          <rect width="16" height="16" fill={COL.ground} />
           <path d="M0 0h9l-9 9z" fill={COL.bad} />
-        </svg>
-        {t('board.legend.lost')}
-      </span>
-      <span>
-        <svg width="8" height="10">
-          <rect x="0" y="0" width="1" height="9" fill={COL.ink} />
-          <rect x="1" y="0" width="5" height="4" fill={COL.hazard} />
-        </svg>
-        {t('board.legend.garrison')}
-      </span>
-      <span>
-        <svg width="20" height="6">
-          <rect y="1" width="20" height="3" fill={COL.sunk} />
-          <rect y="1" width="12" height="3" fill={COL.good} />
-        </svg>
-        {t('board.legend.warden')}
-      </span>
-    </div>
+        </Swatch>,
+        t('board.legend.lost'),
+      )}
+      {row(
+        <Swatch>
+          <rect x="4" y="2" width="1" height="12" fill={COL.ink} />
+          <rect x="5" y="2" width="7" height="5" fill={COL.hazard} />
+        </Swatch>,
+        t('board.legend.garrison'),
+      )}
+      {row(
+        <Swatch>
+          <rect x="0" y="6" width="16" height="4" fill={COL.sunk} />
+          <rect x="1" y="7" width="9" height="2" fill={COL.good} />
+        </Swatch>,
+        t('board.legend.warden'),
+      )}
+      {row(
+        <Swatch>
+          <rect x="0" y="6" width="16" height="4" fill={SQUAD_HEX[0]} />
+        </Swatch>,
+        t('board.legend.squad_a'),
+      )}
+      {row(
+        <Swatch>
+          <rect x="0" y="6" width="16" height="4" fill={SQUAD_HEX[1]} />
+        </Swatch>,
+        t('board.legend.squad_b'),
+      )}
+      </div>
+    </details>
   );
 }

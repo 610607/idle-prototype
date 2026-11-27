@@ -198,6 +198,16 @@ pub fn surge_setup(
         mult = mult * (10_000 + p.surge_bp) as i64 / 10_000;
     }
     let r = ring(source).max(1);
+    // Surges follow their own ring curve: `enemy_spec` scales by the route table, so trade it for
+    // the surge one.
+    let at = |t: &Vec<i32>| -> i64 {
+        t.get(r as usize)
+            .or(t.last())
+            .copied()
+            .unwrap_or(10_000)
+            .max(1) as i64
+    };
+    mult = mult * at(&b.surge_ring_bp) / at(&b.enemy_ring_bp);
     let waves: Vec<Vec<UnitSpec>> = src
         .waves
         .iter()
@@ -281,6 +291,7 @@ pub fn surge_setup(
         record: false,
     };
     crate::mech::doctrine::apply(&cy.doctrines, &mut input);
+    crate::mech::armory::apply(&cy.armory, &mut input);
     Some(SurgeSetup {
         input,
         source,

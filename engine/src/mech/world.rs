@@ -39,6 +39,17 @@ pub fn surge_source(c: &Cycle, i: u16) -> Option<u16> {
         .max_by(|a, b| ring(*a).cmp(&ring(*b)).then(b.cmp(a)))
 }
 
+/// Deepest ring with an owned tile (the HQ is ring 0).
+pub fn deepest_owned(c: &Cycle) -> i32 {
+    c.tiles
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.owned)
+        .map(|(i, _)| ring(i as u16))
+        .max()
+        .unwrap_or(0)
+}
+
 /// Deepest ring any squad's route reaches.
 pub fn deepest_route(c: &Cycle) -> i32 {
     c.squads

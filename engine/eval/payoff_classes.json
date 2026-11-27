@@ -3,6 +3,9 @@
   "keys": {
     "event.research.new": { "class": "research", "tier": 1 },
     "event.research.done": { "class": "research", "tier": 1 },
+    "event.armory.breakthrough": { "class": "armory", "tier": 2 },
+    "event.armory.level": { "class": "armory", "tier": 0 },
+    "event.research.unlocked": { "class": "claimed", "tier": 0 },
     "event.contiguous": { "class": "contiguous", "tier": 1 },
     "event.core_sealed": { "class": "core", "tier": 1 },
     "event.special_arrived": { "class": "special", "tier": 1 },
