@@ -435,16 +435,33 @@ pub struct GameState {
     #[serde(skip)]
     pub tide_log: Option<Vec<TideEntry>>,
     /// Measurement hook for `examples/eval` (docs/balance-eval.md): when `Some`, every route
-    /// battle and every real surge is appended here. Never saved; `None` costs nothing.
+    /// battle, every real surge and every event-log entry is appended here. Never saved; `None`
+    /// costs nothing.
     #[serde(skip)]
     pub trace: Option<Vec<Trace>>,
 }
 
 /// One measured outcome (see `GameState::trace`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Trace {
-    Route { t: i64, tile: u16, won: bool },
-    Surge { t: i64, tile: u16, held: bool },
+    Route {
+        t: i64,
+        tile: u16,
+        won: bool,
+    },
+    Surge {
+        t: i64,
+        tile: u16,
+        held: bool,
+    },
+    /// An event-log entry, by kind and text key (the log itself keeps only the latest ones): the
+    /// payoff timeline (docs/balance-eval.md §爽点时间轴) is built from these.
+    Event {
+        t: i64,
+        kind: EventKind,
+        key: String,
+        tile: Option<u16>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -490,6 +507,14 @@ impl GameState {
     ) {
         if self.tide_log.is_some() {
             return; // forecasts don't write history
+        }
+        if let Some(tr) = self.trace.as_mut() {
+            tr.push(Trace::Event {
+                t: self.time,
+                kind,
+                key: text.key.clone(),
+                tile,
+            });
         }
         let id = self.alloc_id();
         self.events.push(Event {

@@ -22,7 +22,10 @@ use std::collections::BTreeMap;
 
 pub const T0: i64 = 1_700_000_000;
 const STEP: i64 = 300;
-pub const CHECKPOINTS: [i64; 6] = [6, 12, 24, 48, 72, 120];
+pub const CHECKPOINTS: [i64; 7] = [6, 12, 24, 48, 72, 120, 168];
+
+/// Metric values of one seed by id (`None` = never happened).
+pub type Metrics = BTreeMap<String, Option<f64>>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Persona {
@@ -288,11 +291,24 @@ fn squad_power(e: &Engine, r: i32) -> (Option<f64>, Option<f64>) {
     (Some(s), med)
 }
 
-/// Plays one seed; returns metric values and accepted commands.
-pub fn play(seed: u64, persona: Persona, hours: i64) -> BTreeMap<String, Option<f64>> {
+/// Plays one seed; returns metric values (accepted commands are in `bot_policy::USED`).
+pub fn play(seed: u64, persona: Persona, hours: i64) -> Metrics {
+    play_full(seed, persona, hours).0
+}
+
+/// Accepted commands so far, by name.
+fn used() -> BTreeMap<String, u32> {
+    bot_policy::USED.with(|u| u.borrow().clone())
+}
+
+/// `play`, also returning the payoff timeline (docs/balance-eval.md §爽点时间轴).
+pub fn play_full(seed: u64, persona: Persona, hours: i64) -> (Metrics, Vec<crate::payoff::Ev>) {
     let mut e = new_game(seed, persona);
     e.state.trace = Some(Vec::new());
-    let mut m: BTreeMap<String, Option<f64>> = BTreeMap::new();
+    let mut m: Metrics = BTreeMap::new();
+    let mut timeline = crate::payoff::Timeline::new();
+    let mut series = crate::strength::Series::new();
+    let mut intel_in = 0i64;
     let mut reach: [Option<f64>; 8] = [None; 8];
     let (mut inner, mut front, mut deep) = (Tally::default(), Tally::default(), Tally::default());
     let (mut s_inside, mut s_edge) = (Tally::default(), Tally::default());
@@ -303,9 +319,16 @@ pub fn play(seed: u64, persona: Persona, hours: i64) -> BTreeMap<String, Option<
     for h in 1..=hours {
         let before = spendable(&e);
         let research = e.state.cycle.research_count;
+        let used_before = used();
         if persona.acts(h - 1) {
             bot_policy::step(&mut e);
         }
+        // Commands the bot issued this hour, by name.
+        let mut issued = used();
+        for (k, n) in issued.iter_mut() {
+            *n -= used_before.get(k).copied().unwrap_or(0);
+        }
+        issued.retain(|_, n| *n > 0);
         let after = spendable(&e);
         if before.iter().zip(after.iter()).any(|(b, a)| a < b)
             || e.state.cycle.research_count > research
@@ -315,7 +338,11 @@ pub fn play(seed: u64, persona: Persona, hours: i64) -> BTreeMap<String, Option<
         let start = T0 + (h - 1) * 3600;
         for k in 1..=3600 / STEP {
             e.advance(start + k * STEP);
-            for tr in e.state.trace.as_mut().unwrap().drain(..) {
+            let traces: Vec<Trace> = e.state.trace.as_mut().unwrap().drain(..).collect();
+            let t_h = (start + k * STEP - T0) as f64 / 3600.0;
+            timeline.on_step(&e, t_h, &traces);
+            series.on_step(&e, t_h, &traces);
+            for tr in traces {
                 match tr {
                     Trace::Route { tile, won, .. } => match ring(tile) - deepest {
                         ..=0 => inner.add(won),
@@ -329,16 +356,24 @@ pub fn play(seed: u64, persona: Persona, hours: i64) -> BTreeMap<String, Option<
                             s_edge.add(held);
                         }
                     }
+                    Trace::Event { .. } => {}
                 }
             }
             deepest = deepest_owned(&e);
-            let t_h = (start + k * STEP - T0) as f64 / 3600.0;
             for r in 1..=deepest.clamp(0, 7) as usize {
                 reach[r].get_or_insert(t_h);
             }
         }
         let now = spendable(&e);
         gains.push([0, 1, 2].map(|k| now[k] - after[k]));
+        // Intel income, task rewards included: research is the only way intel leaves.
+        let b = idle_engine::content::balance();
+        let spent: i64 = (research..e.state.cycle.research_count)
+            .map(|k| b.research_base + b.research_step * k as i64)
+            .sum();
+        intel_in += now[2] - before[2] + spent;
+        timeline.on_hour(&e, h, &issued);
+        series.on_hour(&e, h, issued.values().sum());
         let res = sim::cycle_results(&e.state);
         score_rate.push((h, res.total as f64 / h as f64));
         if CHECKPOINTS.contains(&h) {
@@ -350,6 +385,7 @@ pub fn play(seed: u64, persona: Persona, hours: i64) -> BTreeMap<String, Option<
                 format!("ops.h{h}"),
                 Some(e.state.cycle.operatives.len() as f64),
             );
+            m.insert(format!("intel_in.h{h}"), Some(intel_in as f64));
             m.insert(format!("frontier_win.h{h}"), winnable(&e, deepest, 1));
             m.insert(format!("deep_win.h{h}"), winnable(&e, deepest, 2));
             // Player strength S(t) and how it sits against the next ring's encounters.
@@ -422,7 +458,9 @@ pub fn play(seed: u64, persona: Persona, hours: i64) -> BTreeMap<String, Option<
         Some(e.state.cycle.research_count as f64),
     );
     m.insert("hired".into(), Some(e.state.cycle.stats.hired as f64));
-    m
+    let mags = series.finish(&mut m, hours);
+    let evs = timeline.finish(&mut m, &mags, hours);
+    (m, evs)
 }
 
 /// Plays every seed on `threads` threads.

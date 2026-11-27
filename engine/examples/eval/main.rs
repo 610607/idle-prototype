@@ -11,6 +11,7 @@
 //! cargo run --release --example eval -- pace [--vs RUN] [--squads N] [--patch JSON]  # pacing model
 //! cargo run --release --example eval -- price [--bless]          # 词条 price card (eval/prices.json)
 //! cargo run --release --example eval -- timeline SEED [persona] [--hours H] [--patch JSON]
+//! cargo run --release --example eval -- payoff SEED [persona] [--hours H] [--patch JSON]   # 爽点时间轴
 //! ```
 //!
 //! Personas: `greedy` (the reference bot: nearest ring first), `explorer` (deepest winnable target
@@ -20,10 +21,12 @@
 mod bot_policy;
 mod calib;
 mod model;
+mod payoff;
 mod power;
 mod price;
 mod run;
 mod stats;
+mod strength;
 #[path = "../synergy.rs"]
 #[allow(dead_code)]
 mod synergy;
@@ -291,6 +294,19 @@ fn main() {
                 idle_engine::content::patch_balance(&p).unwrap();
             }
             run::timeline(seed, persona, hours);
+        }
+        Some("payoff") => {
+            let seed: u64 = args.get(1).map_or(0, |s| s.parse().unwrap());
+            let persona = args
+                .get(2)
+                .filter(|a| !a.starts_with("--"))
+                .map(|p| Persona::parse(p).unwrap_or_else(|| panic!("unknown persona {p}")))
+                .unwrap_or(Persona::REFERENCE);
+            let hours: i64 = arg(&args, "--hours").map_or(168, |s| s.parse().unwrap());
+            if let Some(p) = arg(&args, "--patch") {
+                idle_engine::content::patch_balance(&p).unwrap();
+            }
+            payoff::print(seed, persona, hours);
         }
         Some("model") => {
             let p = model::profile();
