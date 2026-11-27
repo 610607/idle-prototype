@@ -11,6 +11,7 @@ use crate::routes;
 use crate::save;
 use crate::sim;
 use crate::state::{GameState, Phase, TideEntry};
+use crate::t;
 use crate::view::{self, TideView};
 use crate::world;
 use serde::Serialize;
@@ -120,7 +121,8 @@ fn fmt_rate(v: i64) -> String {
     // income is x100 per hour
     let sign = if v < 0 { "-" } else { "" };
     let a = v.abs();
-    format!("{}{}.{}/时", sign, a / 100, (a % 100) / 10)
+    let v = format!("{}{}.{}", sign, a / 100, (a % 100) / 10);
+    t!("delta.per_hour", v = v)
 }
 
 impl Engine {
@@ -162,7 +164,7 @@ impl Engine {
     pub fn command_json(&mut self, json: &str) -> String {
         let r = match serde_json::from_str::<Command>(json) {
             Ok(cmd) => self.command(&cmd).map(|_| cmd.changes_shape()),
-            Err(e) => Err(format!("命令格式不对：{e}")),
+            Err(e) => Err(t!("err.bad_command", err = e)),
         };
         let ack = match r {
             Ok(shape) => Ack {
@@ -252,7 +254,12 @@ impl Engine {
 
     fn deltas(a: &Metrics, b: &Metrics) -> Vec<Delta> {
         let mut out = Vec::new();
-        let names = ["废料", "零件", "情报", "晶体"];
+        let names = [
+            t!("delta.res.scrap"),
+            t!("delta.res.parts"),
+            t!("delta.res.intel"),
+            t!("delta.res.crystal"),
+        ];
         let ra = [
             a.resources.scrap,
             a.resources.parts,
@@ -268,7 +275,7 @@ impl Engine {
         for i in 0..4 {
             if ra[i] != rb[i] {
                 out.push(Delta {
-                    label: names[i].into(),
+                    label: names[i].clone(),
                     before: ra[i].to_string(),
                     after: rb[i].to_string(),
                     better: rb[i] > ra[i],
@@ -278,7 +285,7 @@ impl Engine {
         for i in 0..4 {
             if a.income[i] != b.income[i] {
                 out.push(Delta {
-                    label: format!("{}产出", names[i]),
+                    label: t!("delta.income", res = names[i]),
                     before: fmt_rate(a.income[i]),
                     after: fmt_rate(b.income[i]),
                     better: b.income[i] > a.income[i],
@@ -289,7 +296,7 @@ impl Engine {
             let ok_a = a.power.0 >= a.power.1;
             let ok_b = b.power.0 >= b.power.1;
             out.push(Delta {
-                label: "电力".into(),
+                label: t!("delta.power"),
                 before: format!("{}/{}", a.power.0, a.power.1),
                 after: format!("{}/{}", b.power.0, b.power.1),
                 better: (ok_b && !ok_a)
@@ -298,7 +305,7 @@ impl Engine {
         }
         if a.border != b.border {
             out.push(Delta {
-                label: "边界格".into(),
+                label: t!("delta.border"),
                 before: a.border.to_string(),
                 after: b.border.to_string(),
                 better: b.border < a.border,
@@ -306,16 +313,16 @@ impl Engine {
         }
         if a.lost != b.lost || a.held != b.held {
             out.push(Delta {
-                label: "12 小时来潮失守".into(),
-                before: format!("{} 次", a.lost),
-                after: format!("{} 次", b.lost),
+                label: t!("delta.tide_lost"),
+                before: t!("delta.times", n = a.lost),
+                after: t!("delta.times", n = b.lost),
                 better: b.lost < a.lost || (b.lost == a.lost && b.held >= a.held),
             });
         }
         if a.lost_tiles != b.lost_tiles {
             let fmt = |v: &Vec<u16>| {
                 if v.is_empty() {
-                    "无".to_string()
+                    t!("delta.none")
                 } else {
                     v.iter()
                         .map(|t| geom::label(*t))
@@ -324,7 +331,7 @@ impl Engine {
                 }
             };
             out.push(Delta {
-                label: "会失守的格子".into(),
+                label: t!("delta.lost_tiles"),
                 before: fmt(&a.lost_tiles),
                 after: fmt(&b.lost_tiles),
                 better: b.lost_tiles.len() <= a.lost_tiles.len(),
@@ -332,7 +339,7 @@ impl Engine {
         }
         if a.alerts != b.alerts {
             out.push(Delta {
-                label: "告急格".into(),
+                label: t!("delta.alerts"),
                 before: a.alerts.to_string(),
                 after: b.alerts.to_string(),
                 better: b.alerts < a.alerts,
@@ -342,7 +349,7 @@ impl Engine {
             if let Some((_, tb)) = b.trust_targets.iter().find(|(n, _)| n == name) {
                 if ta != tb {
                     out.push(Delta {
-                        label: format!("{}信任目标", name),
+                        label: t!("delta.trust_target", district = name),
                         before: ta.to_string(),
                         after: tb.to_string(),
                         better: tb > ta,
@@ -353,7 +360,7 @@ impl Engine {
         for (name, tb) in &b.trust_targets {
             if !a.trust_targets.iter().any(|(n, _)| n == name) {
                 out.push(Delta {
-                    label: format!("{}信任目标", name),
+                    label: t!("delta.trust_target", district = name),
                     before: "—".into(),
                     after: tb.to_string(),
                     better: true,
@@ -363,7 +370,7 @@ impl Engine {
         // Building over a home: residents stay for now but have nowhere to live later.
         if a.housing != b.housing {
             out.push(Delta {
-                label: "住房".into(),
+                label: t!("delta.housing"),
                 before: a.housing.to_string(),
                 after: b.housing.to_string(),
                 better: b.housing > a.housing,
@@ -371,7 +378,7 @@ impl Engine {
         }
         if a.unhoused != b.unhoused {
             out.push(Delta {
-                label: "无处安置".into(),
+                label: t!("delta.unhoused"),
                 before: a.unhoused.to_string(),
                 after: b.unhoused.to_string(),
                 better: b.unhoused < a.unhoused,
@@ -379,16 +386,22 @@ impl Engine {
         }
         if a.talent_rate != b.talent_rate {
             out.push(Delta {
-                label: "人才积累".into(),
-                before: format!("{:.1}/时", a.talent_rate as f64 / 100.0),
-                after: format!("{:.1}/时", b.talent_rate as f64 / 100.0),
+                label: t!("delta.talent"),
+                before: t!(
+                    "delta.per_hour",
+                    v = format!("{:.1}", a.talent_rate as f64 / 100.0)
+                ),
+                after: t!(
+                    "delta.per_hour",
+                    v = format!("{:.1}", b.talent_rate as f64 / 100.0)
+                ),
                 better: b.talent_rate > a.talent_rate,
             });
         }
         if a.self_sufficient != b.self_sufficient {
-            let f = |v: bool| if v { "是" } else { "否" }.to_string();
+            let f = |v: bool| t!(if v { "delta.yes" } else { "delta.no" });
             out.push(Delta {
-                label: "防线自给".into(),
+                label: t!("delta.self_sufficient"),
                 before: f(a.self_sufficient),
                 after: f(b.self_sufficient),
                 better: b.self_sufficient,
@@ -396,7 +409,7 @@ impl Engine {
         }
         if a.roster != b.roster {
             out.push(Delta {
-                label: "队员".into(),
+                label: t!("delta.roster"),
                 before: a.roster.to_string(),
                 after: b.roster.to_string(),
                 better: b.roster > a.roster,
@@ -404,7 +417,7 @@ impl Engine {
         }
         if a.population != b.population {
             out.push(Delta {
-                label: "居民".into(),
+                label: t!("delta.population"),
                 before: a.population.to_string(),
                 after: b.population.to_string(),
                 better: b.population > a.population,
@@ -413,7 +426,7 @@ impl Engine {
         // Only new candidates: hiring one away is already shown as a roster change.
         if b.candidates > a.candidates {
             out.push(Delta {
-                label: "候选".into(),
+                label: t!("delta.candidates"),
                 before: a.candidates.to_string(),
                 after: b.candidates.to_string(),
                 better: b.candidates > a.candidates,
@@ -467,7 +480,7 @@ impl Engine {
             Ok(cmd) => self.dry_run(&cmd),
             Err(e) => DryRun {
                 ok: false,
-                error: Some(format!("命令格式不对：{e}")),
+                error: Some(t!("err.bad_command", err = e)),
                 irreversible: false,
                 deltas: vec![],
                 tide_before: vec![],
@@ -501,7 +514,7 @@ impl Engine {
             let (held, lw, tw, rounds, hp, wg) = summarize(&r);
             out.push(GarrisonOption {
                 op: None,
-                name: "不派人（街坊自卫）".into(),
+                name: t!("view.garrison.militia"),
                 icon: "militia".into(),
                 current: current.is_none(),
                 busy: None,
@@ -522,13 +535,13 @@ impl Engine {
                 crate::state::Assignment::Idle => None,
                 crate::state::Assignment::Garrison { tile: t } if t == tile => None,
                 crate::state::Assignment::Garrison { tile: t } => {
-                    Some(format!("正驻扎 {}", geom::label(t)))
+                    Some(t!("view.garrison.busy_garrison", tile = geom::label(t)))
                 }
                 crate::state::Assignment::Squad { squad } => cy
                     .squads
                     .iter()
                     .find(|s| s.id == squad)
-                    .map(|s| format!("在{}", s.name)),
+                    .map(|s| t!("view.garrison.busy_squad", squad = s.name)),
             };
             let icon = crate::content::content()
                 .classes
@@ -613,7 +626,7 @@ impl Engine {
         let attention_after = world::attention_level(&copy.cycle);
         let t = copy.time;
         let Some(trip) = routes::plan_trip(&mut copy, squad, t) else {
-            return empty("小队没人或路线为空".into());
+            return empty(t!("err.route_empty"));
         };
         let steps = route
             .iter()
