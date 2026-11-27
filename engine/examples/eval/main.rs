@@ -12,6 +12,7 @@
 //! cargo run --release --example eval -- price [--bless]          # 词条 price card (eval/prices.json)
 //! cargo run --release --example eval -- timeline SEED [persona] [--hours H] [--patch JSON]
 //! cargo run --release --example eval -- payoff SEED [persona] [--hours H] [--patch JSON]   # 爽点时间轴
+//! cargo run --release --example eval -- metrics [RUN.json]      # metric registry (eval/metrics.json)
 //! ```
 //!
 //! Personas: `greedy` (the reference bot: nearest ring first), `explorer` (deepest winnable target
@@ -24,6 +25,7 @@ mod model;
 mod payoff;
 mod power;
 mod price;
+mod registry;
 mod run;
 mod stats;
 mod strength;
@@ -301,6 +303,7 @@ fn main() {
             }
             run::timeline(seed, persona, hours);
         }
+        Some("metrics") => registry::print(args.get(1).map(|f| read_run(f)).as_ref()),
         Some("payoff") => {
             let seed: u64 = args.get(1).map_or(0, |s| s.parse().unwrap());
             let persona = args

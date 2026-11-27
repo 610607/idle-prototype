@@ -28,3 +28,9 @@ name = "bot_policy"
 path = "examples/bot_policy.rs"
 crate-type = ["lib"]
 test = false
+
+# The evaluation tool's own tests (metric registry, smoke runs) run under `cargo test`.
+[[example]]
+name = "eval"
+path = "examples/eval/main.rs"
+test = true
