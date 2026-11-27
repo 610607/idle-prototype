@@ -1167,12 +1167,57 @@ impl Content {
     }
 }
 
-fn parse<T: for<'de> Deserialize<'de>>(name: &str, text: &str) -> T {
+/// Every content file, embedded once: `load` parses them and `fingerprint` hashes them.
+const FILES: &[(&str, &str)] = &[
+    ("tags.json", include_str!("../content/tags.json")),
+    ("skills.json", include_str!("../content/skills.json")),
+    ("traits.json", include_str!("../content/traits.json")),
+    (
+        "exp_traits.json",
+        include_str!("../content/exp_traits.json"),
+    ),
+    ("classes.json", include_str!("../content/classes.json")),
+    ("enemies.json", include_str!("../content/enemies.json")),
+    (
+        "facilities.json",
+        include_str!("../content/facilities.json"),
+    ),
+    (
+        "professions.json",
+        include_str!("../content/professions.json"),
+    ),
+    ("world.json", include_str!("../content/world.json")),
+    ("balance.json", include_str!("../content/balance.json")),
+    ("reactions.json", include_str!("../content/reactions.json")),
+    ("doctrines.json", include_str!("../content/doctrines.json")),
+    ("tasks.json", include_str!("../content/tasks.json")),
+];
+
+fn parse<T: for<'de> Deserialize<'de>>(name: &str) -> T {
+    let text = FILES
+        .iter()
+        .find(|f| f.0 == name)
+        .unwrap_or_else(|| panic!("content/{name}: not embedded"))
+        .1;
     serde_json::from_str(text).unwrap_or_else(|e| panic!("content/{name}: {e}"))
 }
 
+/// Game version fingerprint for play sessions (docs/eval-interface.md, manifest `build`): FNV-1a
+/// 64 over `SAVE_VERSION`, every embedded content file (with `balance.json`) and any balance
+/// patch, first 8 hex digits. Only a hint: engine code changes do not move it.
+pub fn fingerprint() -> String {
+    let mut s = format!("save:{}\n", crate::state::SAVE_VERSION);
+    for (name, text) in FILES.iter() {
+        s += &format!("{name}:{}\n{text}\n", text.len());
+    }
+    if let Some(p) = BALANCE_PATCH.get() {
+        s += &format!("patch:{}\n", serde_json::to_string(p).unwrap_or_default());
+    }
+    crate::save::fnv64(s.as_bytes())[..8].to_string()
+}
+
 fn load() -> Content {
-    let tags: Vec<TagDef> = parse("tags.json", include_str!("../content/tags.json"));
+    let tags: Vec<TagDef> = parse("tags.json");
     let mut tag_num = [TagNum {
         max: 1,
         ..TagNum::default()
@@ -1183,26 +1228,16 @@ fn load() -> Content {
             ..t.num
         };
     }
-    let skills: Vec<SkillDef> = parse("skills.json", include_str!("../content/skills.json"));
-    let traits: Vec<TraitDef> = parse("traits.json", include_str!("../content/traits.json"));
-    let exp_traits: Vec<ExpTraitDef> = parse(
-        "exp_traits.json",
-        include_str!("../content/exp_traits.json"),
-    );
-    let classes: Vec<ClassDef> = parse("classes.json", include_str!("../content/classes.json"));
-    let enemies: Vec<EnemyDef> = parse("enemies.json", include_str!("../content/enemies.json"));
-    let facilities: Vec<FacilityDef> = parse(
-        "facilities.json",
-        include_str!("../content/facilities.json"),
-    );
-    let prof: ProfessionsFile = parse(
-        "professions.json",
-        include_str!("../content/professions.json"),
-    );
-    let world: WorldFile = parse("world.json", include_str!("../content/world.json"));
+    let skills: Vec<SkillDef> = parse("skills.json");
+    let traits: Vec<TraitDef> = parse("traits.json");
+    let exp_traits: Vec<ExpTraitDef> = parse("exp_traits.json");
+    let classes: Vec<ClassDef> = parse("classes.json");
+    let enemies: Vec<EnemyDef> = parse("enemies.json");
+    let facilities: Vec<FacilityDef> = parse("facilities.json");
+    let prof: ProfessionsFile = parse("professions.json");
+    let world: WorldFile = parse("world.json");
     let balance: Balance = {
-        let mut v: serde_json::Value =
-            parse("balance.json", include_str!("../content/balance.json"));
+        let mut v: serde_json::Value = parse("balance.json");
         if let (Some(patch), Some(obj)) = (BALANCE_PATCH.get(), v.as_object_mut()) {
             for (k, x) in patch {
                 obj.insert(k.clone(), x.clone());
@@ -1210,11 +1245,9 @@ fn load() -> Content {
         }
         serde_json::from_value(v).unwrap_or_else(|e| panic!("content/balance.json: {e}"))
     };
-    let reactions: Vec<ReactionDef> =
-        parse("reactions.json", include_str!("../content/reactions.json"));
-    let doctrines: Vec<DoctrineDef> =
-        parse("doctrines.json", include_str!("../content/doctrines.json"));
-    let tasks: Vec<TaskDef> = parse("tasks.json", include_str!("../content/tasks.json"));
+    let reactions: Vec<ReactionDef> = parse("reactions.json");
+    let doctrines: Vec<DoctrineDef> = parse("doctrines.json");
+    let tasks: Vec<TaskDef> = parse("tasks.json");
     let mut c = Content {
         tags,
         tag_num,

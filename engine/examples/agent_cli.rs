@@ -2,12 +2,15 @@
 //! menu, runs menu numbers or JSON commands, and advances time. Same engine and save format as
 //! the web client. `agent_cli` with no arguments prints the usage. Every `do` is appended to
 //! `<save>.log` as JSONL. Settings: AGENT_HOURS (default 72), AGENT_NORESEARCH=1 (control group),
-//! AGENT_LANG (default zh-CN).
+//! AGENT_LANG (default zh-CN). `agent_cli session …` is the play-session protocol
+//! (docs/eval-interface.md, `textui::session`): fixed visit schedule, menu ids, feel and scores.
 use idle_engine::api::Engine;
 use idle_engine::t;
+use idle_engine::textui::session::{self, Action, Feel, Observation, Schedule, Score, Setup};
 use idle_engine::textui::{self, Options, MAX_WAIT};
 use std::fs;
 use std::io::Write;
+use std::path::PathBuf;
 #[path = "bot_policy.rs"]
 mod bot_policy;
 
@@ -50,6 +53,151 @@ fn show(e: &mut Engine, since: i64, opts: &Options) {
     print!("{}", textui::menu_text(e, &m));
 }
 
+/// `agent_cli session new|obs|act|serve DIR …` (docs/eval-interface.md); the logic is
+/// `textui::session`, this only reads flags and prints.
+fn session_cli(a: &[String]) {
+    let sub = a.get(2).map(String::as_str).unwrap_or("");
+    let dir = PathBuf::from(a.get(3).cloned().unwrap_or_default());
+    if dir.as_os_str().is_empty() {
+        fail(t!("cli.run.usage"));
+    }
+    let rest: Vec<String> = a.iter().skip(4).cloned().collect();
+    let json = rest.iter().any(|x| x == "--json");
+    let print = |o: &Observation| {
+        if json {
+            println!("{}", serde_json::to_string(o).unwrap());
+        } else {
+            print!("{}", session::render(o));
+        }
+    };
+    // A refused action changes nothing: show the same visit with the reason.
+    let refused = |err: String| -> ! {
+        match session::observe(&dir) {
+            Ok(mut o) => {
+                o.results = vec![err];
+                print(&o);
+                std::process::exit(1);
+            }
+            Err(_) => fail(err),
+        }
+    };
+    let mut i = 0;
+    let next = |i: &mut usize| -> String {
+        *i += 1;
+        rest.get(*i)
+            .cloned()
+            .unwrap_or_else(|| fail(t!("cli.session.err.arg", arg = rest[*i - 1])))
+    };
+    match sub {
+        "new" => {
+            let mut s = Setup {
+                lang: std::env::var("AGENT_LANG")
+                    .unwrap_or_else(|_| idle_engine::i18n::DEFAULT.into()),
+                ..Setup::default()
+            };
+            while i < rest.len() {
+                match rest[i].as_str() {
+                    "--seed" => {
+                        let v = next(&mut i);
+                        s.seed = v
+                            .parse()
+                            .unwrap_or_else(|_| fail(t!("cli.session.err.arg", arg = v)));
+                    }
+                    "--schedule" => {
+                        s.schedule = Schedule::parse(&next(&mut i)).unwrap_or_else(|e| fail(e))
+                    }
+                    "--hours" => {
+                        let v = next(&mut i);
+                        s.hours = v
+                            .parse()
+                            .unwrap_or_else(|_| fail(t!("cli.session.err.hours", s = v)));
+                    }
+                    "--player" => s.player = next(&mut i),
+                    "--no-research" => s.research = false,
+                    "--json" => {}
+                    x => fail(t!("cli.session.err.arg", arg = x)),
+                }
+                i += 1;
+            }
+            print(&session::create(&dir, &s).unwrap_or_else(|e| fail(e)));
+        }
+        "obs" => print(&session::observe(&dir).unwrap_or_else(|e| fail(e))),
+        "act" => {
+            let mut act = Action::default();
+            let (mut feel, mut why) = (None::<String>, None::<String>);
+            while i < rest.len() {
+                match rest[i].as_str() {
+                    "--action" => {
+                        let v = next(&mut i);
+                        let base: Action = serde_json::from_str(&v)
+                            .unwrap_or_else(|e| refused(t!("cli.session.err.bad_action", err = e)));
+                        act.pick.extend(base.pick);
+                        act.commands.extend(base.commands);
+                        act.feel = base.feel.or(act.feel);
+                        act.scores = base.scores.or(act.scores);
+                    }
+                    "--pick" => act.pick.extend(
+                        next(&mut i)
+                            .split(',')
+                            .map(str::trim)
+                            .filter(|x| !x.is_empty())
+                            .map(String::from),
+                    ),
+                    // Not JSON: kept as text, so it fails as an item of the visit.
+                    "--cmd" => {
+                        let v = next(&mut i);
+                        act.commands
+                            .push(serde_json::from_str(&v).unwrap_or(serde_json::Value::String(v)));
+                    }
+                    "--feel" => feel = Some(next(&mut i)),
+                    "--why" => why = Some(next(&mut i)),
+                    "--score" => {
+                        let v = next(&mut i);
+                        let (dim, rest) = v
+                            .split_once('=')
+                            .unwrap_or_else(|| fail(t!("cli.session.err.score_arg", s = v)));
+                        let (n, why) = rest.split_once(':').unwrap_or((rest, ""));
+                        let score = n
+                            .trim()
+                            .parse()
+                            .unwrap_or_else(|_| fail(t!("cli.session.err.score_arg", s = v)));
+                        act.scores.get_or_insert_with(Default::default).insert(
+                            dim.trim().to_string(),
+                            Score {
+                                score,
+                                why: why.to_string(),
+                            },
+                        );
+                    }
+                    "--json" => {}
+                    x => fail(t!("cli.session.err.arg", arg = x)),
+                }
+                i += 1;
+            }
+            if feel.is_some() || why.is_some() {
+                let old = act.feel.take().unwrap_or(Feel {
+                    label: String::new(),
+                    text: String::new(),
+                });
+                act.feel = Some(Feel {
+                    label: feel.unwrap_or(old.label),
+                    text: why.unwrap_or(old.text),
+                });
+            }
+            match session::act(&dir, &act) {
+                Ok(o) => print(&o),
+                Err(err) => refused(err),
+            }
+        }
+        "serve" => {
+            let stdin = std::io::stdin();
+            session::serve(&dir, stdin.lock(), std::io::stdout().lock())
+                .unwrap_or_else(|e| fail(e));
+        }
+        _ => fail(t!("cli.run.usage")),
+    }
+}
+
 fn main() {
     if let Ok(lang) = std::env::var("AGENT_LANG") {
         idle_engine::i18n::set_locale(&lang).unwrap_or_else(|e| fail(e));
@@ -60,6 +208,7 @@ fn main() {
     let path = a.get(2).cloned().unwrap_or_default();
     let num = |i: usize, d: i64| a.get(i).and_then(|s| s.parse().ok()).unwrap_or(d);
     match cmd {
+        "session" => session_cli(&a),
         "new" => {
             let mut e = textui::new_game(num(3, 0) as u64);
             textui::claim_tasks(&mut e);

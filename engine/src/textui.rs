@@ -3,6 +3,9 @@
 //! client and must keep up with it: what a player can see or do there should be reachable here.
 //! `reach` lists every command with no catch-all arm, so a new command does not compile until
 //! someone decides how the text client offers it.
+//!
+//! `session` is the play-session protocol on top (docs/eval-interface.md): schedule, observation
+//! and action JSON, session directory. It reads and writes files, so it stays out of wasm.
 use crate::api::{Engine, RoutePreview};
 use crate::combat::Outcome;
 use crate::commands::Command;
@@ -11,6 +14,9 @@ use crate::geom;
 use crate::state::Dial;
 use crate::t;
 use crate::view::{OpView, View};
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod session;
 
 pub const T0: i64 = 1_700_000_000;
 /// Longest single wait, so decisions come at least this often.
@@ -261,9 +267,19 @@ pub fn hour(e: &Engine, v: &View) -> i64 {
     (e.state.time - v.started_at) / 3600
 }
 
+/// Device name in text-client saves (it is part of the save, so replays use it too).
+pub const DEVICE: &str = "agent";
+
 /// A cycle on map 0 with the three rules the scripted bot also uses.
 pub fn new_game(seed: u64) -> Engine {
-    let mut e = Engine::new(seed, T0, "agent");
+    let mut e = Engine::new(seed, T0, DEVICE);
+    setup(&mut e);
+    e
+}
+
+/// The commands `new_game` sends to a fresh `Engine::new(seed, T0, DEVICE)`; a play session runs
+/// them with the trace on so they land in its journal.
+pub fn setup(e: &mut Engine) {
     e.command(&Command::ChooseMap { index: 0 }).unwrap();
     for r in ["auto_claim", "auto_recruit", "auto_counter"] {
         e.command(&Command::SetRule {
@@ -272,7 +288,6 @@ pub fn new_game(seed: u64) -> Engine {
         })
         .unwrap();
     }
-    e
 }
 
 /// Finished 见习任务 are free; both players claim them automatically.
