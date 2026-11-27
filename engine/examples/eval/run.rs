@@ -241,6 +241,29 @@ pub fn field_samples(e: &Engine) -> Vec<(&'static str, Sample)> {
     out
 }
 
+/// Every squad against every tile, scored by the combat model and by simulation.
+pub fn field_model_rows(
+    e: &Engine,
+    p: &crate::model::Profile,
+) -> Vec<(crate::model::Margins, Sample)> {
+    let st = &e.state;
+    let class = |u: &UnitSpec| {
+        let id: u32 = u.key.strip_prefix("op:")?.parse().ok()?;
+        st.op(id).map(|o| o.class.clone())
+    };
+    let mut out = Vec::new();
+    for specs in squads(e) {
+        for tile in fight_tiles(e) {
+            let input = routes::route_battle(st, &specs, tile, false);
+            out.push((
+                crate::model::margins(p, &input, &class),
+                power::sample(&input, ring(tile)),
+            ));
+        }
+    }
+    out
+}
+
 /// Strongest squad's S (with doctrines) and its median ρ against the tiles of ring `r`.
 fn squad_power(e: &Engine, r: i32) -> (Option<f64>, Option<f64>) {
     let tiles: Vec<u16> = fight_tiles(e).collect();
@@ -450,4 +473,33 @@ pub fn run(persona: Persona, seeds: &[u64], hours: i64, threads: usize) -> RunFi
         }
     }
     f
+}
+
+/// One seed hour by hour (for checking the pacing model against the bot): hour, owned tiles,
+/// deepest ring, squads with members, operatives, claimable tiles, unowned fightable tiles of the
+/// next ring with their wardenship.
+pub fn timeline(seed: u64, persona: Persona, hours: i64) {
+    let mut e = new_game(seed, persona);
+    println!("hour owned ring squads ops claimable next_ring_warden");
+    for h in 1..=hours {
+        if persona.acts(h - 1) {
+            bot_policy::step(&mut e);
+        }
+        e.advance(T0 + h * 3600);
+        let cy = &e.state.cycle;
+        let deepest = deepest_owned(&e);
+        let warden: Vec<i32> = fight_tiles(&e)
+            .filter(|&t| ring(t) == deepest + 1)
+            .map(|t| cy.tiles[t as usize].warden)
+            .filter(|w| *w > 0)
+            .collect();
+        println!(
+            "{h} {} {deepest} {} {} {} {:?}",
+            cy.tiles.iter().filter(|t| t.owned).count(),
+            cy.squads.iter().filter(|s| !s.members.is_empty()).count(),
+            cy.operatives.len(),
+            cy.tiles.iter().filter(|t| t.claimable()).count(),
+            warden
+        );
+    }
 }

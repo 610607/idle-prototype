@@ -1,0 +1,242 @@
+{
+  "archive_habit": {
+    "kind": "trait",
+    "mean": 0.02,
+    "best": 0.08
+  },
+  "barrier_runner": {
+    "kind": "trait",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "bloodhound": {
+    "kind": "doctrine",
+    "mean": 0.2,
+    "best": 0.2
+  },
+  "burst": {
+    "kind": "doctrine",
+    "mean": 0.1,
+    "best": 0.1
+  },
+  "capacitor": {
+    "kind": "equipment",
+    "mean": 0.03,
+    "best": 0.13
+  },
+  "chain": {
+    "kind": "doctrine",
+    "mean": 0.05,
+    "best": 0.05
+  },
+  "conductor": {
+    "kind": "trait",
+    "mean": 0.03,
+    "best": 0.13
+  },
+  "decoy": {
+    "kind": "trait",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "defuser": {
+    "kind": "trait",
+    "mean": -0.03,
+    "best": 0.0
+  },
+  "electrician_roots": {
+    "kind": "trait",
+    "mean": 0.02,
+    "best": 0.05
+  },
+  "erosion_feeder": {
+    "kind": "trait",
+    "mean": 0.02,
+    "best": 0.05
+  },
+  "etch": {
+    "kind": "doctrine",
+    "mean": 0.03,
+    "best": 0.03
+  },
+  "field_dressing": {
+    "kind": "doctrine",
+    "mean": 0.05,
+    "best": 0.05
+  },
+  "fog_sight": {
+    "kind": "trait",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "fog_walker": {
+    "kind": "trait",
+    "mean": 0.0,
+    "best": 0.05
+  },
+  "ionize": {
+    "kind": "doctrine",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "iron_lung": {
+    "kind": "trait",
+    "mean": 0.02,
+    "best": 0.05
+  },
+  "mist_pathfinder": {
+    "kind": "trait",
+    "mean": 0.02,
+    "best": 0.05
+  },
+  "night_market_voice": {
+    "kind": "trait",
+    "mean": 0.03,
+    "best": 0.1
+  },
+  "night_watch": {
+    "kind": "trait",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "overclock": {
+    "kind": "doctrine",
+    "mean": 0.3,
+    "best": 0.3
+  },
+  "overclock_nerve": {
+    "kind": "trait",
+    "mean": 0.09,
+    "best": 0.25
+  },
+  "overflow": {
+    "kind": "doctrine",
+    "mean": -0.05,
+    "best": -0.05
+  },
+  "party_line": {
+    "kind": "trait",
+    "mean": 0.0,
+    "best": 0.0
+  },
+  "plating": {
+    "kind": "doctrine",
+    "mean": 0.2,
+    "best": 0.2
+  },
+  "precise": {
+    "kind": "trait",
+    "mean": -0.01,
+    "best": 0.03
+  },
+  "quick_draw": {
+    "kind": "trait",
+    "mean": -0.01,
+    "best": 0.05
+  },
+  "radio_tinker": {
+    "kind": "trait",
+    "mean": 0.02,
+    "best": 0.08
+  },
+  "react": {
+    "kind": "doctrine",
+    "mean": 0.23,
+    "best": 0.23
+  },
+  "resonance": {
+    "kind": "trait",
+    "mean": 0.04,
+    "best": 0.13
+  },
+  "resonance_coil": {
+    "kind": "equipment",
+    "mean": 0.04,
+    "best": 0.13
+  },
+  "rift_ink": {
+    "kind": "equipment",
+    "mean": 0.15,
+    "best": 0.28
+  },
+  "rift_neighbor": {
+    "kind": "trait",
+    "mean": 0.03,
+    "best": 0.08
+  },
+  "rift_sensitive": {
+    "kind": "trait",
+    "mean": 0.15,
+    "best": 0.28
+  },
+  "riot_shield": {
+    "kind": "equipment",
+    "mean": 0.03,
+    "best": 0.1
+  },
+  "riot_veteran": {
+    "kind": "trait",
+    "mean": 0.08,
+    "best": 0.25
+  },
+  "road_veteran": {
+    "kind": "trait",
+    "mean": 0.06,
+    "best": 0.15
+  },
+  "rooftop_watcher": {
+    "kind": "trait",
+    "mean": 0.08,
+    "best": 0.2
+  },
+  "scarred": {
+    "kind": "trait",
+    "mean": 0.01,
+    "best": 0.03
+  },
+  "scavenger_eye": {
+    "kind": "trait",
+    "mean": 0.08,
+    "best": 0.13
+  },
+  "shield_burst": {
+    "kind": "trait",
+    "mean": 0.06,
+    "best": 0.15
+  },
+  "silver_tongue": {
+    "kind": "trait",
+    "mean": 0.01,
+    "best": 0.05
+  },
+  "spall": {
+    "kind": "doctrine",
+    "mean": 0.03,
+    "best": 0.03
+  },
+  "spotter": {
+    "kind": "doctrine",
+    "mean": 0.03,
+    "best": 0.03
+  },
+  "spotter_scope": {
+    "kind": "equipment",
+    "mean": 0.02,
+    "best": 0.05
+  },
+  "steady_hand": {
+    "kind": "trait",
+    "mean": 0.03,
+    "best": 0.05
+  },
+  "street_smart": {
+    "kind": "trait",
+    "mean": 0.0,
+    "best": 0.05
+  },
+  "tuning_fork": {
+    "kind": "equipment",
+    "mean": 0.04,
+    "best": 0.08
+  }
+}

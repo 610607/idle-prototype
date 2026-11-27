@@ -7,6 +7,10 @@
 //! cargo run --release --example eval -- compare A B              # paired by seed, 90% bootstrap CI
 //! cargo run --release --example eval -- numbers                  # L0: encounter curve D(r)
 //! cargo run --release --example eval -- calibrate [lab|field] [persona] [--seeds N]   # L1
+//! cargo run --release --example eval -- model [--seeds N]        # combat model vs simulation
+//! cargo run --release --example eval -- pace [--vs RUN] [--squads N] [--patch JSON]  # pacing model
+//! cargo run --release --example eval -- price [--bless]          # 词条 price card (eval/prices.json)
+//! cargo run --release --example eval -- timeline SEED [persona] [--hours H] [--patch JSON]
 //! ```
 //!
 //! Personas: `greedy` (the reference bot: nearest ring first), `explorer` (deepest winnable target
@@ -15,7 +19,9 @@
 #[path = "../bot_policy.rs"]
 mod bot_policy;
 mod calib;
+mod model;
 mod power;
+mod price;
 mod run;
 mod stats;
 #[path = "../synergy.rs"]
@@ -253,6 +259,50 @@ fn main() {
             compare(&a, &b);
         }
         Some("numbers") => calib::numbers(),
+        Some("pace") => {
+            if let Some(p) = arg(&args, "--patch") {
+                idle_engine::content::patch_balance(&p).unwrap();
+            }
+            let bot = arg(&args, "--vs").map(|f| read_run(&f));
+            let every = bot
+                .as_ref()
+                .and_then(|f| Persona::parse(&f.persona))
+                .map_or(1, |p| p.every);
+            let squads: f64 = arg(&args, "--squads").map_or(1.0, |s| s.parse().unwrap());
+            let seeds: Vec<u64> = (0..8).collect();
+            model::pace(&model::profile(), &seeds, every, squads, bot.as_ref());
+        }
+        Some("price") => {
+            let card = price::card();
+            price::print(&card, &price::load());
+            if args.iter().any(|a| a == "--bless") {
+                price::bless(&card);
+            }
+        }
+        Some("timeline") => {
+            let seed: u64 = args.get(1).map_or(0, |s| s.parse().unwrap());
+            let persona = args
+                .get(2)
+                .filter(|a| !a.starts_with("--"))
+                .map(|p| Persona::parse(p).unwrap_or_else(|| panic!("unknown persona {p}")))
+                .unwrap_or(Persona::REFERENCE);
+            let hours: i64 = arg(&args, "--hours").map_or(72, |s| s.parse().unwrap());
+            if let Some(p) = arg(&args, "--patch") {
+                idle_engine::content::patch_balance(&p).unwrap();
+            }
+            run::timeline(seed, persona, hours);
+        }
+        Some("model") => {
+            let p = model::profile();
+            model::print_profile(&p);
+            model::report_model("lab.traits", &model::lab_rows(&p));
+            let n: u64 = arg(&args, "--seeds").map_or(8, |s| s.parse().unwrap());
+            let seeds: Vec<u64> = (0..n).collect();
+            model::report_model(
+                "field.greedy",
+                &calib::field_model(Persona::REFERENCE, &seeds, &p),
+            );
+        }
         Some("calibrate") => {
             let which = args.get(1).map(String::as_str).unwrap_or("all");
             if which == "lab" || which == "all" {

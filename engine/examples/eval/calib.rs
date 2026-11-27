@@ -126,9 +126,11 @@ pub fn report(label: &str, samples: &[Sample]) {
         .iter()
         .filter(|x| (power::predict(s, b, x.rho) > 0.5) == x.won)
         .count();
+    let timeouts = samples.iter().filter(|x| !x.won && x.left > 0.0).count();
     println!(
-        "# calibrate {label}: {n} battles, {:.2} won",
-        wins as f64 / n.max(1) as f64
+        "# calibrate {label}: {n} battles, {:.2} won; {:.2} of losses are timeouts (allies still standing)",
+        wins as f64 / n.max(1) as f64,
+        timeouts as f64 / (n - wins).max(1) as f64
     );
     println!(
         "calib.slope {s:.2}  calib.rho50 {rho50:.2}  calib.auc {}  calib.acc_rho1 {:.3}  calib.acc_fit {:.3}",
@@ -308,4 +310,36 @@ pub fn lab_by_rung(samples: &[([usize; 3], Sample)]) {
         }
         println!();
     }
+}
+
+/// The bot's squads at FIELD_HOURS, scored by the combat model and by simulation.
+pub fn field_model(
+    persona: Persona,
+    seeds: &[u64],
+    p: &crate::model::Profile,
+) -> Vec<(crate::model::Margins, Sample)> {
+    std::thread::scope(|s| {
+        let hs: Vec<_> = (0..4)
+            .map(|k| {
+                let mine: Vec<u64> = seeds.iter().copied().skip(k).step_by(4).collect();
+                s.spawn(move || {
+                    let mut out = Vec::new();
+                    for seed in mine {
+                        let mut e = run::new_game(seed, persona);
+                        for h in 1..=*FIELD_HOURS.last().unwrap() {
+                            if (h - 1) % persona.every == 0 {
+                                crate::bot_policy::step(&mut e);
+                            }
+                            e.advance(run::T0 + h * 3600);
+                            if FIELD_HOURS.contains(&h) {
+                                out.extend(run::field_model_rows(&e, p));
+                            }
+                        }
+                    }
+                    out
+                })
+            })
+            .collect();
+        hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
+    })
 }

@@ -10,11 +10,11 @@
   "spend_gap.max_h": [{ "stat": "p50", "max": 4 }],
   "frontier_win.h24": [{ "stat": "p50", "min": 0.3, "max": 0.8 }],
   "deep_win.h24": [{ "stat": "p50", "max": 0.3 }],
-  "reach_h.r1": [{ "stat": "p50", "min": 1.6, "max": 2.4, "missing_fails": true }],
-  "reach_h.r2": [{ "stat": "p50", "min": 4, "max": 6, "missing_fails": true }],
-  "reach_h.r3": [{ "stat": "p50", "min": 8, "max": 12, "missing_fails": true }],
-  "reach_h.r4": [{ "stat": "p50", "min": 14.4, "max": 21.6, "missing_fails": true }],
-  "reach_h.r5": [{ "stat": "p50", "min": 24, "max": 36, "missing_fails": true }],
-  "reach_h.r6": [{ "stat": "p50", "min": 38.4, "max": 57.6, "missing_fails": true }],
-  "reach_h.r7": [{ "stat": "p50", "min": 57.6, "max": 86.4, "missing_fails": true }]
+  "reach_h.r1": [{ "stat": "p50", "min": 1.6, "max": 2.4, "missing_fails": true, "personas": ["greedy"] }],
+  "reach_h.r2": [{ "stat": "p50", "min": 4, "max": 6, "missing_fails": true, "personas": ["greedy"] }],
+  "reach_h.r3": [{ "stat": "p50", "min": 8, "max": 12, "missing_fails": true, "personas": ["greedy"] }],
+  "reach_h.r4": [{ "stat": "p50", "min": 14.4, "max": 21.6, "missing_fails": true, "personas": ["greedy"] }],
+  "reach_h.r5": [{ "stat": "p50", "min": 24, "max": 36, "missing_fails": true, "personas": ["greedy"] }],
+  "reach_h.r6": [{ "stat": "p50", "min": 38.4, "max": 57.6, "missing_fails": true, "personas": ["greedy"] }],
+  "reach_h.r7": [{ "stat": "p50", "min": 57.6, "max": 86.4, "missing_fails": true, "personas": ["greedy"] }]
 }

@@ -16,6 +16,13 @@
 - 新命令不改文字版编译不过：`textui::reach` 没有兜底分支，要决定它进菜单、只走 `--json`、自动做还是轮回之间；`textui::samples` 和 `cli.cmd.<命令>` 的说明由测试检查有没有漏。
 - 改完跑一遍：`cargo run --release --example agent_cli -- new /tmp/t.json 0`，再 `do /tmp/t.json 1 --wait 4`，确认新东西出现在局面或菜单里。
 
+## 数值评估（docs/balance-eval.md、docs/balance-model.md）
+
+- 新系统、新词条都要接进评估工具 `engine/examples/eval`，按 `docs/balance-eval.md`“新系统怎么接入”的清单在同一个改动里补齐：指标、机器人会用到它、合格区间、模型系数。
+- 新特质、装备、学说跑 `cargo run --release --example eval -- price --bless`，把价格写进 `engine/eval/prices.json` 一起提交；`cargo test` 里的 `eval_prices` 测试会拦漏测价的词条。
+- 改数值：先用 `eval pace --patch '{…}'` 和 `eval model` 算预期，再用 `eval run`（参考玩家是 `greedy`）+ `eval check` / `eval compare` 验证；模型和机器人对不上超过两成，要补模型或写明原因。
+- 机器人用不到的命令会出现在 `commands.never`，等于没被评估：给 `examples/bot_policy.rs` 加规则或加人格。
+
 ## 子代理
 
 - 同时运行的子代理最多 3 个，后台的也算，workflow 里的也算。要跑更多（比如多局 LLM 试玩），分批：一批全部结束再开下一批。
