@@ -314,7 +314,8 @@ button.list-item:disabled { cursor: not-allowed; opacity: 0.55; }
 .pending-item.route::before { background: var(--hazard); }
 
 /* ---------------------------------------------------------------- deltas (red → green) */
-.deltas { display: grid; grid-template-columns: 1fr auto auto auto; gap: 3px 10px; align-items: center; font-size: 13px; }
+.deltas { display: grid; grid-template-columns: minmax(5em, auto) minmax(0, 1fr) auto minmax(0, 1fr); gap: 3px 10px; align-items: center; font-size: 13px; }
+.deltas > span { min-width: 0; overflow-wrap: anywhere; }
 .deltas .arrow { color: var(--ink-3); }
 .deltas .after.good { color: var(--good); }
 .deltas .after.bad { color: var(--bad); }

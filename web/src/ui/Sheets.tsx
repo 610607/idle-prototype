@@ -398,6 +398,7 @@ export function DistrictSheet({ district, onClose }: { district: number; onClose
         <>
           <DistrictPriority d={d} />
           <DistrictPolicy d={d} />
+          <DistrictCustomize d={d} />
           <Section title="格子" icon="map" hint={`${d.owned}/${d.total}`}>
             <div className="row wrap" style={{ gap: 4 }}>
               {d.tiles.map((i) => (
@@ -527,6 +528,146 @@ function DistrictPolicy({ d }: { d: DistrictView }) {
           </button>
         </div>
       ) : null}
+    </Section>
+  );
+}
+
+const RARITY_FLOORS: [number | null, string][] = [
+  [null, '不保底'],
+  [1, 'R'],
+  [2, 'SR'],
+  [3, 'SSR'],
+];
+
+/** 定制招募: spend this district's residents on a candidate of your choosing. */
+function DistrictCustomize({ d }: { d: DistrictView }) {
+  const { game, run, view } = useCtx();
+  const cz = d.customize;
+  const [prof, setProf] = useState<string | null>(null);
+  const [cls, setCls] = useState<string | null>(null);
+  const [lock, setLock] = useState<string | null>(null);
+  const [rarity, setRarity] = useState<number | null>(null);
+  const opt = cz.options.find((o) => o.prof === prof) ?? cz.options.find((o) => o.ok) ?? null;
+  const klass = opt?.classes.find((c) => c.id === cls && c.ok) ?? opt?.classes[0] ?? null;
+  const cost = cz.base + (klass?.mixed ? cz.class_cost : 0) + (lock ? cz.lock_cost : 0) + (rarity !== null ? cz.rarity_cost[rarity]! : 0);
+  const cmd =
+    opt && klass
+      ? ({ cmd: 'customize', district: d.id, profession: opt.prof, class: klass.mixed ? klass.id : null, lock, rarity } as const)
+      : null;
+  const key = JSON.stringify(cmd);
+  const dry = useMemo(
+    () => (cmd && cz.unlocked && opt?.ok ? game.dryRun(cmd) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key, cz.unlocked, opt?.ok, game, view.revision, view.time],
+  );
+  const hint = cz.unlocked ? `用居民换一名指定的候选 · 现有 ${d.population} 人` : '未开放';
+  return (
+    <Section title="定制招募" icon="candidate" hint={hint}>
+      {!cz.unlocked ? (
+        <div className="small muted">{cz.hint}。</div>
+      ) : cz.options.length === 0 ? (
+        <div className="small muted">这个街区还没有人在岗，带不出新人。</div>
+      ) : (
+        <div className="stack" style={{ gap: 8 }}>
+          <div className="stack" style={{ gap: 4 }}>
+            {cz.options.map((o) => (
+              <button
+                key={o.prof}
+                disabled={!o.ok}
+                className={'list-item' + (opt?.prof === o.prof ? ' selected' : '')}
+                onClick={() => {
+                  setProf(o.prof);
+                  setCls(null);
+                  setLock(null);
+                }}
+              >
+                <Icon id={o.prof_icon} size={18} />
+                <div className="grow">
+                  <b>{o.prof_name}</b> <span className="small muted">在岗 {o.workers}</span>
+                  <div className="tiny faint">{o.reason ?? `带出 ${o.classes.map((c) => c.name).join(' / ')}`}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          {opt && opt.ok && opt.classes.length > 1 ? (
+            <div className="stack" style={{ gap: 4 }}>
+              <div className="seg">
+                {opt.classes.map((c) => (
+                  <button
+                    key={c.id}
+                    disabled={!c.ok}
+                    aria-pressed={klass?.id === c.id}
+                    onClick={() => {
+                      setCls(c.id);
+                      setLock(null);
+                    }}
+                  >
+                    {c.name}
+                    {c.mixed ? ` +${cz.class_cost}` : ''}
+                  </button>
+                ))}
+              </div>
+              {opt.classes
+                .filter((c) => !c.ok && c.reason)
+                .map((c) => (
+                  <div key={c.id} className="tiny faint">
+                    {c.name}：{c.reason}
+                  </div>
+                ))}
+            </div>
+          ) : null}
+          {opt && opt.ok && klass && klass.traits.length ? (
+            <div className="stack" style={{ gap: 4 }}>
+              <div className="small">
+                指定一条词条 <span className="faint">+{cz.lock_cost} 人</span>
+              </div>
+              <button className={'list-item' + (lock === null ? ' selected' : '')} onClick={() => setLock(null)}>
+                <div className="grow small">不指定（随机）</div>
+              </button>
+              {klass.traits.map((t) => (
+                <button key={t.id} className={'list-item' + (lock === t.id ? ' selected' : '')} onClick={() => setLock(t.id)}>
+                  <Icon id={t.icon} size={16} />
+                  <div className="grow">
+                    <b className="small">{t.name}</b>
+                    <div className="tiny muted">{t.desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {opt && opt.ok ? (
+            <div className="stack" style={{ gap: 4 }}>
+              <div className="small">稀有度保底</div>
+              <div className="seg">
+                {RARITY_FLOORS.map(([r, name]) => (
+                  <button key={name} aria-pressed={rarity === r} onClick={() => setRarity(r)}>
+                    {name}
+                    {r !== null && cz.rarity_cost[r] ? ` +${cz.rarity_cost[r]}` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {opt && opt.ok ? (
+            <div className="card flat">
+              <div className="small">
+                共消耗 <b>{cost}</b> 名居民（现有 {d.population}）。空出的岗位由剩下的人按优先级补，人口按住房和信任慢慢长回来。
+              </div>
+              <div style={{ marginTop: 6 }}>
+                <DryRunView dry={dry} />
+              </div>
+              <button
+                className="btn small primary"
+                style={{ marginTop: 6 }}
+                disabled={!dry?.ok}
+                onClick={() => cmd && run(cmd, '定制候选已进招募池')}
+              >
+                下单定制
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
     </Section>
   );
 }

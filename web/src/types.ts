@@ -219,6 +219,40 @@ export interface DistrictView {
   policy_options: PolicyOption[];
   priority: string[];
   flavor: TraitView;
+  /** Residents gained per hour x100 (0 when housing is full). */
+  growth_x100: number;
+  customize: CustomizeView;
+}
+
+/** 定制招募 for one district: what can be ordered here and what it costs (in residents). */
+export interface CustomizeView {
+  unlocked: boolean;
+  hint: string;
+  base: number;
+  class_cost: number;
+  lock_cost: number;
+  rarity_cost: [number, number, number, number];
+  options: CustomizeOption[];
+}
+
+export interface CustomizeOption {
+  prof: string;
+  prof_name: string;
+  prof_icon: string;
+  workers: number;
+  ok: boolean;
+  reason: string | null;
+  classes: CustomizeClass[];
+}
+
+export interface CustomizeClass {
+  id: string;
+  name: string;
+  icon: string;
+  mixed: boolean;
+  ok: boolean;
+  reason: string | null;
+  traits: TraitView[];
 }
 
 export interface TileResultView {
@@ -518,6 +552,7 @@ export type Command =
   | { cmd: 'set_dial'; tile: number; dial: Dial }
   | { cmd: 'hire'; candidate: number }
   | { cmd: 'dismiss'; candidate: number }
+  | { cmd: 'customize'; district: number; profession: string; class: string | null; lock: string | null; rarity: number | null }
   | { cmd: 'retire'; op: number }
   | { cmd: 'set_policy'; district: number; policy: string | null }
   | { cmd: 'set_priority'; district: number; priority: string[] }

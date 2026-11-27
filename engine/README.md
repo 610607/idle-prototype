@@ -41,7 +41,7 @@ cargo run --release --example doctrines      # 规则改写发给全队：单独
 cargo run --release --example fixtures       # 守城：驻守职业 × 设施固定物组合
 cargo run --release --example population     # 人口、岗位、闲置、人才和候选从哪来（docs/ideas.md）
 cargo run --release --example customize      # 定制新队员值多少：指定词条 / 稀有度保底（加 loop 开闭环）
-cargo run --release --example custcost       # 定制一单的代价：下单和不下单各跑 24 小时比较
+cargo run --release --example custcost       # 定制一单的代价：每个能下单的街区，下单和不下单各跑 24 小时比较
 ```
 
 `population` 和 `custcost` 可以多给一个 JSON 参数临时改数值（`content::patch_balance`，只在内容第一次加载前有效），比如复现人口改稀缺之前的旧数值：

@@ -194,6 +194,112 @@ pub struct DistrictView {
     pub policy_options: Vec<PolicyOption>,
     pub priority: Vec<String>,
     pub flavor: TraitView,
+    /// Residents gained per hour x100 right now (0 when housing is full).
+    pub growth_x100: i32,
+    pub customize: CustomizeView,
+}
+
+/// 定制招募 for one district (docs/ideas.md): what can be ordered here and what it costs.
+#[derive(Serialize)]
+pub struct CustomizeView {
+    pub unlocked: bool,
+    /// Why it is not open yet; empty once open.
+    pub hint: String,
+    /// Residents: base order, mixed class, locked trait, rarity floor (N/R/SR/SSR).
+    pub base: i32,
+    pub class_cost: i32,
+    pub lock_cost: i32,
+    pub rarity_cost: [i32; 4],
+    /// Professions working here (any number), and whether each can train someone.
+    pub options: Vec<CustomizeOption>,
+}
+
+#[derive(Serialize)]
+pub struct CustomizeOption {
+    pub prof: String,
+    pub prof_name: String,
+    pub prof_icon: String,
+    pub workers: i32,
+    pub ok: bool,
+    pub reason: Option<String>,
+    pub classes: Vec<CustomizeClass>,
+}
+
+#[derive(Serialize)]
+pub struct CustomizeClass {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub mixed: bool,
+    pub ok: bool,
+    pub reason: Option<String>,
+    /// Traits that can be locked (empty for classes with fixed traits).
+    pub traits: Vec<TraitView>,
+}
+
+fn customize_view(state: &GameState, dc: &economy::DistrictCalc) -> CustomizeView {
+    let c = content();
+    let b = balance();
+    let unlocked = actions::customize_unlocked(state);
+    let workers = |p: &str| dc.workers.get(p).copied().unwrap_or(0);
+    let class_entry = |id: &str, mixed: bool, reason: Option<String>| {
+        let cl = &c.classes[id];
+        CustomizeClass {
+            id: id.into(),
+            name: cl.name.clone(),
+            icon: cl.icon.clone(),
+            mixed,
+            ok: reason.is_none(),
+            reason,
+            traits: if cl.fixed_traits.is_empty() {
+                cl.trait_pool.iter().map(|t| trait_view(t, false)).collect()
+            } else {
+                vec![]
+            },
+        }
+    };
+    let options = c
+        .professions
+        .iter()
+        .filter(|p| workers(&p.id) > 0)
+        .map(|p| {
+            let mut classes = vec![class_entry(&p.class, false, None)];
+            for m in c.mixed.iter().filter(|m| m.a == p.id || m.b == p.id) {
+                let other = if m.a == p.id { &m.b } else { &m.a };
+                let reason = (workers(other) < 4).then(|| {
+                    let on = c
+                        .profession(other)
+                        .map(|x| x.name.clone())
+                        .unwrap_or_default();
+                    format!("还要{}在岗满 4 人", on)
+                });
+                classes.push(class_entry(&m.class, true, reason));
+            }
+            let ok = workers(&p.id) >= b.customize_base;
+            CustomizeOption {
+                prof: p.id.clone(),
+                prof_name: p.name.clone(),
+                prof_icon: p.icon.clone(),
+                workers: workers(&p.id),
+                ok,
+                reason: (!ok).then(|| format!("在岗满 {} 人才能带新人", b.customize_base)),
+                classes,
+            }
+        })
+        .collect();
+    CustomizeView {
+        unlocked,
+        hint: if unlocked {
+            String::new()
+        } else {
+            "本轮有街区连片，或完成一轮之后开放".into()
+        },
+        base: b.customize_base,
+        class_cost: b.customize_class,
+        lock_cost: b.customize_lock,
+        rarity_cost: b.customize_rarity,
+        options,
+    }
 }
 
 #[derive(Serialize)]
@@ -871,6 +977,8 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 policy_options,
                 priority: d.priority.clone(),
                 flavor: trait_view(&d.flavor, false),
+                growth_x100: dc.growth_rate / 100,
+                customize: customize_view(state, &dc),
             }
         })
         .collect();

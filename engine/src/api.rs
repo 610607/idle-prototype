@@ -53,6 +53,8 @@ pub struct Metrics {
     pub talent_rate: i32,
     pub self_sufficient: bool,
     pub roster: usize,
+    pub population: i32,
+    pub candidates: usize,
 }
 
 /// One row of a red→green preview. `better` is the engine's verdict so the client only colours.
@@ -241,6 +243,8 @@ impl Engine {
                 .sum(),
             self_sufficient: sim::self_sufficient(state),
             roster: cy.operatives.len(),
+            population: cy.districts.iter().map(|d| d.population).sum(),
+            candidates: cy.candidates.len(),
         }
     }
 
@@ -365,8 +369,8 @@ impl Engine {
         if a.talent_rate != b.talent_rate {
             out.push(Delta {
                 label: "人才积累".into(),
-                before: format!("{}/时", a.talent_rate),
-                after: format!("{}/时", b.talent_rate),
+                before: format!("{:.1}/时", a.talent_rate as f64 / 100.0),
+                after: format!("{:.1}/时", b.talent_rate as f64 / 100.0),
                 better: b.talent_rate > a.talent_rate,
             });
         }
@@ -385,6 +389,23 @@ impl Engine {
                 before: a.roster.to_string(),
                 after: b.roster.to_string(),
                 better: b.roster > a.roster,
+            });
+        }
+        if a.population != b.population {
+            out.push(Delta {
+                label: "居民".into(),
+                before: a.population.to_string(),
+                after: b.population.to_string(),
+                better: b.population > a.population,
+            });
+        }
+        // Only new candidates: hiring one away is already shown as a roster change.
+        if b.candidates > a.candidates {
+            out.push(Delta {
+                label: "候选".into(),
+                before: a.candidates.to_string(),
+                after: b.candidates.to_string(),
+                better: b.candidates > a.candidates,
             });
         }
         out

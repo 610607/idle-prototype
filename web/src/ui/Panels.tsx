@@ -370,6 +370,11 @@ export function RosterPanel() {
               ))}
             </div>
           )}
+          {view.districts.some((d) => d.customize.unlocked) ? (
+            <div className="tiny faint" style={{ marginTop: 6 }}>
+              定制招募已开放：在街区页用居民换一名指定职业、词条或稀有度的候选。
+            </div>
+          ) : null}
         </Section>
         <Section title="仓库" icon="equip" hint={`${view.inventory.length} 件`}>
           {view.inventory.length === 0 ? (
