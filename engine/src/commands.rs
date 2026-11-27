@@ -92,6 +92,8 @@ pub enum Command {
     },
     /// Spend intel on a research draw of three doctrines.
     Research,
+    /// Swap the pending draw for three others (scrap).
+    Reroll,
     /// Keep one doctrine from the pending draw.
     PickDoctrine {
         doctrine: String,
@@ -174,6 +176,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         Command::Seal { item, on } => actions::seal(state, item, *on),
         Command::Lock { op, locked } => actions::lock(state, *op, *locked),
         Command::Research => crate::doctrine::research(state),
+        Command::Reroll => crate::doctrine::reroll(state),
         Command::PickDoctrine { doctrine } => crate::doctrine::pick(state, doctrine),
         Command::Archive { doctrine, on } => crate::doctrine::archive(state, doctrine, *on),
         Command::ClaimTask { task } => crate::tasks::claim(state, task),

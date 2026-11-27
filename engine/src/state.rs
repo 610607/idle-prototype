@@ -367,6 +367,9 @@ pub struct Cycle {
     /// Research draws paid for this cycle (drives the intel price).
     #[serde(default)]
     pub research_count: u32,
+    /// 换一批 paid for this cycle (drives the scrap price).
+    #[serde(default)]
+    pub rerolls: u32,
     /// Tag reactions set off this cycle, by id.
     #[serde(default)]
     pub reactions: BTreeMap<String, u32>,

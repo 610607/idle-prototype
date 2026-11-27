@@ -55,6 +55,12 @@ function Draw() {
               </DoctrineCard>
             ))}
           </div>
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="btn small" disabled={!r.reroll_ok} onClick={() => run({ cmd: 'reroll' })}>
+              <Icon id="res-scrap" size={14} /> 换一批（{r.reroll_cost} 废材）
+            </button>
+            <span className="small faint">换掉这三条；本轮每换一次贵一些。</span>
+          </div>
         </>
       ) : (
         <div className="stack" style={{ gap: 6 }}>

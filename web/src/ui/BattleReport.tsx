@@ -184,6 +184,18 @@ function Field({ snap, actor, target }: { snap: SnapUnit[]; actor?: string; targ
 }
 
 function UnitBox({ u, actor, target }: { u: SnapUnit; actor?: string; target?: string }) {
+  if (u.fixture) {
+    return (
+      <div className={'unit ally fixture' + (actor === u.name ? ' actor' : '')} title="设施：不挨打、没有自己的回合，只做反应">
+        <div className="row" style={{ gap: 4 }}>
+          <Icon id={u.icon} />
+          <span className="grow ellipsis">{u.name}</span>
+          <span className="faint tiny">设施</span>
+        </div>
+        {u.pp > 0 ? <div className="faint tiny">PP {u.pp}</div> : null}
+      </div>
+    );
+  }
   const cls = 'unit ' + u.side + (u.alive ? '' : ' dead') + (actor === u.name ? ' actor' : '') + (target === u.name ? ' target' : '');
   const pct = Math.max(0, Math.min(100, (u.hp / Math.max(1, u.max_hp)) * 100));
   const tone = pct < 30 ? 'bad' : pct < 60 ? 'warn' : 'good';

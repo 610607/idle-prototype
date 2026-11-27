@@ -495,6 +495,9 @@ pub struct ResearchView {
     pub cost: i64,
     /// Price rise per draw.
     pub step: i64,
+    /// Scrap for 换一批, and whether there is anything else to draw.
+    pub reroll_cost: i64,
+    pub reroll_ok: bool,
     pub affordable: bool,
     /// Doctrines still drawable this cycle.
     pub left: usize,
@@ -546,6 +549,11 @@ pub fn research_view(state: &GameState) -> ResearchView {
     ResearchView {
         cost,
         step: balance().research_step,
+        reroll_cost: crate::doctrine::reroll_cost(state),
+        reroll_ok: active
+            && !cy.research_offers.is_empty()
+            && !crate::doctrine::pool(state).is_empty()
+            && cy.resources.scrap >= crate::doctrine::reroll_cost(state),
         affordable: active && cy.resources.intel >= cost,
         left: if active {
             crate::doctrine::pool(state).len()
@@ -1217,7 +1225,23 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
 
     // 待你决定: things only the player decides.
     let mut pending = Vec::new();
-    for i in actions::alert_tiles(state) {
+    // Long lists of the same kind fold into one line that opens the tide table.
+    const SHOWN_PER_KIND: usize = 3;
+    let alerts = actions::alert_tiles(state);
+    if alerts.len() > SHOWN_PER_KIND {
+        pending.push(PendingView {
+            kind: "alert_more",
+            text: format!(
+                "共 {} 格告急：停产中。反击、放弃，或先守住还没丢的",
+                alerts.len()
+            ),
+            tile: None,
+            op: None,
+            candidate: None,
+            district: None,
+        });
+    }
+    for i in alerts.into_iter().take(SHOWN_PER_KIND) {
         pending.push(PendingView {
             kind: "alert",
             text: format!("{} 告急：反击、放弃或暂不处理", geom::label(i)),
@@ -1272,7 +1296,25 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         }
     }
     let mut warned = std::collections::BTreeSet::new();
+    let losing: std::collections::BTreeSet<u16> = tide
+        .iter()
+        .filter(|e| !e.held && !e.skipped_alert)
+        .map(|e| e.tile)
+        .collect();
+    if losing.len() > SHOWN_PER_KIND {
+        pending.push(PendingView {
+            kind: "defend_more",
+            text: format!("未来 12 小时有 {} 格会失守：看潮汐表挑要守的", losing.len()),
+            tile: None,
+            op: None,
+            candidate: None,
+            district: None,
+        });
+    }
     for e in tide.iter().filter(|e| !e.held && !e.skipped_alert) {
+        if warned.len() >= SHOWN_PER_KIND {
+            break;
+        }
         if !warned.insert(e.tile) {
             continue;
         }

@@ -312,7 +312,7 @@ export interface TideView {
 }
 
 export interface PendingView {
-  kind: 'map' | 'alert' | 'claim' | 'candidate' | 'policy' | 'route' | 'defend' | 'research';
+  kind: 'map' | 'alert' | 'alert_more' | 'claim' | 'candidate' | 'policy' | 'route' | 'defend' | 'defend_more' | 'research';
   text: string;
   tile?: number;
   op?: number;
@@ -463,6 +463,8 @@ export interface CodexEntry {
 export interface ResearchView {
   cost: number;
   step: number;
+  reroll_cost: number;
+  reroll_ok: boolean;
   affordable: boolean;
   left: number;
   offers: DoctrineView[];
@@ -532,6 +534,7 @@ export interface SnapUnit {
   pp: number;
   tags: number[];
   alive: boolean;
+  fixture?: boolean;
 }
 
 export interface LogEntry {
@@ -625,6 +628,7 @@ export type Command =
   | { cmd: 'seal'; item: string; on: boolean }
   | { cmd: 'lock'; op: number; locked: boolean }
   | { cmd: 'research' }
+  | { cmd: 'reroll' }
   | { cmd: 'claim_task'; task: string }
   | { cmd: 'pick_doctrine'; doctrine: string }
   | { cmd: 'archive'; doctrine: string; on: boolean }

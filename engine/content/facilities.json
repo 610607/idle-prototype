@@ -12,9 +12,13 @@
   { "id": "barricade", "name": "路障", "icon": "fac-barricade", "kind": "defense", "profession": "militia", "jobs": 2,
     "cost": { "scrap": 25 }, "defender_tags": [["fortify", 1]], "radius": 1, "desc": "本格和相邻边界格的守军开局 1 层 [固守]。" },
   { "id": "watchtower", "name": "瞭望点", "icon": "fac-watchtower", "kind": "defense", "profession": "watchman", "jobs": 3, "power": 1,
-    "cost": { "scrap": 35, "parts": 4 }, "reveal": 3, "enemy_tags": [["mark", 1]], "radius": 2, "desc": "揭开半径 3 的迷雾；半径 2 内来敌开局带 1 层 [标记]。" },
+    "cost": { "scrap": 35, "parts": 4 }, "reveal": 3, "enemy_tags": [["mark", 1]], "radius": 2,
+    "fixture": { "atk": 16, "skills": ["mark_follow_up"], "desc": "守城时站在守军一边：敌人被挂上 [标记] 就补一枪。" },
+    "desc": "揭开半径 3 的迷雾；半径 2 内来敌开局带 1 层 [标记]，瞭望点还会对挂上标记的敌人补枪。" },
   { "id": "clinic", "name": "诊所", "icon": "fac-clinic", "kind": "service", "profession": "medic", "jobs": 4, "power": 1,
-    "cost": { "scrap": 45, "parts": 3 }, "trust": 4, "desc": "服务设施：相邻民居信任 +4。告急格反击后恢复更多镇守度。" },
+    "cost": { "scrap": 45, "parts": 3 }, "trust": 4, "radius": 1,
+    "fixture": { "defender_effects": [{ "type": "regen", "bp": 500 }], "desc": "守城时：半径 1 内的守军每回合回复 5% 最大生命。" },
+    "desc": "服务设施：相邻民居信任 +4。半径 1 内守城时守军每回合回血 5%；告急格反击后恢复更多镇守度。" },
   { "id": "streetlamp", "name": "路灯", "icon": "fac-streetlamp", "kind": "service", "jobs": 0, "power": 1,
     "cost": { "scrap": 15, "parts": 2 }, "trust": 3, "enemy_tags": [["mark", 1]], "radius": 0, "desc": "服务设施：相邻民居信任 +3；本格来敌开局带 1 层 [标记]。" },
   { "id": "market", "name": "集市", "icon": "fac-market", "kind": "service", "profession": "worker", "jobs": 4,
@@ -22,5 +26,7 @@
   { "id": "training_ground", "name": "训练场", "icon": "fac-training", "kind": "training", "profession": "militia", "jobs": 2, "power": 1,
     "cost": { "scrap": 60, "parts": 8 }, "talent_bp": 5000, "desc": "本街区人才积累 +50%。" },
   { "id": "grounding_grid", "name": "接地网", "icon": "fac-grounding", "kind": "defense", "profession": "engineer", "jobs": 2, "power": 1,
-    "cost": { "scrap": 40, "parts": 10 }, "grounding": 1, "radius": 0, "desc": "本格守城战里每消耗一层 [震荡]，镇守度 +1。把来敌的震荡变成防线。" }
+    "cost": { "scrap": 40, "parts": 10 }, "grounding": 1, "radius": 0,
+    "fixture": { "atk": 14, "skills": ["aftershock"], "desc": "守城时站在守军一边：每有标签被消耗，就补一下电并挂 [震荡]。" },
+    "desc": "本格守城战里每消耗一层 [震荡]，镇守度 +1；有标签被消耗时补一下电。把来敌的震荡变成防线。" }
 ]

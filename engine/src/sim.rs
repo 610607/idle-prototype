@@ -116,6 +116,7 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         doctrines: vec![],
         research_offers: vec![],
         research_count: 0,
+        rerolls: 0,
         reactions: Default::default(),
     }
 }

@@ -3,7 +3,9 @@
 //! never drops further and is never lost without the player.
 
 use crate::combat::{self, enemy_spec, BattleInput, BattleKind, BattleReport, UnitSpec};
-use crate::content::{balance, content, Act, Cond, Gambit, Row, Tag, Target};
+use crate::content::{
+    balance, content, Act, Cond, FacilityDef, FixtureDef, Gambit, Row, Tag, Target, TraitEffect,
+};
 use crate::economy::{self, EconCalc};
 use crate::geom::{self, ring};
 use crate::operative;
@@ -64,6 +66,32 @@ fn simple_unit(
         effects: vec![],
         start_tags: vec![],
         fixture: false,
+    }
+}
+
+/// A facility standing with the defenders (see `FixtureDef`).
+fn fixture_unit(f: &FacilityDef, fx: &FixtureDef) -> UnitSpec {
+    UnitSpec {
+        key: format!("fac:{}", f.id),
+        name: f.name.clone(),
+        icon: f.icon.clone(),
+        row: Row::Back,
+        max_hp: 1,
+        atk: fx.atk,
+        def: 0,
+        spd: 0,
+        ap: 0,
+        pp: 1,
+        stats: [55; 9],
+        skills: fx.skills.clone(),
+        gambits: vec![],
+        effects: fx
+            .effects
+            .iter()
+            .map(|e| (format!("fac:{}", f.id), e.clone()))
+            .collect(),
+        start_tags: vec![],
+        fixture: true,
     }
 }
 
@@ -192,6 +220,8 @@ pub fn surge_setup(
         .map(|m| m.enemy_tags.clone())
         .unwrap_or_default();
     let mut grounding = 0;
+    let mut fixtures: Vec<String> = Vec::new();
+    let mut defender_effects: Vec<(String, TraitEffect)> = Vec::new();
     for (i, other) in cy.tiles.iter().enumerate() {
         if !other.owned || other.alert() {
             continue;
@@ -211,6 +241,19 @@ pub fn surge_setup(
         if dist <= f.radius {
             ally_tags.extend(f.defender_tags.iter().cloned());
             enemy_tags.extend(f.enemy_tags.iter().cloned());
+            if let Some(fx) = &f.fixture {
+                if !fixtures.contains(&f.id) {
+                    fixtures.push(f.id.clone());
+                    if !fx.skills.is_empty() || !fx.effects.is_empty() {
+                        allies.push(fixture_unit(f, fx));
+                    }
+                    defender_effects.extend(
+                        fx.defender_effects
+                            .iter()
+                            .map(|e| (format!("fac:{}", f.id), e.clone())),
+                    );
+                }
+            }
         }
         if i as u16 == tile && f.grounding > 0 {
             grounding = f.grounding;
@@ -218,6 +261,9 @@ pub fn surge_setup(
     }
     if let Some(p) = policy {
         ally_tags.extend(p.defender_tags.iter().cloned());
+    }
+    for u in allies.iter_mut().filter(|u| !u.fixture) {
+        u.effects.extend(defender_effects.iter().cloned());
     }
     let mut input = BattleInput {
         kind,
@@ -361,5 +407,65 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::TileUse;
+
+    #[test]
+    fn staffed_facilities_stand_with_nearby_defenders() {
+        let mut s = crate::sim::new_game(2, 1_000_000_000 - 1_000_000_000 % 3600, "test");
+        crate::sim::choose_map(&mut s, 0).unwrap();
+        // Two owned city tiles of one district next to each other: a watchtower and a target.
+        let cy = &s.cycle;
+        let (a, b) = cy
+            .districts
+            .iter()
+            .flat_map(|d| d.tiles.iter().map(move |t| (d.id, *t)))
+            .filter(|(_, t)| cy.tiles[*t as usize].terrain == Terrain::City)
+            .flat_map(|(d, t)| {
+                geom::neighbors(t)
+                    .filter(move |n| {
+                        cy.tiles[*n as usize].district == Some(d)
+                            && cy.tiles[*n as usize].terrain == Terrain::City
+                            && !cy.tiles[*n as usize].waves.is_empty()
+                    })
+                    .map(move |n| (t, n))
+            })
+            .next()
+            .unwrap();
+        let d = s.cycle.tiles[a as usize].district.unwrap();
+        for t in [a, b] {
+            let tt = &mut s.cycle.tiles[t as usize];
+            tt.owned = true;
+            tt.warden = 100;
+        }
+        s.cycle.tiles[a as usize].usage = TileUse::Facility {
+            id: "watchtower".into(),
+        };
+        s.cycle.districts[d as usize].population = 20;
+        let calc = economy::calc(&s);
+        let setup = surge_setup(&s, &calc, b, None, BattleKind::Surge)
+            .expect("a surge reaches this border tile");
+        assert!(setup
+            .input
+            .allies
+            .iter()
+            .any(|u| u.fixture && u.key == "fac:watchtower"));
+        // Clinics hand regen to the defenders instead of standing in line.
+        s.cycle.tiles[a as usize].usage = TileUse::Facility {
+            id: "clinic".into(),
+        };
+        let calc = economy::calc(&s);
+        let setup = surge_setup(&s, &calc, b, None, BattleKind::Surge).unwrap();
+        assert!(!setup.input.allies.iter().any(|u| u.fixture));
+        assert!(setup
+            .input
+            .allies
+            .iter()
+            .all(|u| u.effects.iter().any(|(src, _)| src == "fac:clinic")));
     }
 }

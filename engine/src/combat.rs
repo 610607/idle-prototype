@@ -157,6 +157,9 @@ pub struct SnapUnit {
     pub pp: i32,
     pub tags: [i32; 6],
     pub alive: bool,
+    /// A facility standing with the defenders (no HP of its own on the field).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fixture: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -461,6 +464,7 @@ impl<'a> Battle<'a> {
                     pp: u.pp,
                     tags: u.tags,
                     alive: u.alive,
+                    fixture: u.fixture,
                 })
                 .collect();
             self.log.push(LogEntry {

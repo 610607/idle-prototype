@@ -44,15 +44,48 @@ pub fn research(state: &mut GameState) -> ActResult {
     if state.cycle.resources.intel < cost {
         return Err(format!("情报不够（要 {cost}）"));
     }
-    let mut pool: Vec<&DoctrineDef> = pool(state);
-    if pool.is_empty() {
+    if pool(state).is_empty() {
         return Err("能研究的条令都拿到了".into());
     }
     state.cycle.resources.intel -= cost;
     state.cycle.research_count += 1;
+    state.cycle.research_offers = draw(state, true);
+    Ok(())
+}
+
+/// Scrap for the next 换一批 this cycle.
+pub fn reroll_cost(state: &GameState) -> i64 {
+    let b = balance();
+    b.reroll_base + b.reroll_step * state.cycle.rerolls as i64
+}
+
+/// Swap the pending three for three others (scrap; the price rises each time this cycle).
+pub fn reroll(state: &mut GameState) -> ActResult {
+    if state.cycle.research_offers.is_empty() {
+        return Err("先研究一次".into());
+    }
+    if pool(state).is_empty() {
+        return Err("没有别的条令可换".into());
+    }
+    let cost = reroll_cost(state);
+    if state.cycle.resources.scrap < cost {
+        return Err(format!("废材不够（要 {cost}）"));
+    }
+    state.cycle.resources.scrap -= cost;
+    state.cycle.rerolls += 1;
+    state.cycle.research_offers = draw(state, false);
+    Ok(())
+}
+
+/// Up to three distinct doctrines from the pool (which leaves out the pending offers), weighted by
+/// rarity; `hub_first` puts the reaction doctrine in while it is not held.
+fn draw(state: &mut GameState, hub_first: bool) -> Vec<String> {
+    let mut pool: Vec<&DoctrineDef> = pool(state);
     let mut offers = Vec::new();
-    if let Some(i) = pool.iter().position(|d| d.id == HUB) {
-        offers.push(pool.remove(i).id.clone());
+    if hub_first {
+        if let Some(i) = pool.iter().position(|d| d.id == HUB) {
+            offers.push(pool.remove(i).id.clone());
+        }
     }
     while offers.len() < 3 && !pool.is_empty() {
         let weights: Vec<i32> = pool
@@ -64,8 +97,7 @@ pub fn research(state: &mut GameState) -> ActResult {
         };
         offers.push(pool.remove(i).id.clone());
     }
-    state.cycle.research_offers = offers;
-    Ok(())
+    offers
 }
 
 pub fn pick(state: &mut GameState, id: &str) -> ActResult {
@@ -215,6 +247,25 @@ mod tests {
         research(&mut s).unwrap();
         assert_eq!(s.cycle.research_offers[0], HUB);
         assert!(!s.cycle.research_offers.contains(&offers[1]));
+    }
+
+    #[test]
+    fn reroll_swaps_the_offers_for_scrap() {
+        let mut s = started(11);
+        s.cycle.resources.intel = 100;
+        s.cycle.resources.scrap = 1000;
+        assert!(reroll(&mut s).is_err(), "nothing to reroll yet");
+        research(&mut s).unwrap();
+        let before = s.cycle.research_offers.clone();
+        reroll(&mut s).unwrap();
+        assert_eq!(s.cycle.resources.scrap, 1000 - balance().reroll_base);
+        assert_eq!(s.cycle.research_offers.len(), 3);
+        assert!(s.cycle.research_offers.iter().all(|o| !before.contains(o)));
+        assert_eq!(
+            reroll_cost(&s),
+            balance().reroll_base + balance().reroll_step
+        );
+        assert_eq!(s.cycle.research_count, 1, "a reroll is not a new draw");
     }
 
     #[test]

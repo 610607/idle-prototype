@@ -673,6 +673,25 @@ pub struct FacilityDef {
     pub district_bp: BTreeMap<String, i32>,
     #[serde(default)]
     pub grounding: i32,
+    /// Stands with the defenders of surges within `radius` (one per facility kind per battle).
+    #[serde(default)]
+    pub fixture: Option<FixtureDef>,
+    pub desc: String,
+}
+
+/// A facility in a defence battle: cannot be hit and has no turn of its own; it only reacts with
+/// its PP skills and lends rule changes to its side. `defender_effects` go on every defender.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FixtureDef {
+    #[serde(default)]
+    pub atk: i32,
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default)]
+    pub effects: Vec<TraitEffect>,
+    #[serde(default)]
+    pub defender_effects: Vec<TraitEffect>,
+    /// What it does in battle, for the facility card.
     pub desc: String,
 }
 
@@ -902,6 +921,11 @@ pub struct Balance {
     pub research_base: i64,
     #[serde(default = "default_research_step")]
     pub research_step: i64,
+    /// Research 换一批: scrap = base + step x rerolls this cycle.
+    #[serde(default = "default_reroll_base")]
+    pub reroll_base: i64,
+    #[serde(default = "default_reroll_step")]
+    pub reroll_step: i64,
     /// 知识库 slots at organisation level 1 (+1 at levels 3 and 5).
     #[serde(default = "default_archive_slots")]
     pub archive_slots: usize,
@@ -921,7 +945,13 @@ fn default_research_base() -> i64 {
     10
 }
 fn default_research_step() -> i64 {
-    12
+    18
+}
+fn default_reroll_base() -> i64 {
+    80
+}
+fn default_reroll_step() -> i64 {
+    60
 }
 fn default_archive_slots() -> usize {
     1

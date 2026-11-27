@@ -307,8 +307,8 @@ button.list-item:disabled { cursor: not-allowed; opacity: 0.55; }
 }
 .pending-item::before { content: ''; position: absolute; left: -1px; top: -1px; bottom: -1px; width: 4px; background: var(--ink-3); }
 .pending-item:hover { background: var(--panel-2); border-color: var(--line-2); }
-.pending-item.alert, .pending-item.defend { background: var(--bad-bg); border-color: rgba(219, 94, 66, 0.45); }
-.pending-item.alert::before, .pending-item.defend::before { background: repeating-linear-gradient(0deg, var(--bad) 0 6px, var(--sunk) 6px 9px); }
+.pending-item.alert, .pending-item.defend, .pending-item.alert_more, .pending-item.defend_more { background: var(--bad-bg); border-color: rgba(219, 94, 66, 0.45); }
+.pending-item.alert::before, .pending-item.defend::before, .pending-item.alert_more::before, .pending-item.defend_more::before { background: repeating-linear-gradient(0deg, var(--bad) 0 6px, var(--sunk) 6px 9px); }
 .pending-item.alert .icon, .pending-item.defend .icon { color: var(--bad); }
 .pending-item.claim::before { background: var(--good); }
 .pending-item.claim .icon { color: var(--good); }
@@ -338,6 +338,7 @@ button.list-item:disabled { cursor: not-allowed; opacity: 0.55; }
 .unit { border: 1px solid var(--line); padding: 4px 6px 5px; background: var(--panel); font-size: 12px; }
 .unit.enemy { border-color: rgba(157, 138, 198, 0.35); }
 .unit.dead { opacity: 0.35; text-decoration: line-through; }
+.unit.fixture { border-style: dashed; background: var(--sunk); }
 .unit.actor { border-color: var(--hazard); box-shadow: inset 3px 0 0 var(--hazard); }
 .unit.target { border-color: var(--bad); background: var(--bad-bg); }
 .unit .tags { display: flex; gap: 2px; flex-wrap: wrap; margin-top: 3px; }

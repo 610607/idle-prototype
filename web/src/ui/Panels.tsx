@@ -13,6 +13,8 @@ const PENDING_ICON: Record<string, string> = {
   route: 'route',
   defend: 'garrison',
   research: 'trait-book',
+  alert_more: 'alert',
+  defend_more: 'garrison',
 };
 
 // ---------------------------------------------------------------------------
@@ -141,6 +143,7 @@ export function PendingList() {
     if (p.kind === 'candidate' && p.candidate !== undefined) open({ kind: 'candidate', candidate: p.candidate }, true);
     else if (p.kind === 'policy' && p.district !== undefined) open({ kind: 'district', district: p.district }, true);
     else if (p.kind === 'research') goTab('research');
+    else if (p.kind === 'alert_more' || p.kind === 'defend_more') open({ kind: 'tide' }, true);
     else if (p.kind === 'route') {
       const s = view.squads.find((s) => p.text.startsWith(s.name));
       if (s) setRouteEdit({ squad: s.id, route: s.route.filter((i) => !view.tiles[i]!.owned) });

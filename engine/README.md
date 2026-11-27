@@ -20,6 +20,8 @@ Rust 写的确定性规则引擎。客户端（网页、以后的 iOS）只做�
 | `economy` | 住房与岗位、人口增长与无家可归者离开、电力、产出、信任因素、人才积累与候选、志愿民兵 |
 | `world`, `defense` | 边界、来潮来源、关注度；驻守与民兵、来潮结算、告急 |
 | `routes` | 路线校验、出发时预先打完整趟、回来时结算 |
+| `doctrine` | 研究（情报买三选一的条令）、换一批、条令进战斗、反应图鉴、知识库 |
+| `tasks` | 见习任务：每个系统一到三条「做一次」，按链解锁，小奖励 |
 | `actions`, `commands` | 所有玩家操作；`Command` 是它们的 JSON 形式 |
 | `sim` | 新游戏、选图、时间推进、规章、特殊人物、潮汐预报、一轮结算与收束 |
 | `view` | 视图模型：客户端要画的一切，包括「待你决定」 |
@@ -30,9 +32,9 @@ Rust 写的确定性规则引擎。客户端（网页、以后的 iOS）只做�
 ## 命令
 
 ```bash
-cargo test                                   # 37 个测试
+cargo test                                   # 44 个测试
 cargo run --example battle                   # 打一场示例战斗，打印因果链
-cargo run --release --example bot 3 72       # 自动玩家跑 3 个种子各 72 小时，看节奏
+cargo run --release --example bot 3 72       # 自动玩家跑 3 个种子各 72 小时，看节奏（会研究；BOT_NORESEARCH=1 关掉）
 cargo run --release --example militia        # 各圈层：民兵 / 单人驻守 / 三人小队的胜率
 cargo run --release --example opening        # 开局总部第一次来潮
 cargo run --example dump_view                # 打印一份视图 JSON
@@ -42,6 +44,7 @@ cargo run --release --example fixtures       # 守城：驻守职业 × 设施�
 cargo run --release --example population     # 人口、岗位、闲置、人才和候选从哪来（docs/ideas.md）
 cargo run --release --example customize      # 定制新队员值多少：指定词条 / 稀有度保底（加 loop 开闭环）
 cargo run --release --example custcost       # 定制一单的代价：每个能下单的街区，下单和不下单各跑 24 小时比较
+cargo run --release --example midsave 1 60 $(date +%s)  # 自动玩家玩 60 小时，打印一份结束在此刻的存档（网页「从文本读档」）
 ```
 
 `population` 和 `custcost` 可以多给一个 JSON 参数临时改数值（`content::patch_balance`，只在内容第一次加载前有效），比如复现人口改稀缺之前的旧数值：
