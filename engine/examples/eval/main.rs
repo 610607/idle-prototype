@@ -163,8 +163,8 @@ fn compare(a: &RunFile, b: &RunFile) {
         b.patch.as_deref().unwrap_or("base")
     );
     println!(
-        "{:<28} {:>8} {:>8} {:>9} {:>17}  {}",
-        "metric", "A p50", "B p50", "Δ p50", "90% CI", "pairs"
+        "{:<28} {:>8} {:>8} {:>9} {:>17}  {:>5} {:>7} {:>7}",
+        "metric", "A p50", "B p50", "Δ p50", "90% CI", "pairs", "A has", "B has"
     );
     for (id, va) in &a.metrics {
         let Some(vb) = b.metrics.get(id) else {
@@ -180,29 +180,34 @@ fn compare(a: &RunFile, b: &RunFile) {
             })
             .collect();
         let (sa, sb) = (stats::summary(va), stats::summary(vb));
-        if diffs.len() < 3 {
-            println!(
-                "{:<28} {:>8} {:>8} {:>9} {:>17}  {}",
-                id,
-                fmt(sa.p50),
-                fmt(sb.p50),
-                "-",
-                "-",
-                diffs.len()
-            );
-            continue;
-        }
-        let (med, lo, hi) = stats::paired(&diffs);
-        let moved = lo > 0.0 || hi < 0.0;
+        // Seeds with a value on each side: a change in how often something happens at all (first
+        // reach of a ring) shows here even though those seeds cannot be paired.
+        let has = |s: &stats::Summary| format!("{}/{}", s.reached, s.n);
+        let (med, ci, moved) = if diffs.len() < 3 {
+            ("-".to_string(), "-".to_string(), false)
+        } else {
+            let (med, lo, hi) = stats::paired(&diffs);
+            (
+                fmt(med),
+                format!("[{}, {}]", fmt(lo), fmt(hi)),
+                lo > 0.0 || hi < 0.0,
+            )
+        };
         println!(
-            "{:<28} {:>8} {:>8} {:>9} {:>17}  {}{}",
+            "{:<28} {:>8} {:>8} {:>9} {:>17}  {:>5} {:>7} {:>7}{}",
             id,
             fmt(sa.p50),
             fmt(sb.p50),
-            fmt(med),
-            format!("[{}, {}]", fmt(lo), fmt(hi)),
+            med,
+            ci,
             diffs.len(),
-            if moved { "  *" } else { "" }
+            has(&sa),
+            has(&sb),
+            if moved || sa.reached != sb.reached {
+                "  *"
+            } else {
+                ""
+            }
         );
     }
 }
