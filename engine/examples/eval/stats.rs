@@ -1,6 +1,8 @@
 //! Small statistics helpers: percentiles over seeds, and a seeded bootstrap for paired
-//! comparisons. Values are `Option<f64>`: `None` means "did not happen before the run ended"
-//! (e.g. a ring never reached) and is kept as censored, not dropped.
+//! comparisons. Values are `Option<f64>`. What `None` means depends on the metric
+//! (`registry::Missing`): "did not happen before the run ended" (a ring never reached) is kept as
+//! censored, not dropped; "nothing to measure on that seed" (a rate with no samples) is left out.
+//! Summaries of metric ids go through `registry::summary`, which picks the reading.
 
 /// Linear-interpolated percentile of sorted values (`p` in 0..=1).
 pub fn pct(sorted: &[f64], p: f64) -> f64 {
@@ -25,7 +27,17 @@ pub struct Summary {
 /// Censored values count as "later than everything" (+inf), so a median over seeds where fewer
 /// than half reached the event is +inf, read as "not reached".
 pub fn summary(values: &[Option<f64>]) -> Summary {
-    let mut v: Vec<f64> = values.iter().map(|x| x.unwrap_or(f64::INFINITY)).collect();
+    summary_as(values, false)
+}
+
+/// As `summary`, or, with `skip_missing`, over the seeds that have a value (`n` still counts all
+/// seeds); with none, every percentile is +inf.
+pub fn summary_as(values: &[Option<f64>], skip_missing: bool) -> Summary {
+    let mut v: Vec<f64> = if skip_missing {
+        values.iter().flatten().copied().collect()
+    } else {
+        values.iter().map(|x| x.unwrap_or(f64::INFINITY)).collect()
+    };
     v.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let q = |p: f64| {
         let x = pct(&v, p);

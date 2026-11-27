@@ -418,7 +418,7 @@ fn pace_research(bot: &crate::run::RunFile) {
     let p50 = |id: &str| {
         bot.metrics
             .get(id)
-            .map(|v| crate::stats::summary(v).p50)
+            .map(|v| crate::registry::summary(id, v).p50)
             .filter(|x| x.is_finite())
     };
     let income: Vec<(f64, f64)> = crate::run::CHECKPOINTS
@@ -558,7 +558,7 @@ pub fn pace(
         let model = if margin >= 1.0 { Some(t) } else { None };
         let bot_p50 = bot
             .and_then(|f| f.metrics.get(&format!("reach_h.r{r}")))
-            .map(|v| crate::stats::summary(v));
+            .map(|v| crate::registry::summary(&format!("reach_h.r{r}"), v));
         let show = |x: Option<f64>| x.map_or("-".to_string(), |x| format!("{x:.1}"));
         let bp = bot_p50.as_ref().map(|s| s.p50).filter(|x| x.is_finite());
         println!(

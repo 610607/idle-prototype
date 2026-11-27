@@ -166,7 +166,7 @@ pub fn evaluate<'a>(goals: &'a [Goal], f: &RunFile) -> Vec<Outcome<'a>> {
                     });
                     continue;
                 };
-                let s = stats::summary(v);
+                let s = registry::summary(id, v);
                 let x = stat(&s, &b.stat);
                 let pass = b.min.is_none_or(|lo| x >= lo) && b.max.is_none_or(|hi| x <= hi);
                 let status = if x.is_infinite() && !b.missing_fails {
@@ -340,7 +340,7 @@ fn goal_section(
                     let bv = b
                         .metrics
                         .get(o.metric)
-                        .map(|v| fmt(stat(&stats::summary(v), &o.band.stat)))
+                        .map(|v| fmt(stat(&registry::summary(o.metric, v), &o.band.stat)))
                         .unwrap_or("-".into());
                     let d = delta(b, r.f, o.metric)
                         .map(|d| {
@@ -461,7 +461,7 @@ pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (Strin
         for (id, v) in &r.f.metrics {
             let class = registry::find(&reg, id).map(|e| e.class.as_str());
             if class == Some("model") && !bound.contains(id.as_str()) {
-                let p50 = stats::summary(v).p50;
+                let p50 = registry::summary(id, v).p50;
                 if p50.is_finite() && (p50 - 1.0).abs() > MODEL_TOLERANCE {
                     auto.push(format!(
                         "模型比值 `{id}` = {}（{}），偏离 1 超过两成：模型漏了机制，或者机器人做了模型没想到的事。",
@@ -481,15 +481,16 @@ pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (Strin
         if let Some(size) =
             r.f.metrics
                 .get("payoff.ladder.size")
-                .map(|v| stats::summary(v).p50)
+                .map(|v| registry::summary("payoff.ladder.size", v).p50)
         {
             let top =
                 r.f.metrics
                     .iter()
                     .filter(|(id, _)| id.starts_with("payoff.ladder.h"))
-                    .filter(|(_, v)| {
-                        // Missing reads (no squad with members) summarise as infinity.
-                        let p50 = stats::summary(v).p50;
+                    .filter(|(id, v)| {
+                        // A seed without a read (no squad with members) is skipped; with none at
+                        // all the median is infinite.
+                        let p50 = registry::summary(id, v).p50;
                         p50.is_finite() && p50 >= size
                     })
                     .map(|(id, _)| id.as_str())
@@ -568,8 +569,8 @@ pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (Strin
         for id in r.f.metrics.keys() {
             let Some(d) = delta(b, r.f, id) else { continue };
             let (sa, sb) = (
-                stats::summary(&b.metrics[id]),
-                stats::summary(&r.f.metrics[id]),
+                registry::summary(id, &b.metrics[id]),
+                registry::summary(id, &r.f.metrics[id]),
             );
             if !d.moved() && sa.reached == sb.reached {
                 continue;

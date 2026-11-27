@@ -201,7 +201,7 @@ cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --session
     - 改掉 final.json 的 `save_sha`：判为过期，只剩 `llm.feel.*`、`llm.score.*` 和 `session.stale` = 1。
     - `protocol` 为 2 的 manifest 报错；没有 final.json 的目录跳过；不同玩家、同一种子两次都报错。
   - 事件分类棘轮：`locales/zh-CN/events.json` 里每个事件 key 都要在 `engine/eval/payoff_classes.json` 里有归类（爽点类别和级别，或明确记为“不算”）。新事件不归类，测试就失败，这就是“新系统怎么接入”清单里的爽点声明。
-  - 指标注册表：`engine/eval/metrics.json` 登记每个指标 id 的模式、类别（局面探针 / 结果量 / 自选样本）和一句说明。`eval run` 产出的 id、`goals.json` 里引用的 id 都必须能在注册表里找到；改名或拼错立刻失败。`eval metrics` 打印注册表，给人和模型读结果时查。
+  - 指标注册表：`engine/eval/metrics.json` 登记每个指标 id 的模式、类别（局面探针 / 结果量 / 自选样本）、缺值读法（`late` 按“没发生、最晚”算，`skip` 略过没有可量的种子）和一句说明。`eval run` 产出的 id、`goals.json` 里引用的 id 都必须能在注册表里找到；改名或拼错立刻失败。`eval metrics` 打印注册表，给人和模型读结果时查。
 
 ## 附录：试玩提示要点
 

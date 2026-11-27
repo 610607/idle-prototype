@@ -1,7 +1,9 @@
 //! Metric registry (`eval/metrics.json`, docs/eval-interface.md §版本和稳健性): every metric id
 //! the tool writes, and every id a band refers to, must match a registered pattern, so a rename
 //! or a typo fails `cargo test` instead of silently reading `n/a`.
+use crate::stats::{self, Summary};
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 pub const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/eval/metrics.json");
 
@@ -10,6 +12,21 @@ pub struct Entry {
     pub pattern: String,
     pub class: String,
     pub doc: String,
+    /// What a seed without a value (`None`) means; required, so every metric decides.
+    pub missing: Missing,
+}
+
+/// What a missing value means when a metric is summarised over seeds.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Missing {
+    /// The event did not happen before the run ended (a ring never reached): later than
+    /// everything, +inf, so a median over seeds where fewer than half got there reads "not
+    /// reached".
+    Late,
+    /// Nothing to measure on that seed (no inside surge, no squad, a day past the run's end): the
+    /// seed is left out. Counting it as +inf would drag a rate's median toward "worst".
+    Skip,
 }
 
 #[derive(Deserialize)]
@@ -51,11 +68,28 @@ pub fn find<'a>(reg: &'a [Entry], id: &str) -> Option<&'a Entry> {
     reg.iter().find(|e| matches(&e.pattern, id))
 }
 
+/// The registry, read once per process.
+pub fn cached() -> &'static [Entry] {
+    static REG: OnceLock<Vec<Entry>> = OnceLock::new();
+    REG.get_or_init(load)
+}
+
+/// Percentiles over seeds for one metric, reading missing values as its entry says (an
+/// unregistered id reads them as `late`; the tests keep every id registered).
+pub fn summary(id: &str, values: &[Option<f64>]) -> Summary {
+    let skip = find(cached(), id).is_some_and(|e| e.missing == Missing::Skip);
+    stats::summary_as(values, skip)
+}
+
 /// `eval metrics [RUN.json]`: the registry; with a run, also its unregistered ids.
 pub fn print(run: Option<&crate::run::RunFile>) {
     let reg = load();
     for e in &reg {
-        println!("{:<34} {:<7} {}", e.pattern, e.class, e.doc);
+        let missing = match e.missing {
+            Missing::Late => "late",
+            Missing::Skip => "skip",
+        };
+        println!("{:<34} {:<7} {:<5} {}", e.pattern, e.class, missing, e.doc);
     }
     if let Some(f) = run {
         let bad: Vec<&String> = f
@@ -85,6 +119,30 @@ mod tests {
         assert!(matches("payoff.t.{class}.{k}", "payoff.t.research.3"));
         assert!(!matches("payoff.t.{class}.{k}", "payoff.t.research"));
         assert!(matches("hired", "hired"));
+    }
+
+    #[test]
+    fn missing_values_follow_the_entry() {
+        // A ring never reached is late; a seed without an inside surge has no rate to give.
+        let late = summary("reach_h.r6", &[Some(100.0), None, None]);
+        assert!(late.p50.is_infinite());
+        let rate = [
+            Some(0.0),
+            Some(0.0),
+            Some(0.0),
+            None,
+            Some(0.0),
+            None,
+            None,
+            Some(1.0),
+        ];
+        let skip = summary("surge_lost.inside", &rate);
+        assert_eq!((skip.n, skip.reached, skip.p50), (8, 5, 0.0));
+        assert_eq!(
+            stats::summary(&rate).p50,
+            0.5,
+            "read as late, the median lands mid-way"
+        );
     }
 
     #[test]

@@ -78,7 +78,7 @@ fn print_summary(f: &RunFile) {
         "metric", "reached", "p10", "p50", "p90"
     );
     for (id, v) in &f.metrics {
-        let s = stats::summary(v);
+        let s = registry::summary(id, v);
         println!(
             "{:<28} {:>3}/{:<3} {:>8} {:>8} {:>8}",
             id,
@@ -118,7 +118,7 @@ fn compare(a: &RunFile, b: &RunFile) {
         let Some(vb) = b.metrics.get(id) else {
             continue;
         };
-        let (sa, sb) = (stats::summary(va), stats::summary(vb));
+        let (sa, sb) = (registry::summary(id, va), registry::summary(id, vb));
         // Seeds with a value on each side: a change in how often something happens at all (first
         // reach of a ring) shows here even though those seeds cannot be paired.
         let has = |s: &stats::Summary| format!("{}/{}", s.reached, s.n);
