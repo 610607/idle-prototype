@@ -258,14 +258,30 @@ mod tests {
     #[test]
     fn fills_placeholders() {
         assert_eq!(
-            fill("{a} 到 {b}，{c}", &[("a", "1".into()), ("b", "2".into())]),
-            "1 到 2，{c}"
+            fill("{a} to {b}, {c}", &[("a", "1".into()), ("b", "2".into())]),
+            "1 to 2, {c}"
         );
-        assert_eq!(fill("没有占位", &[]), "没有占位");
+        assert_eq!(fill("no placeholders", &[]), "no placeholders");
         assert_eq!(
             fill(r#"{"squad":{sq},"m":[1]}"#, &[("sq", "4".into())]),
             r#"{"squad":4,"m":[1]}"#
         );
+    }
+
+    /// Kept text renders nested keys and survives a JSON round trip.
+    #[test]
+    fn text_renders_and_round_trips() {
+        let x = crate::txt!("event.research.done", name = name("doctrine", "react"));
+        let back: Text = serde_json::from_str(&serde_json::to_string(&x).unwrap()).unwrap();
+        assert_eq!(back, x);
+        assert_eq!(
+            x.render(),
+            fmt(
+                "event.research.done",
+                &[("name", tr("doctrine.react.name"))]
+            )
+        );
+        assert!(!x.render().contains('{'));
     }
 
     #[test]
