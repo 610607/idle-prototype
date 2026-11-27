@@ -505,6 +505,8 @@ pub struct ResearchView {
     pub held: Vec<DoctrineView>,
     pub archive: Vec<DoctrineView>,
     pub archive_slots: usize,
+    /// The 知识库: every doctrine ever researched, to pick what the next cycle brings.
+    pub library: Vec<DoctrineView>,
     /// Whether the reaction table is switched on (the hub doctrine is held).
     pub reactions_on: bool,
     pub codex: Vec<CodexEntry>,
@@ -564,6 +566,7 @@ pub fn research_view(state: &GameState) -> ResearchView {
         held: cy.doctrines.iter().filter_map(dv).collect(),
         archive: state.org.archive.iter().filter_map(dv).collect(),
         archive_slots: crate::doctrine::archive_slots(state),
+        library: state.org.known_doctrines.iter().filter_map(dv).collect(),
         reactions_on: cy.doctrines.iter().any(|d| d == crate::doctrine::HUB),
         codex: c
             .reactions

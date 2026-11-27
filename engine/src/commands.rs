@@ -124,7 +124,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
             cmd,
             Command::ChooseMap { .. }
                 | Command::SetRule { .. }
-                | Command::Archive { on: false, .. }
+                | Command::Archive { .. }
                 | Command::ClaimTask { .. }
         )
     {

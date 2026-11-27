@@ -125,18 +125,19 @@ pub fn pick(state: &mut GameState, id: &str) -> ActResult {
     Ok(())
 }
 
-/// File a held doctrine in the 知识库 (it starts every later cycle held), or take it out.
+/// Pick a doctrine from the 知识库 (every doctrine ever researched) to bring into the next cycles,
+/// or drop it. Limited slots; can be changed any time, including while choosing the next map.
 pub fn archive(state: &mut GameState, id: &str, on: bool) -> ActResult {
     if on {
         if state.org.archive.iter().any(|x| x == id) {
             return Ok(());
         }
-        if !state.cycle.doctrines.iter().any(|x| x == id) {
-            return Err("这一轮没有这条条令".into());
+        if !state.org.known_doctrines.iter().any(|x| x == id) {
+            return Err("还没研究过这条条令".into());
         }
         let slots = archive_slots(state);
         if state.org.archive.len() >= slots {
-            return Err(format!("知识库只有 {slots} 格"));
+            return Err(format!("只能带 {slots} 条"));
         }
         state.org.archive.push(id.to_string());
     } else {
@@ -314,15 +315,19 @@ mod tests {
     fn archived_doctrines_start_the_next_cycle_held() {
         let mut s = started(9);
         s.cycle.doctrines = vec!["react".into(), "etch".into()];
+        s.org.known_doctrines = s.cycle.doctrines.clone();
         archive(&mut s, "react", true).unwrap();
         assert!(
             archive(&mut s, "etch", true).is_err(),
             "one slot at level 1"
         );
-        assert!(archive(&mut s, "burst", true).is_err(), "not held");
+        assert!(archive(&mut s, "burst", true).is_err(), "never researched");
         collapse(&mut s).unwrap();
+        // The pick can change while choosing the next map.
+        archive(&mut s, "react", false).unwrap();
+        archive(&mut s, "etch", true).unwrap();
         choose_map(&mut s, 0).unwrap();
-        assert_eq!(s.cycle.doctrines, vec!["react".to_string()]);
+        assert_eq!(s.cycle.doctrines, vec!["etch".to_string()]);
         assert_eq!(s.cycle.research_count, 0);
     }
 }

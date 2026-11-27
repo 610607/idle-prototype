@@ -6,7 +6,7 @@ import { ReportSheet } from './BattleReport';
 import { Board, WASH } from './Board';
 import { ConfirmDialog, fmtClock, fmtRate, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, SQUAD_HEX, useCtx, type ConfirmAsk, type Ctx, type RouteEdit, type Sheet } from './common';
 import { CommandPanel, DistrictsPanel, HQPanel, PendingList, RosterPanel, TideStrip } from './Panels';
-import { ResearchPanel } from './Research';
+import { Archive, ResearchPanel } from './Research';
 import { CandidateSheet, DistrictSheet, OpSheet, SquadSheet, TideSheet } from './Sheets';
 import { TileSheet } from './TileSheet';
 
@@ -398,6 +398,7 @@ function MapChoice() {
             </div>
           ))}
         </div>
+        {view.research.library.length ? <Archive /> : null}
         <HQPanel />
       </div>
     </div>

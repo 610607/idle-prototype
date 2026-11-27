@@ -471,6 +471,7 @@ export interface ResearchView {
   held: DoctrineView[];
   archive: DoctrineView[];
   archive_slots: number;
+  library: DoctrineView[];
   reactions_on: boolean;
   codex: CodexEntry[];
   known: number;

@@ -666,7 +666,21 @@ function CycleBlock() {
           onClick={() =>
             confirm({
               title: '收束这一轮？',
-              body: '地图、街区、普通队员都会清空；组织经验、规章、特殊人物和封存的装备留下。',
+              body: (
+                <div className="split" style={{ gap: 12 }}>
+                  <div className="col">
+                    <b>清空</b>
+                    <div className="small muted">地图和领地、居民、普通队员、没封存的装备、资源、这一轮的条令。</div>
+                  </div>
+                  <div className="col">
+                    <b>留下</b>
+                    <div className="small muted">
+                      组织经验 +{view.results.total}、规章、特殊人物、封存的装备（{view.sealed.length}）、知识库和带入的条令（
+                      {view.research.archive.map((d) => d.name).join('、') || '还没选'}）、反应图鉴。
+                    </div>
+                  </div>
+                </div>
+              ),
               ok: '确定收束',
               danger: true,
               onOk: () => run({ cmd: 'collapse' }, '这一轮收束了'),

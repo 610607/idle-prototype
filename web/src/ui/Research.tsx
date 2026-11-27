@@ -65,9 +65,11 @@ function Draw() {
       ) : (
         <div className="stack" style={{ gap: 6 }}>
           <div className="row">
-            <button className="btn primary" disabled={!r.affordable || r.left === 0} onClick={() => run({ cmd: 'research' })}>
-              <Icon id="res-intel" size={16} /> 研究（{r.cost} 情报）
-            </button>
+            {r.left > 0 ? (
+              <button className="btn primary" disabled={!r.affordable} onClick={() => run({ cmd: 'research' })}>
+                <Icon id="res-intel" size={16} /> 研究（{r.cost} 情报）
+              </button>
+            ) : null}
             <span className="small muted grow">
               {r.left === 0 ? '这一轮能研究的条令都拿到了' : `还有 ${r.left} 条可研究；每次研究价格 +${r.step}`}
             </span>
@@ -95,10 +97,10 @@ function Held() {
         {r.held.map((d) => (
           <DoctrineCard key={d.id} d={d} compact>
             {d.archived ? (
-              <span className="chip good">在知识库</span>
+              <span className="chip good">下一轮带上</span>
             ) : (
-              <button className="btn small ghost" disabled={full} title={full ? '知识库满了' : '下一轮开局就带着'} onClick={() => run({ cmd: 'archive', doctrine: d.id, on: true }, `「${d.name}」收进知识库`)}>
-                收进知识库
+              <button className="btn small ghost" disabled={full} title={full ? `只能带 ${r.archive_slots} 条，先在知识库里取下一条` : '下一轮开局就带着'} onClick={() => run({ cmd: 'archive', doctrine: d.id, on: true }, `下一轮带上「${d.name}」`)}>
+                下一轮带上
               </button>
             )}
           </DoctrineCard>
@@ -108,22 +110,34 @@ function Held() {
   );
 }
 
-function Archive() {
+/** The 知识库: every doctrine ever researched; a few slots say which ones the next cycle starts with. */
+export function Archive() {
   const { view, run } = useCtx();
   const r = view.research;
+  const full = r.archive.length >= r.archive_slots;
   return (
-    <Section title="知识库" icon="seal" hint={`${r.archive.length}/${r.archive_slots}`}>
-      {r.archive.length === 0 ? <div className="empty">收进知识库的条令，之后每一轮开局就带着。组织 Lv.3 和 Lv.5 各多一格。</div> : null}
-      <div className="stack" style={{ gap: 6 }}>
-        {r.archive.map((d) => (
-          <div key={d.id} className="row small">
+    <Section title="知识库 · 带入" icon="seal" hint={`带 ${r.archive.length}/${r.archive_slots} · 收录 ${r.library.length}/${r.total}`}>
+      {r.library.length === 0 ? (
+        <div className="empty">研究过的条令都记在这里。每一轮开局可以带上其中几条（组织 Lv.3、Lv.5 各多一格），选图时也能换。</div>
+      ) : (
+        <div className="small muted" style={{ marginBottom: 6 }}>
+          勾上的条令下一轮开局就带着。选图时也能换。
+        </div>
+      )}
+      <div className="stack" style={{ gap: 4 }}>
+        {r.library.map((d) => (
+          <label key={d.id} className="switch small" style={{ alignItems: 'flex-start' }}>
+            <input
+              type="checkbox"
+              checked={d.archived}
+              disabled={!d.archived && full}
+              onChange={(e) => run({ cmd: 'archive', doctrine: d.id, on: e.target.checked })}
+            />
             <Icon id={d.icon} size={16} />
-            <b>{d.name}</b>
-            <span className="grow muted">{d.desc}</span>
-            <button className="btn small ghost" onClick={() => run({ cmd: 'archive', doctrine: d.id, on: false })}>
-              取出
-            </button>
-          </div>
+            <span>
+              <b>{d.name}</b> <span className="muted">{d.desc}</span>
+            </span>
+          </label>
         ))}
       </div>
     </Section>

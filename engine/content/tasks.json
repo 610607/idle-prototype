@@ -9,7 +9,7 @@
   {"id": "reaction", "group": "研究", "name": "触发一次反应", "check": "reaction", "after": "research", "desc": "拿到「反应协议」以后，两种标签在同一个敌人身上相遇就会起反应。第一次触发会点亮图鉴。", "reward": {"intel": 15}},
   {"id": "counter", "group": "守城", "name": "反击告急", "check": "counter", "after": "garrison", "desc": "镇守度掉到 0 的格子会告急、停产。打开它点「反击」，赢了就恢复。", "reward": {"scrap": 60}},
   {"id": "policy", "group": "街区", "name": "定一条政策", "check": "policy", "after": "build", "desc": "街区信任够了以后，可以在「街区」里给它定政策。政策改的是这个街区的玩法，不只是数值。", "reward": {"parts": 6}},
-  {"id": "archive", "group": "研究", "name": "收进知识库", "check": "archive", "after": "reaction", "desc": "把一条用得顺手的条令收进知识库，之后每一轮开局就带着它。", "reward": {"intel": 10}},
+  {"id": "archive", "group": "研究", "name": "定一条带入", "check": "archive", "after": "reaction", "desc": "研究过的条令都记在知识库里。把一条用得顺手的定为「下一轮带上」，之后开局就带着它。", "reward": {"intel": 10}},
   {"id": "customize", "group": "名册", "name": "定制一名候选", "check": "customize", "after": "hire", "desc": "有街区连成片（或第二轮起）可以定制招募：从一个街区抽居民，换一名指定职业的候选。", "reward": {"scrap": 50}},
   {"id": "collapse", "group": "轮回", "name": "收束防线", "check": "collapse", "after": "counter", "desc": "一轮打到满意，就在「总部」收束防线，把成果换成组织经验，再选下一张地图。", "reward": {}}
 ]
