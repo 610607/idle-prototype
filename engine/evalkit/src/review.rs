@@ -649,6 +649,25 @@ mod tests {
     }
 
     #[test]
+    fn baselines_round_trip_exactly() {
+        // `--bless` writes what it read; with serde_json's `float_roundtrip` that is the run file
+        // byte for byte (without it the last digit of some floats drifts).
+        let dir = baseline_dir();
+        let mut n = 0;
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path().display().to_string();
+            if !path.ends_with(".json") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).unwrap();
+            let again = serde_json::to_string_pretty(&read_run(&path)).unwrap();
+            assert!(text == again, "{path} does not round-trip exactly");
+            n += 1;
+        }
+        assert!(n > 0, "no baselines in {dir}");
+    }
+
+    #[test]
     fn personas_match() {
         let p = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert!(applies(&[], "greedy"));
