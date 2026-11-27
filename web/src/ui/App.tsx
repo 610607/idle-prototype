@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Game } from '../engine/client';
+import { t, tn } from '../i18n';
 import { Icon } from '../icons';
 import type { Command, View } from '../types';
 import { ReportSheet } from './BattleReport';
@@ -13,11 +14,11 @@ import { TileSheet } from './TileSheet';
 /** `map` only exists on phones, where the map and the workspace take turns. */
 type Tab = 'map' | 'command' | 'roster' | 'districts' | 'research' | 'hq';
 const TABS: { id: Exclude<Tab, 'map'>; name: string; icon: string }[] = [
-  { id: 'command', name: '指挥', icon: 'squad' },
-  { id: 'roster', name: '队员', icon: 'roster' },
-  { id: 'districts', name: '街区', icon: 'trust' },
-  { id: 'research', name: '研究', icon: 'trait-book' },
-  { id: 'hq', name: '总部', icon: 'org' },
+  { id: 'command', name: t('app.tab.command'), icon: 'squad' },
+  { id: 'roster', name: t('app.tab.roster'), icon: 'roster' },
+  { id: 'districts', name: t('app.tab.districts'), icon: 'trust' },
+  { id: 'research', name: t('app.tab.research'), icon: 'trait-book' },
+  { id: 'hq', name: t('app.tab.hq'), icon: 'org' },
 ];
 
 function sameSheet(a: Sheet, b: Sheet): boolean {
@@ -70,7 +71,7 @@ export function App({ game }: { game: Game }) {
       if (document.visibilityState === 'visible') {
         const n = game.tick();
         refresh();
-        if (n > 0) toast(`离开期间发生了 ${n} 件事，看看「待你决定」`);
+        if (n > 0) toast(t('app.away', { n }));
       } else onHide();
     };
     document.addEventListener('visibilitychange', onShow);
@@ -85,7 +86,7 @@ export function App({ game }: { game: Game }) {
   }, [game, refresh]);
 
   useEffect(() => {
-    if (game.loadError) toast(`存档读不出来，已开新档：${game.loadError}`, true);
+    if (game.loadError) toast(t('app.load_error', { err: game.loadError }), true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -103,7 +104,7 @@ export function App({ game }: { game: Game }) {
   const run = useCallback(
     (cmd: Command, okText?: string) => {
       const ack = game.command(cmd);
-      if (!ack.ok) toast(ack.error ?? '做不到', true);
+      if (!ack.ok) toast(ack.error ?? t('app.cannot'), true);
       else if (okText) toast(okText);
       refresh();
       return ack.ok;
@@ -156,7 +157,7 @@ export function App({ game }: { game: Game }) {
     return null;
   }, [top, view.operatives]);
   const workTab: Exclude<Tab, 'map'> = tab === 'map' ? 'command' : tab;
-  const tabName = tab === 'map' ? '地图' : TABS.find((t) => t.id === workTab)!.name;
+  const tabName = tab === 'map' ? t('app.tab.map') : TABS.find((t) => t.id === workTab)!.name;
 
   const goTab = useCallback((t: Exclude<Tab, 'map'>) => {
     setTab(t);
@@ -238,7 +239,7 @@ export function App({ game }: { game: Game }) {
               </div>
             </div>
             <nav className="bottom-nav">
-              {([{ id: 'map', name: '地图', icon: 'map' }, ...TABS] as const).map((t) => (
+              {([{ id: 'map', name: t('app.tab.map'), icon: 'map' }, ...TABS] as const).map((t) => (
                 <button key={t.id} aria-selected={mobileView === 'map' ? t.id === 'map' : !pages.length ? tab === t.id : false} onClick={() => pick(t.id)}>
                   <Icon id={t.icon} />
                   {t.name}
@@ -279,10 +280,11 @@ function TopBar() {
   return (
     <header className="topbar">
       <span className="brand">
-        <span className="stamp">民防</span>
-        <h1>裂隙城</h1>
+        <span className="stamp">{t('app.brand.stamp')}</span>
+        <h1>{t('app.brand.name')}</h1>
         <span className="cycle">
-          第 {view.cycle} 轮{view.modifier ? ` · ${view.modifier[1]}` : ''}
+          {t('app.cycle', { n: view.cycle })}
+          {view.modifier ? ` · ${view.modifier[1]}` : ''}
         </span>
       </span>
       {view.phase === 'active' ? (
@@ -291,24 +293,24 @@ function TopBar() {
             <span key={k} className="res-item" title={RES_NAMES[k]}>
               <Icon id={`res-${k}`} />
               <span className="num">{view.resources[k]}</span>
-              {view.income[i] ? <span className="rate">{fmtRate(view.income[i]!)}/时</span> : null}
+              {view.income[i] ? <span className="rate">{t('delta.per_hour', { v: fmtRate(view.income[i]!) })}</span> : null}
             </span>
           ))}
-          <span className={'res-item ' + (view.power[0] < view.power[1] ? 'bad' : '')} title="电力 供/需">
+          <span className={'res-item ' + (view.power[0] < view.power[1] ? 'bad' : '')} title={t('app.res.power')}>
             <Icon id="power" />
             <span className="num">
               {view.power[0]}/{view.power[1]}
             </span>
           </span>
           {view.self_sufficient ? (
-            <span className="chip good" title="所有边界格不派人也守得住">
-              防线自给
+            <span className="chip good" title={t('app.res.self_sufficient_hint')}>
+              {t('app.res.self_sufficient')}
             </span>
           ) : null}
         </div>
       ) : null}
       <span className="clock muted">
-        {game.offset ? <span className="chip warn">快进 +{Math.round(game.offset / 3600)} 时</span> : null}
+        {game.offset ? <span className="chip warn">{t('app.fast_forward', { h: Math.round(game.offset / 3600) })}</span> : null}
         <Icon id="clock" />
         <span className="num">{fmtClock(now)}</span>
       </span>
@@ -326,16 +328,14 @@ function RouteEditor() {
     <div className="route-mode-banner" style={{ ['--route-color' as string]: SQUAD_HEX[si] }}>
       <Icon id="route" />
       <div className="grow">
-        <div>
-          <b style={{ color: SQUAD_HEX[si] }}>{squad.name}</b> 编路线：从领地边上出发，依次点相邻的格子（点最后一格撤回）。
-        </div>
+        <div>{tn('app.route.banner', { squad: <b style={{ color: SQUAD_HEX[si] }}>{squad.name}</b> })}</div>
         <div className="small">
-          {edit.route.length ? edit.route.map((i) => view.tiles[i]!.label).join(' → ') : <span className="faint">还没选格子</span>}
+          {edit.route.length ? edit.route.map((i) => view.tiles[i]!.label).join(' → ') : <span className="faint">{t('app.route.empty')}</span>}
         </div>
         {preview ? (
           preview.ok ? (
             <div className="small">
-              预演：
+              {t('app.route.preview')}
               <b className={preview.outcome === 'victory' ? 'good' : 'bad'}>{OUTCOME_NAMES[preview.outcome ?? 'victory']}</b>
               {preview.steps
                 .filter((s) => s.fought)
@@ -346,11 +346,11 @@ function RouteEditor() {
                     {s.outcome === 'victory' ? '✓' : '✗'}
                   </span>
                 ))}
-              <span className="muted"> · 一趟约 {preview.minutes} 分</span>
+              <span className="muted">{t('app.route.minutes', { n: preview.minutes })}</span>
               {preview.attention_after !== preview.attention_before ? (
                 <span className="warn">
                   {' '}
-                  · 关注度 {preview.attention_before}→{preview.attention_after}
+                  {t('app.route.attention', { before: preview.attention_before, after: preview.attention_after })}
                 </span>
               ) : null}
             </div>
@@ -363,16 +363,16 @@ function RouteEditor() {
         className="btn primary small"
         disabled={!!preview && !preview.ok}
         onClick={() => {
-          if (run({ cmd: 'set_route', squad: edit.squad, route: edit.route }, `${squad.name}路线已更新`)) setRouteEdit(null);
+          if (run({ cmd: 'set_route', squad: edit.squad, route: edit.route }, t('app.route.saved', { squad: squad.name }))) setRouteEdit(null);
         }}
       >
-        保存
+        {t('app.route.save')}
       </button>
       <button className="btn small" onClick={() => setRouteEdit({ ...edit, route: [] })}>
-        清空
+        {t('app.route.clear')}
       </button>
       <button className="btn small ghost" onClick={() => setRouteEdit(null)}>
-        取消
+        {t('app.route.cancel')}
       </button>
     </div>
   );
@@ -384,8 +384,8 @@ function MapChoice() {
     <div className="work-body">
       <div className="pane" style={{ maxWidth: 1200, margin: '0 auto', width: '100%' }}>
         <div>
-          <h2 style={{ fontSize: 26 }}>第 {view.cycle} 轮 · 选一张城市地图</h2>
-          <p className="muted">每张图的天险、裂隙和特殊地点都不同；本轮的异界气候决定来敌常带什么标签。</p>
+          <h2 style={{ fontSize: 26 }}>{t('app.choose.title', { n: view.cycle })}</h2>
+          <p className="muted">{t('app.choose.intro')}</p>
         </div>
         <div className="mapchoice">
           {view.previews.map((p) => (
@@ -394,10 +394,14 @@ function MapChoice() {
               <h3 style={{ fontSize: 18 }}>{p.modifier_name}</h3>
               <div className="small muted">{p.modifier_desc}</div>
               <div className="small">
-                裂隙 <span className="num">{p.rifts}</span> · 特殊地点 <span className="num">{p.specials}</span> · 街区 <span className="num">{p.districts}</span>
+                {tn('app.choose.stats', {
+                  rifts: <span className="num">{p.rifts}</span>,
+                  specials: <span className="num">{p.specials}</span>,
+                  districts: <span className="num">{p.districts}</span>,
+                })}
               </div>
-              <button className="btn primary" onClick={() => run({ cmd: 'choose_map', index: p.index }, '出发')}>
-                选这张
+              <button className="btn primary" onClick={() => run({ cmd: 'choose_map', index: p.index }, t('app.choose.go'))}>
+                {t('app.choose.pick')}
               </button>
             </div>
           ))}

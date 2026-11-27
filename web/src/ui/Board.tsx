@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { t } from '../i18n';
 import { BoardIcon } from '../icons';
 import type { TileView, View } from '../types';
 import { SQUAD_HEX, useCtx } from './common';
@@ -28,6 +29,11 @@ function xy(i: number): [number, number] {
 function center(i: number): [number, number] {
   const [x, y] = xy(i);
   return [x * C + C / 2, y * C + C / 2];
+}
+
+/** Hover text of a tile: its label, then whether it is ours and whether it is on alert. */
+function tileTitle(tile: TileView): string {
+  return `${tile.label}${tile.owned ? t('board.tile.owned') : ''}${tile.alert ? t('board.tile.alert') : ''}`;
 }
 
 function tileIcon(t: TileView, view: View): string | null {
@@ -105,17 +111,18 @@ export function Board() {
     return { district: district.join(''), territory: territory.join('') };
   }, [tiles]);
 
-  const onTile = (t: TileView) => {
+  const onTile = (tile: TileView) => {
     if (routeEdit) {
       const r = routeEdit.route;
-      if (r[r.length - 1] === t.i) {
+      if (r[r.length - 1] === tile.i) {
         setRouteEdit({ ...routeEdit, route: r.slice(0, -1) });
-      } else if (r.includes(t.i)) {
-        setRouteEdit({ ...routeEdit, route: r.slice(0, r.indexOf(t.i) + 1) });
+      } else if (r.includes(tile.i)) {
+        setRouteEdit({ ...routeEdit, route: r.slice(0, r.indexOf(tile.i) + 1) });
       } else {
-        const next = [...r, t.i];
+        const next = [...r, tile.i];
         const p = game.previewRoute(routeEdit.squad, next);
-        if (!p.ok && p.error && !p.error.includes('小队没人')) {
+        // An empty squad may still draw its route; the engine's text for that is err.route_empty.
+        if (!p.ok && p.error && p.error !== t('err.route_empty')) {
           toast(p.error, true);
           return;
         }
@@ -123,7 +130,7 @@ export function Board() {
       }
       return;
     }
-    open({ kind: 'tile', tile: t.i }, true);
+    open({ kind: 'tile', tile: tile.i }, true);
   };
 
   const routes = view.squads
@@ -133,7 +140,7 @@ export function Board() {
   const size = N * C;
   return (
     <div className="board-frame">
-      <svg className="board" viewBox={`${-M} ${-M} ${size + M + 2} ${size + M + 2}`} role="img" aria-label="城市地图">
+      <svg className="board" viewBox={`${-M} ${-M} ${size + M + 2} ${size + M + 2}`} role="img" aria-label={t('board.map_label')}>
         <defs>
           {/* fog: an ordered dither, darker than anything known */}
           <pattern id="fog" width="4" height="4" patternUnits="userSpaceOnUse">
@@ -272,7 +279,7 @@ export function Board() {
                 </g>
               ) : null}
               <rect className="hover" x={px + 0.5} y={py + 0.5} width={w - 1} height={w - 1} fill="none" stroke={COL.ink} strokeWidth={1} pointerEvents="none" />
-              <title>{`${t.label}${t.owned ? ' · 领地' : ''}${t.alert ? ' · 告急' : ''}`}</title>
+              <title>{tileTitle(t)}</title>
             </g>
           );
         })}
@@ -356,25 +363,25 @@ function Legend() {
         <svg width="18" height="6">
           <rect y="1" width="18" height="4" fill={COL.hazard} />
         </svg>
-        领地边界
+        {t('board.legend.border')}
       </span>
       <span>
         <svg width="16" height="6">
           <rect y="1" width="16" height="3" fill={SQUAD_HEX[0]} />
         </svg>
-        甲队
+        {t('board.legend.squad_a')}
       </span>
       <span>
         <svg width="16" height="6">
           <rect y="1" width="16" height="3" fill={SQUAD_HEX[1]} />
         </svg>
-        乙队
+        {t('board.legend.squad_b')}
       </span>
       <span>
         <svg width="12" height="12">
           <rect x="1" y="1" width="10" height="10" fill="none" stroke={COL.good} strokeWidth="2" strokeDasharray="3 2" />
         </svg>
-        可占领
+        {t('board.legend.claimable')}
       </span>
       <span>
         <svg width="10" height="12">
@@ -382,27 +389,27 @@ function Legend() {
           <rect x="4" y="2" width="2" height="5" fill={COL.ink} />
           <rect x="4" y="8" width="2" height="2" fill={COL.ink} />
         </svg>
-        告急
+        {t('board.legend.alert')}
       </span>
       <span>
         <svg width="10" height="10">
           <path d="M0 0h9l-9 9z" fill={COL.bad} />
         </svg>
-        下次来潮会失守
+        {t('board.legend.lost')}
       </span>
       <span>
         <svg width="8" height="10">
           <rect x="0" y="0" width="1" height="9" fill={COL.ink} />
           <rect x="1" y="0" width="5" height="4" fill={COL.hazard} />
         </svg>
-        驻守
+        {t('board.legend.garrison')}
       </span>
       <span>
         <svg width="20" height="6">
           <rect y="1" width="20" height="3" fill={COL.sunk} />
           <rect y="1" width="12" height="3" fill={COL.good} />
         </svg>
-        镇守度
+        {t('board.legend.warden')}
       </span>
     </div>
   );
