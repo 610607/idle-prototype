@@ -14,7 +14,7 @@ fn main() {
     let seeds: u64 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(5);
     let hours: i64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(72);
     let marks = [1, 3, 6, 12, 24, 48, 72, 120, 168];
-    println!("seed  h  owned ring  ops  scrap parts intel cryst  held lost alert  income(s/p/i/c per h)  lvl-exp");
+    println!("seed  h  owned ring  ops  scrap parts intel cryst  held lost alert  income(s/p/i/c per h)  lvl-exp  doct react");
     for seed in 0..seeds {
         let mut e = Engine::new(seed, T0, "bot");
         e.command(&Command::ChooseMap { index: 0 }).unwrap();
@@ -73,7 +73,7 @@ fn main() {
                 let v = e.view();
                 let st = &e.state.cycle.stats;
                 println!(
-                    "{seed:>4} {h:>3} {:>5} {:>4} {:>4} {:>6} {:>5} {:>5} {:>5}  {:>4} {:>4} {:>5}  {:>5.1}/{:.1}/{:.1}/{:.1}  {}",
+                    "{seed:>4} {h:>3} {:>5} {:>4} {:>4} {:>6} {:>5} {:>5} {:>5}  {:>4} {:>4} {:>5}  {:>5.1}/{:.1}/{:.1}/{:.1}  {:>5}  {:>4} {:>5}",
                     v.tiles.iter().filter(|t| t.owned).count(),
                     st.max_ring,
                     v.operatives.len(),
@@ -89,6 +89,8 @@ fn main() {
                     v.income[2] as f64 / 100.0,
                     v.income[3] as f64 / 100.0,
                     v.results.total,
+                    e.state.cycle.doctrines.len(),
+                    e.state.cycle.reactions.values().sum::<u32>(),
                 );
             }
         }

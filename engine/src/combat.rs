@@ -2461,6 +2461,11 @@ fn trait_name(id: &str) -> String {
         .get(id)
         .map(|t| t.name.clone())
         .or_else(|| c.equip(id).map(|e| e.name.clone()))
+        .or_else(|| {
+            id.strip_prefix("doctrine:")
+                .and_then(|d| c.doctrine(d))
+                .map(|d| format!("条令·{}", d.name))
+        })
         .unwrap_or_else(|| id.to_string())
 }
 

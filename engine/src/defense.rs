@@ -219,17 +219,19 @@ pub fn surge_setup(
     if let Some(p) = policy {
         ally_tags.extend(p.defender_tags.iter().cloned());
     }
+    let mut input = BattleInput {
+        kind,
+        allies,
+        waves,
+        ally_tags,
+        enemy_tags,
+        grounding,
+        defense: true,
+        record: false,
+    };
+    crate::doctrine::apply(&cy.doctrines, &mut input);
     Some(SurgeSetup {
-        input: BattleInput {
-            kind,
-            allies,
-            waves,
-            ally_tags,
-            enemy_tags,
-            grounding,
-            defense: true,
-            record: false,
-        },
+        input,
         source,
         defender,
     })
@@ -272,6 +274,7 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
         return;
     };
     let report = combat::simulate(&setup.input);
+    crate::doctrine::note(state, &report);
     let held = report.won();
     let gain = report.warden_gain;
     {

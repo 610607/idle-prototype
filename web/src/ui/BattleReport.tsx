@@ -74,6 +74,7 @@ export function BattleReport({ report }: { report: Report }) {
           </span>
           {report.warden_gain ? <span className="small good">接地网 镇守度 +{report.warden_gain}</span> : null}
         </div>
+        {report.reactions?.length ? <ReactionLine reactions={report.reactions} /> : null}
 
         {snap ? <Field snap={snap} actor={cur?.actor} target={cur?.target} /> : null}
 
@@ -254,5 +255,21 @@ function Summary({ report }: { report: Report }) {
         )}
       </div>
     </details>
+  );
+}
+
+function ReactionLine({ reactions }: { reactions: [string, number][] }) {
+  const { view } = useCtx();
+  const name = (id: string) => view.research.codex.find((e) => e.id === id)?.name ?? id;
+  return (
+    <div className="row wrap small" style={{ gap: 6 }}>
+      <Icon id="trait-resonance" size={14} />
+      <span className="muted">反应</span>
+      {reactions.map(([id, n]) => (
+        <span key={id} className="chip">
+          {name(id)} <span className="num">×{n}</span>
+        </span>
+      ))}
+    </div>
   );
 }

@@ -1,0 +1,15 @@
+[
+  {"id": "route", "group": "路线", "name": "定一条路线", "check": "route_set", "desc": "在「指挥」里给第一小队定路线：点「路线」，再点地图上挨着领地的未占领格。", "reward": {"scrap": 30}},
+  {"id": "win", "group": "路线", "name": "打赢一场", "check": "route_win", "after": "route", "desc": "小队走完路线会自动开打。赢下来的格子镇守度会涨，回来看战报。", "reward": {"parts": 4}},
+  {"id": "claim", "group": "领地", "name": "占领一格", "check": "claim", "after": "win", "desc": "镇守度涨满的格子会出现在「待你决定」里，点它占领。", "reward": {"intel": 10}},
+  {"id": "research", "group": "研究", "name": "研究一次", "check": "research", "after": "claim", "desc": "在「研究」里花情报抽三条条令，挑一条。条令对这一轮的所有战斗生效。", "reward": {"intel": 10}},
+  {"id": "garrison", "group": "守城", "name": "派一名驻守", "check": "garrison", "after": "claim", "desc": "边界格会定时来潮，「潮汐」里标红的会失守。打开那一格派一名队员驻守（可以先从小队里调一人出来），预演会告诉你守不守得住。", "reward": {"parts": 4}},
+  {"id": "build", "group": "建设", "name": "建一座设施", "check": "build", "after": "claim", "desc": "城区格默认是民居。点一个己方城区格，把它改成设施；废材站最先值得建。", "reward": {"scrap": 40}},
+  {"id": "hire", "group": "名册", "name": "招一名队员", "check": "hire", "after": "claim", "desc": "街区人才攒满会出候选。在「队员」里看候选，招一名进来。", "reward": {"scrap": 40}},
+  {"id": "reaction", "group": "研究", "name": "触发一次反应", "check": "reaction", "after": "research", "desc": "拿到「反应协议」以后，两种标签在同一个敌人身上相遇就会起反应。第一次触发会点亮图鉴。", "reward": {"intel": 15}},
+  {"id": "counter", "group": "守城", "name": "反击告急", "check": "counter", "after": "garrison", "desc": "镇守度掉到 0 的格子会告急、停产。打开它点「反击」，赢了就恢复。", "reward": {"scrap": 60}},
+  {"id": "policy", "group": "街区", "name": "定一条政策", "check": "policy", "after": "build", "desc": "街区信任够了以后，可以在「街区」里给它定政策。政策改的是这个街区的玩法，不只是数值。", "reward": {"parts": 6}},
+  {"id": "archive", "group": "研究", "name": "收进知识库", "check": "archive", "after": "reaction", "desc": "把一条用得顺手的条令收进知识库，之后每一轮开局就带着它。", "reward": {"intel": 10}},
+  {"id": "customize", "group": "名册", "name": "定制一名候选", "check": "customize", "after": "hire", "desc": "有街区连成片（或第二轮起）可以定制招募：从一个街区抽居民，换一名指定职业的候选。", "reward": {"scrap": 50}},
+  {"id": "collapse", "group": "轮回", "name": "收束防线", "check": "collapse", "after": "counter", "desc": "一轮打到满意，就在「总部」收束防线，把成果换成组织经验，再选下一张地图。", "reward": {}}
+]

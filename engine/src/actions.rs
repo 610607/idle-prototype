@@ -173,6 +173,7 @@ pub fn counter(state: &mut GameState, tile: u16) -> ActResult {
     let setup = crate::defense::surge_setup(state, &calc, tile, None, BattleKind::Counter)
         .ok_or("这格没有来敌")?;
     let report = combat::simulate(&setup.input);
+    crate::doctrine::note(state, &report);
     let mut rec = setup.input.clone();
     rec.record = true;
     let rid = state.store_report(combat::simulate(&rec));
@@ -189,6 +190,7 @@ pub fn counter(state: &mut GameState, tile: u16) -> ActResult {
             b.warden_counter_restore
         };
         state.cycle.tiles[tile as usize].warden = restore;
+        state.cycle.stats.counters_won += 1;
         state.event(
             EventKind::Info,
             format!("{} 反击成功，镇守度回到 {}", geom::label(tile), restore),
@@ -257,6 +259,7 @@ pub fn hire(state: &mut GameState, candidate: u32) -> ActResult {
         }
     }
     state.cycle.operatives.push(c.op);
+    state.cycle.stats.hired += 1;
     state.event(
         EventKind::Info,
         format!("招募了 {}", name),
@@ -359,6 +362,7 @@ pub fn customize(
         ));
     }
     state.cycle.districts[district as usize].population -= cost;
+    state.cycle.stats.customized += 1;
     economy::spawn_city_candidate_with(
         state,
         district,

@@ -11,6 +11,7 @@ pub mod combat;
 pub mod commands;
 pub mod content;
 pub mod defense;
+pub mod doctrine;
 pub mod economy;
 pub mod geom;
 pub mod mapgen;
@@ -20,6 +21,7 @@ pub mod routes;
 pub mod save;
 pub mod sim;
 pub mod state;
+pub mod tasks;
 pub mod view;
 pub mod world;
 

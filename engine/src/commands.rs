@@ -90,6 +90,21 @@ pub enum Command {
         op: u32,
         locked: bool,
     },
+    /// Spend intel on a research draw of three doctrines.
+    Research,
+    /// Keep one doctrine from the pending draw.
+    PickDoctrine {
+        doctrine: String,
+    },
+    /// File a held doctrine in the 知识库 (or take it out).
+    Archive {
+        doctrine: String,
+        on: bool,
+    },
+    /// Claim the reward of a finished 见习任务.
+    ClaimTask {
+        task: String,
+    },
     Collapse,
 }
 
@@ -102,7 +117,15 @@ impl Command {
 
 pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
     let active = state.cycle.phase == Phase::Active;
-    if !active && !matches!(cmd, Command::ChooseMap { .. } | Command::SetRule { .. }) {
+    if !active
+        && !matches!(
+            cmd,
+            Command::ChooseMap { .. }
+                | Command::SetRule { .. }
+                | Command::Archive { on: false, .. }
+                | Command::ClaimTask { .. }
+        )
+    {
         return Err("先选一张地图".into());
     }
     let r = match cmd {
@@ -150,6 +173,10 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         Command::Equip { op, item } => actions::equip(state, *op, item.as_deref()),
         Command::Seal { item, on } => actions::seal(state, item, *on),
         Command::Lock { op, locked } => actions::lock(state, *op, *locked),
+        Command::Research => crate::doctrine::research(state),
+        Command::PickDoctrine { doctrine } => crate::doctrine::pick(state, doctrine),
+        Command::Archive { doctrine, on } => crate::doctrine::archive(state, doctrine, *on),
+        Command::ClaimTask { task } => crate::tasks::claim(state, task),
         Command::Collapse => sim::collapse(state),
     };
     if r.is_ok() {

@@ -6,15 +6,17 @@ import { ReportSheet } from './BattleReport';
 import { Board, WASH } from './Board';
 import { ConfirmDialog, fmtClock, fmtRate, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, SQUAD_HEX, useCtx, type ConfirmAsk, type Ctx, type RouteEdit, type Sheet } from './common';
 import { CommandPanel, DistrictsPanel, HQPanel, PendingList, RosterPanel, TideStrip } from './Panels';
+import { ResearchPanel } from './Research';
 import { CandidateSheet, DistrictSheet, OpSheet, SquadSheet, TideSheet } from './Sheets';
 import { TileSheet } from './TileSheet';
 
 /** `map` only exists on phones, where the map and the workspace take turns. */
-type Tab = 'map' | 'command' | 'roster' | 'districts' | 'hq';
+type Tab = 'map' | 'command' | 'roster' | 'districts' | 'research' | 'hq';
 const TABS: { id: Exclude<Tab, 'map'>; name: string; icon: string }[] = [
   { id: 'command', name: '指挥', icon: 'squad' },
   { id: 'roster', name: '队员', icon: 'roster' },
   { id: 'districts', name: '街区', icon: 'trust' },
+  { id: 'research', name: '研究', icon: 'trait-book' },
   { id: 'hq', name: '总部', icon: 'org' },
 ];
 
@@ -152,9 +154,13 @@ export function App({ game }: { game: Game }) {
   const workTab: Exclude<Tab, 'map'> = tab === 'map' ? 'command' : tab;
   const tabName = tab === 'map' ? '地图' : TABS.find((t) => t.id === workTab)!.name;
 
+  const goTab = useCallback((t: Exclude<Tab, 'map'>) => {
+    setTab(t);
+    setPages([]);
+  }, []);
   const ctx: Ctx = useMemo(
-    () => ({ game, view, now, open, pages, popTo, selectedTile, confirm: setAsk, run, toast, routeEdit, setRouteEdit, focusTile, setFocusTile, tabName }),
-    [game, view, now, open, pages, popTo, selectedTile, run, toast, routeEdit, focusTile, tabName],
+    () => ({ game, view, now, open, pages, popTo, selectedTile, confirm: setAsk, run, toast, routeEdit, setRouteEdit, focusTile, setFocusTile, tabName, goTab }),
+    [game, view, now, open, pages, popTo, selectedTile, run, toast, routeEdit, focusTile, tabName, goTab],
   );
 
   useEffect(() => {
@@ -171,10 +177,15 @@ export function App({ game }: { game: Game }) {
   const alerts = view.pending.filter((p) => p.kind === 'alert' || p.kind === 'defend').length;
   const badge = (t: Tab) => {
     if (t === 'map' && view.pending.length) return <span className={'badge' + (alerts ? '' : ' ink')}>{view.pending.length}</span>;
+    if (t === 'command' && view.tasks.open.some((x) => x.done)) return <span className="badge ink">!</span>;
     if (t === 'roster' && view.candidates.length) return <span className="badge ink">{view.candidates.length}</span>;
     if (t === 'districts') {
       const n = view.districts.filter((d) => d.policy_unlocked && !d.policy).length;
       return n ? <span className="badge ink">{n}</span> : null;
+    }
+    if (t === 'research') {
+      if (view.research.offers.length) return <span className="badge ink">3</span>;
+      return view.research.affordable && view.research.left ? <span className="badge ink">!</span> : null;
     }
     return null;
   };
@@ -211,7 +222,7 @@ export function App({ game }: { game: Game }) {
               <div className="work-body" ref={workRef}>
                 {pages.length === 0 ? (
                   <div className="pane">
-                    {workTab === 'command' ? <CommandPanel /> : workTab === 'roster' ? <RosterPanel /> : workTab === 'districts' ? <DistrictsPanel /> : <HQPanel />}
+                    {workTab === 'command' ? <CommandPanel /> : workTab === 'roster' ? <RosterPanel /> : workTab === 'districts' ? <DistrictsPanel /> : workTab === 'research' ? <ResearchPanel /> : <HQPanel />}
                   </div>
                 ) : null}
                 {pages.map((s, k) => (

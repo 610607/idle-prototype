@@ -305,6 +305,12 @@ pub struct CycleStats {
     pub candidates: i32,
     pub best_trust: i32,
     pub contiguous_districts: i32,
+    #[serde(default)]
+    pub hired: i32,
+    #[serde(default)]
+    pub counters_won: i32,
+    #[serde(default)]
+    pub customized: i32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -352,6 +358,18 @@ pub struct Cycle {
     /// Facilities the player has ever been able to see (half-affordable reveal).
     #[serde(default)]
     pub seen_facilities: Vec<String>,
+    /// 条令 held this cycle (bought through research or brought from the knowledge base).
+    #[serde(default)]
+    pub doctrines: Vec<String>,
+    /// Pending research draw: pick one of these.
+    #[serde(default)]
+    pub research_offers: Vec<String>,
+    /// Research draws paid for this cycle (drives the intel price).
+    #[serde(default)]
+    pub research_count: u32,
+    /// Tag reactions set off this cycle, by id.
+    #[serde(default)]
+    pub reactions: BTreeMap<String, u32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -378,6 +396,18 @@ pub struct Org {
     /// Equipment kept in sealed storage.
     pub sealed: Vec<String>,
     pub history: Vec<CycleSummary>,
+    /// 知识库: doctrines filed to start every cycle already held.
+    #[serde(default)]
+    pub archive: Vec<String>,
+    /// Doctrines ever held (codex).
+    #[serde(default)]
+    pub known_doctrines: Vec<String>,
+    /// Reaction codex: total times each reaction went off, across cycles.
+    #[serde(default)]
+    pub codex: BTreeMap<String, u32>,
+    /// 见习任务 whose reward has been claimed.
+    #[serde(default)]
+    pub tasks_done: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

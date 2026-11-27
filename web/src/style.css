@@ -299,6 +299,8 @@ button.list-item:disabled { cursor: not-allowed; opacity: 0.55; }
 .list-item:last-child { border-bottom: 0; }
 
 /* ---------------------------------------------------------------- pending (待你决定) */
+.task-item { padding: 6px 8px; border: 1px solid var(--line); background: var(--panel); }
+.task-item.done { border-color: rgba(152, 185, 111, 0.55); background: var(--panel-2); }
 .pending-item {
   display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px 8px 12px; border: 1px solid var(--line);
   background: var(--panel); cursor: pointer; text-align: left; width: 100%; color: inherit; position: relative;

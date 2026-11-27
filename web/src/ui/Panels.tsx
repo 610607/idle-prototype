@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Icon } from '../icons';
 import type { OpView, PendingView, SquadView, TideView } from '../types';
 import { WASH } from './Board';
-import { Bar, fmtAgo, fmtClock, fmtIn, OUTCOME_NAMES, Rarity, Section, SQUAD_HEX, TagIO, useCtx } from './common';
+import { Bar, fmtAgo, fmtClock, fmtIn, OUTCOME_NAMES, RES_KEYS, RES_NAMES, Rarity, Section, SQUAD_HEX, TagIO, useCtx } from './common';
 
 const PENDING_ICON: Record<string, string> = {
   map: 'map',
@@ -12,6 +12,7 @@ const PENDING_ICON: Record<string, string> = {
   policy: 'policy',
   route: 'route',
   defend: 'garrison',
+  research: 'trait-book',
 };
 
 // ---------------------------------------------------------------------------
@@ -21,6 +22,7 @@ export function CommandPanel() {
   return (
     <div className="split">
       <div className="col">
+        <Apprentice />
         <SquadsPanel />
         <EventLog />
       </div>
@@ -99,13 +101,46 @@ export function TideStrip() {
   );
 }
 
+/** 见习任务: the next few "do it once" steps; hidden once every task is claimed. */
+function Apprentice() {
+  const { view, run } = useCtx();
+  const t = view.tasks;
+  if (!t.open.length) return null;
+  return (
+    <Section title="见习任务" icon="check" hint={`${t.claimed}/${t.total}`}>
+      <div className="stack" style={{ gap: 6 }}>
+        {t.open.map((x) => {
+          const reward = RES_KEYS.filter((k) => x.reward[k] > 0).map((k) => `${RES_NAMES[k]} +${x.reward[k]}`);
+          return (
+            <div key={x.id} className={'task-item' + (x.done ? ' done' : '')}>
+              <div className="row">
+                <span className="chip">{x.group}</span>
+                <b>{x.name}</b>
+                <span className="grow" />
+                {reward.length ? <span className="tiny muted">{reward.join(' · ')}</span> : null}
+                {x.done ? (
+                  <button className="btn small primary" onClick={() => run({ cmd: 'claim_task', task: x.id }, `见习任务完成：${x.name}`)}>
+                    领取
+                  </button>
+                ) : null}
+              </div>
+              {!x.done ? <div className="small muted">{x.desc}</div> : null}
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
 export function PendingList() {
-  const { view, open, setFocusTile, setRouteEdit } = useCtx();
+  const { view, open, setFocusTile, setRouteEdit, goTab } = useCtx();
   const items = view.pending;
   const act = (p: PendingView) => {
     if (p.tile !== undefined) setFocusTile(p.tile);
     if (p.kind === 'candidate' && p.candidate !== undefined) open({ kind: 'candidate', candidate: p.candidate }, true);
     else if (p.kind === 'policy' && p.district !== undefined) open({ kind: 'district', district: p.district }, true);
+    else if (p.kind === 'research') goTab('research');
     else if (p.kind === 'route') {
       const s = view.squads.find((s) => p.text.startsWith(s.name));
       if (s) setRouteEdit({ squad: s.id, route: s.route.filter((i) => !view.tiles[i]!.owned) });
@@ -471,7 +506,7 @@ export function HQPanel() {
           {org.next ? <Bar value={org.exp} max={org.next} /> : null}
           <div className="stack" style={{ gap: 2, marginTop: 8 }}>
             {org.perks.map((p) => (
-              <div key={p.level} className={'small ' + (p.unlocked ? '' : 'faint')}>
+              <div key={p.level + p.text} className={'small ' + (p.unlocked ? '' : 'faint')}>
                 {p.unlocked ? '✓' : '·'} Lv.{p.level} {p.text}
               </div>
             ))}

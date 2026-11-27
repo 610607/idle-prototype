@@ -312,7 +312,7 @@ export interface TideView {
 }
 
 export interface PendingView {
-  kind: 'map' | 'alert' | 'claim' | 'candidate' | 'policy' | 'route' | 'defend';
+  kind: 'map' | 'alert' | 'claim' | 'candidate' | 'policy' | 'route' | 'defend' | 'research';
   text: string;
   tile?: number;
   op?: number;
@@ -412,6 +412,67 @@ export interface View {
   org: OrgView;
   results: CycleResults;
   hire_cost: number;
+  research: ResearchView;
+  tasks: TasksView;
+}
+
+export interface TaskView {
+  id: string;
+  group: string;
+  name: string;
+  desc: string;
+  reward: Resources;
+  done: boolean;
+}
+
+export interface TasksView {
+  open: TaskView[];
+  claimed: number;
+  total: number;
+}
+
+export interface DoctrineView {
+  id: string;
+  name: string;
+  icon: string;
+  rarity: number;
+  desc: string;
+  held: boolean;
+  archived: boolean;
+  new: boolean;
+  links_held: string[];
+}
+
+export interface TagChip {
+  id: string;
+  name: string;
+  icon: string;
+}
+
+export interface CodexEntry {
+  id: string;
+  name: string;
+  a: TagChip;
+  b: TagChip;
+  seen: boolean;
+  text: string;
+  total: number;
+  this_cycle: number;
+}
+
+export interface ResearchView {
+  cost: number;
+  step: number;
+  affordable: boolean;
+  left: number;
+  offers: DoctrineView[];
+  held: DoctrineView[];
+  archive: DoctrineView[];
+  archive_slots: number;
+  reactions_on: boolean;
+  codex: CodexEntry[];
+  known: number;
+  total: number;
 }
 
 // ---- api.rs ----
@@ -517,6 +578,8 @@ export interface BattleReport {
   applied: number[];
   consumed: number[];
   warden_gain: number;
+  /** Tag reactions set off, by id (only when the reaction doctrine is held). */
+  reactions?: [string, number][];
   units: UnitReport[];
   log: LogEntry[];
 }
@@ -561,4 +624,8 @@ export type Command =
   | { cmd: 'equip'; op: number; item: string | null }
   | { cmd: 'seal'; item: string; on: boolean }
   | { cmd: 'lock'; op: number; locked: boolean }
+  | { cmd: 'research' }
+  | { cmd: 'claim_task'; task: string }
+  | { cmd: 'pick_doctrine'; doctrine: string }
+  | { cmd: 'archive'; doctrine: string; on: boolean }
   | { cmd: 'collapse' };

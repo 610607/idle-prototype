@@ -420,6 +420,171 @@ pub struct OrgView {
 }
 
 #[derive(Serialize)]
+pub struct TaskView {
+    pub id: String,
+    pub group: String,
+    pub name: String,
+    pub desc: String,
+    pub reward: Resources,
+    pub done: bool,
+}
+
+#[derive(Serialize)]
+pub struct TasksView {
+    pub open: Vec<TaskView>,
+    pub claimed: usize,
+    pub total: usize,
+}
+
+pub fn tasks_view(state: &GameState) -> TasksView {
+    TasksView {
+        open: crate::tasks::open(state)
+            .into_iter()
+            .map(|t| TaskView {
+                id: t.id.clone(),
+                group: t.group.clone(),
+                name: t.name.clone(),
+                desc: t.desc.clone(),
+                reward: t.reward.clone(),
+                done: crate::tasks::done(state, &t.check),
+            })
+            .collect(),
+        claimed: state.org.tasks_done.len(),
+        total: content().tasks.len(),
+    }
+}
+
+#[derive(Serialize)]
+pub struct DoctrineView {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub rarity: i32,
+    pub desc: String,
+    pub held: bool,
+    pub archived: bool,
+    /// Never held before (codex).
+    pub new: bool,
+    /// Names of held doctrines this one wires into.
+    pub links_held: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct CodexEntry {
+    pub id: String,
+    /// Shown only once seen; "？？？" before.
+    pub name: String,
+    pub a: TagChip,
+    pub b: TagChip,
+    pub seen: bool,
+    /// Effect text once seen, hint before.
+    pub text: String,
+    pub total: u32,
+    pub this_cycle: u32,
+}
+
+#[derive(Serialize)]
+pub struct TagChip {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+}
+
+#[derive(Serialize)]
+pub struct ResearchView {
+    pub cost: i64,
+    /// Price rise per draw.
+    pub step: i64,
+    pub affordable: bool,
+    /// Doctrines still drawable this cycle.
+    pub left: usize,
+    pub offers: Vec<DoctrineView>,
+    pub held: Vec<DoctrineView>,
+    pub archive: Vec<DoctrineView>,
+    pub archive_slots: usize,
+    /// Whether the reaction table is switched on (the hub doctrine is held).
+    pub reactions_on: bool,
+    pub codex: Vec<CodexEntry>,
+    pub known: usize,
+    pub total: usize,
+}
+
+fn tag_chip(t: crate::content::Tag) -> TagChip {
+    let c = content();
+    let d = c.tags.iter().find(|x| x.id == t);
+    TagChip {
+        id: format!("{:?}", t).to_lowercase(),
+        name: d.map(|d| d.name.clone()).unwrap_or_default(),
+        icon: d.map(|d| d.icon.clone()).unwrap_or_default(),
+    }
+}
+
+pub fn research_view(state: &GameState) -> ResearchView {
+    let c = content();
+    let cy = &state.cycle;
+    let active = cy.phase == Phase::Active;
+    let dv = |id: &String| -> Option<DoctrineView> {
+        let d = c.doctrine(id)?;
+        Some(DoctrineView {
+            id: d.id.clone(),
+            name: d.name.clone(),
+            icon: d.icon.clone(),
+            rarity: d.rarity,
+            desc: d.desc.clone(),
+            held: cy.doctrines.contains(&d.id),
+            archived: state.org.archive.contains(&d.id),
+            new: !state.org.known_doctrines.contains(&d.id),
+            links_held: d
+                .links
+                .iter()
+                .filter(|l| cy.doctrines.contains(l))
+                .filter_map(|l| c.doctrine(l).map(|x| x.name.clone()))
+                .collect(),
+        })
+    };
+    let cost = crate::doctrine::research_cost(state);
+    ResearchView {
+        cost,
+        step: balance().research_step,
+        affordable: active && cy.resources.intel >= cost,
+        left: if active {
+            crate::doctrine::pool(state).len()
+        } else {
+            0
+        },
+        offers: cy.research_offers.iter().filter_map(dv).collect(),
+        held: cy.doctrines.iter().filter_map(dv).collect(),
+        archive: state.org.archive.iter().filter_map(dv).collect(),
+        archive_slots: crate::doctrine::archive_slots(state),
+        reactions_on: cy.doctrines.iter().any(|d| d == crate::doctrine::HUB),
+        codex: c
+            .reactions
+            .iter()
+            .map(|r| {
+                let total = state.org.codex.get(&r.id).copied().unwrap_or(0);
+                let seen = total > 0;
+                CodexEntry {
+                    id: r.id.clone(),
+                    name: if seen {
+                        r.name.clone()
+                    } else {
+                        "？？？".into()
+                    },
+                    a: tag_chip(r.a),
+                    b: tag_chip(r.b),
+                    seen,
+                    text: if seen { r.desc.clone() } else { r.hint.clone() },
+                    total,
+                    this_cycle: cy.reactions.get(&r.id).copied().unwrap_or(0),
+                }
+            })
+            .collect(),
+        known: state.org.known_doctrines.len(),
+        total: c.doctrines.len(),
+    }
+}
+
+#[derive(Serialize)]
 pub struct PreviewView {
     pub index: usize,
     pub modifier: String,
@@ -463,6 +628,8 @@ pub struct View {
     pub org: OrgView,
     pub results: CycleResults,
     pub hire_cost: i64,
+    pub research: ResearchView,
+    pub tasks: TasksView,
 }
 
 pub fn trait_view(id: &str, exp: bool) -> TraitView {
@@ -747,8 +914,18 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 unlocked: level >= 2,
             },
             PerkView {
+                level: 2,
+                text: "条令「连锁」「超频供电」进研究池",
+                unlocked: level >= 2,
+            },
+            PerkView {
                 level: 3,
                 text: "快反规章：开局第一圈格子镇守度满",
+                unlocked: level >= 3,
+            },
+            PerkView {
+                level: 3,
+                text: "知识库 +1 格；条令「前置观测」进研究池",
                 unlocked: level >= 3,
             },
             PerkView {
@@ -758,7 +935,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             },
             PerkView {
                 level: 5,
-                text: "封存格 +1",
+                text: "封存格 +1，知识库 +1 格",
                 unlocked: level >= 5,
             },
             PerkView {
@@ -829,6 +1006,8 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             org,
             results: sim::cycle_results(state),
             hire_cost: b.hire_cost_scrap,
+            research: research_view(state),
+            tasks: tasks_view(state),
         };
     }
 
@@ -1138,6 +1317,28 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             district: None,
         });
     }
+    if !cy.research_offers.is_empty() {
+        pending.push(PendingView {
+            kind: "research",
+            text: "研究出了三条条令：挑一条".into(),
+            tile: None,
+            op: None,
+            candidate: None,
+            district: None,
+        });
+    } else {
+        let cost = crate::doctrine::research_cost(state);
+        if cy.resources.intel >= cost && !crate::doctrine::pool(state).is_empty() {
+            pending.push(PendingView {
+                kind: "research",
+                text: format!("情报够研究一次条令（{} 情报）", cost),
+                tile: None,
+                op: None,
+                candidate: None,
+                district: None,
+            });
+        }
+    }
 
     let income = calc.income.map(|v| v / 100);
     View {
@@ -1176,6 +1377,8 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         org,
         results: sim::cycle_results(state),
         hire_cost: b.hire_cost_scrap,
+        research: research_view(state),
+        tasks: tasks_view(state),
     }
 }
 

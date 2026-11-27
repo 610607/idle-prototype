@@ -208,8 +208,53 @@ pub fn step_with(e: &mut Engine, staffing: bool) {
             break;
         }
     }
+    research(e);
     let v = e.view();
     for t in v.tiles.iter().filter(|t| t.alert) {
         let _ = e.command(&Command::Counter { tile: t.i });
+    }
+}
+
+/// Research whenever intel allows (unless BOT_NORESEARCH is set): keep the offer that wires into
+/// the most held doctrines, the hub first on ties.
+pub fn research(e: &mut Engine) {
+    let done: Vec<String> = e
+        .view()
+        .tasks
+        .open
+        .iter()
+        .filter(|t| t.done)
+        .map(|t| t.id.clone())
+        .collect();
+    for task in done {
+        let _ = e.command(&Command::ClaimTask { task });
+    }
+    if std::env::var("BOT_NORESEARCH").is_ok() {
+        return;
+    }
+    loop {
+        let v = e.view();
+        if v.research.offers.is_empty() {
+            if !v.research.affordable || v.research.left == 0 {
+                return;
+            }
+            if e.command(&Command::Research).is_err() {
+                return;
+            }
+            continue;
+        }
+        let best = v
+            .research
+            .offers
+            .iter()
+            .max_by_key(|o| (o.links_held.len(), o.id == "react", -(o.rarity)))
+            .unwrap()
+            .id
+            .clone();
+        if e.command(&Command::PickDoctrine { doctrine: best })
+            .is_err()
+        {
+            return;
+        }
     }
 }

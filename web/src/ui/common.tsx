@@ -38,6 +38,8 @@ export interface Ctx {
   setFocusTile: (t: number | null) => void;
   /** Name of the workspace tab the trail started from. */
   tabName: string;
+  /** Switch the workspace to a tab (closing any open pages). */
+  goTab: (t: 'command' | 'roster' | 'districts' | 'research' | 'hq') => void;
 }
 
 export interface ConfirmAsk {

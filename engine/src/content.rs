@@ -772,6 +772,40 @@ pub struct EquipDef {
     pub desc: String,
 }
 
+/// A 条令 (doctrine, the design's 知识库零件): bought with intel through research, held for the cycle,
+/// applied to every ally in route and defence battles. Most are rule changes that only multiply once
+/// wired into `react`. (Called doctrines so they are not confused with the 零件 resource.)
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DoctrineDef {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub rarity: i32,
+    /// Organisation level at which the doctrine enters the research pool.
+    #[serde(default)]
+    pub level: u32,
+    /// Doctrines it wires into (shown on the offer when you already hold them).
+    #[serde(default)]
+    pub links: Vec<String>,
+    pub effects: Vec<TraitEffect>,
+    pub desc: String,
+}
+
+/// 见习任务: a "do it once" task attached to one system, with a small reward.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TaskDef {
+    pub id: String,
+    pub group: String,
+    pub name: String,
+    pub desc: String,
+    /// Which state check marks it done (see `tasks::done`).
+    pub check: String,
+    /// Shown once this task has been claimed.
+    #[serde(default)]
+    pub after: Option<String>,
+    pub reward: Resources,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RuleDef {
     pub id: String,
@@ -863,6 +897,14 @@ pub struct Balance {
     pub core_crystal: i64,
     pub core_attention_cut: i32,
     pub sealed_slots: usize,
+    /// Research: intel for the n-th draw of a cycle = base + step x n.
+    #[serde(default = "default_research_base")]
+    pub research_base: i64,
+    #[serde(default = "default_research_step")]
+    pub research_step: i64,
+    /// 知识库 slots at organisation level 1 (+1 at levels 3 and 5).
+    #[serde(default = "default_archive_slots")]
+    pub archive_slots: usize,
     /// Cycle score: one point per this many residents.
     #[serde(default = "default_score_pop_div")]
     pub score_pop_div: i32,
@@ -875,6 +917,15 @@ pub struct Balance {
     pub customize_rarity: [i32; 4],
 }
 
+fn default_research_base() -> i64 {
+    10
+}
+fn default_research_step() -> i64 {
+    12
+}
+fn default_archive_slots() -> usize {
+    1
+}
 fn default_score_pop_div() -> i32 {
     20
 }
@@ -890,6 +941,9 @@ pub struct ReactionDef {
     pub consume: Vec<Tag>,
     pub effects: Vec<ReactionEffect>,
     pub desc: String,
+    /// Codex hint shown before the reaction has ever gone off.
+    #[serde(default)]
+    pub hint: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -945,6 +999,8 @@ pub struct Content {
     pub equipment: Vec<EquipDef>,
     pub rules: Vec<RuleDef>,
     pub reactions: Vec<ReactionDef>,
+    pub doctrines: Vec<DoctrineDef>,
+    pub tasks: Vec<TaskDef>,
     pub given_names: Vec<String>,
     pub family_names: Vec<String>,
     pub otherworld_names: Vec<String>,
@@ -975,6 +1031,12 @@ impl Content {
     }
     pub fn equip(&self, id: &str) -> Option<&EquipDef> {
         self.equipment.iter().find(|e| e.id == id)
+    }
+    pub fn doctrine(&self, id: &str) -> Option<&DoctrineDef> {
+        self.doctrines.iter().find(|p| p.id == id)
+    }
+    pub fn reaction(&self, id: &str) -> Option<&ReactionDef> {
+        self.reactions.iter().find(|r| r.id == id)
     }
     pub fn rule(&self, id: &str) -> Option<&RuleDef> {
         self.rules.iter().find(|r| r.id == id)
@@ -1020,6 +1082,9 @@ fn load() -> Content {
     };
     let reactions: Vec<ReactionDef> =
         parse("reactions.json", include_str!("../content/reactions.json"));
+    let doctrines: Vec<DoctrineDef> =
+        parse("doctrines.json", include_str!("../content/doctrines.json"));
+    let tasks: Vec<TaskDef> = parse("tasks.json", include_str!("../content/tasks.json"));
 
     Content {
         tags,
@@ -1041,6 +1106,8 @@ fn load() -> Content {
         equipment: world.equipment,
         rules: world.rules,
         reactions,
+        doctrines,
+        tasks,
         given_names: world.given_names,
         family_names: world.family_names,
         otherworld_names: world.otherworld_names,

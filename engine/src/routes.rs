@@ -70,7 +70,7 @@ pub fn route_battle(
     let t = &cy.tiles[tile as usize];
     let r = ring(tile).max(1);
     let m = c.modifier(&cy.modifier);
-    BattleInput {
+    let mut input = BattleInput {
         kind: if t.special == Some(SpecialKind::Core) {
             BattleKind::Core
         } else {
@@ -87,7 +87,9 @@ pub fn route_battle(
         grounding: 0,
         defense: false,
         record,
-    }
+    };
+    crate::doctrine::apply(&cy.doctrines, &mut input);
+    input
 }
 
 fn tile_loot(state: &mut GameState, tile: u16, drops: &mut Vec<String>) -> Resources {
@@ -171,6 +173,7 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
         }
         let input = route_battle(state, &specs, tile, false);
         let report = combat::simulate(&input);
+        crate::doctrine::note(state, &report);
         inputs.push((tile, input.clone()));
         rounds += report.rounds;
         for u in &report.units {

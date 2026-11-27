@@ -113,6 +113,10 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         special_progress: Default::default(),
         core_cut: 0,
         seen_facilities: vec![],
+        doctrines: vec![],
+        research_offers: vec![],
+        research_count: 0,
+        reactions: Default::default(),
     }
 }
 
@@ -138,6 +142,10 @@ pub fn new_game(seed: u64, now: i64, device: &str) -> GameState {
             met_specials: vec![],
             sealed: vec![],
             history: vec![],
+            archive: vec![],
+            known_doctrines: vec![],
+            codex: Default::default(),
+            tasks_done: vec![],
         },
         cycle: empty_cycle(1, pv),
         events: vec![],
@@ -230,8 +238,9 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
     }
     state.cycle.operatives = ops;
     state.cycle.squads = sq;
-    // Sealed equipment comes back out.
+    // Sealed equipment comes back out; filed doctrines start held.
     state.cycle.inventory = state.org.sealed.clone();
+    state.cycle.doctrines = state.org.archive.clone();
     let name = content()
         .modifier(&p.modifier)
         .map(|m| m.name.clone())
