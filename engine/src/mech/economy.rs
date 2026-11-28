@@ -1,6 +1,9 @@
 //! Management: residents live in housing, fill facility jobs by the district's priority, become
 //! professions, accumulate talent, and grow candidates. Trust drives talent and migration.
-//! Everything settles once per game hour.
+//! Outputs are written per hour. Resources settle every `econ_interval` of the map's pace
+//! (`mech::pace`), a share of the hour each time with the remainder carried, so an hour adds up to
+//! the hourly amount exactly; trust, talent, growth, migration and rifts step once per hour of the
+//! pace (`Pace::hour_secs`). On a random map both are the one hourly settlement.
 
 use crate::data::hooks;
 use crate::data::{balance, content, FacilityKind};
@@ -316,20 +319,45 @@ pub fn calc(state: &GameState) -> EconCalc {
     out
 }
 
+/// A whole settlement with the hour's step (on a random map, the hourly settlement).
 pub fn hourly(state: &mut GameState) {
-    let c = content();
-    let b = balance();
-    let calc = calc(state);
+    settle(state, true);
+}
 
-    // Resources (with fractional carry), capped by storage.
+/// One economy settlement: this interval's share of the hourly income (with fractional carry,
+/// capped by storage), then, when `hour` is set, the hour's step for everything else.
+pub fn settle(state: &mut GameState, hour: bool) {
+    let calc = calc(state);
+    let per_hour = crate::mech::pace::of(&state.cycle).settles_per_hour();
+    let whole = pay(&mut state.cycle.carry, &calc.income, per_hour);
     let mut income = crate::data::Resources::default();
     for k in 0..4 {
-        let total = state.cycle.carry[k] + calc.income[k];
-        let whole = total / 10_000;
-        state.cycle.carry[k] = total % 10_000;
-        income.add_key(RES_KEYS[k], whole);
+        income.add_key(RES_KEYS[k], whole[k]);
     }
     state.gain(&income);
+    if hour {
+        hour_step(state, &calc);
+    }
+}
+
+/// One settlement's whole resources out of an hourly income (x10000), `per_hour` settlements to
+/// the hour. The carry is in 1/10000 of a resource times `per_hour`, so each settlement adds the
+/// full hourly rate and an hour's settlements together pay out exactly the hourly amount.
+pub fn pay(carry: &mut [i64; 4], income: &[i64; 4], per_hour: i64) -> [i64; 4] {
+    let unit = 10_000 * per_hour.max(1);
+    let mut out = [0; 4];
+    for k in 0..4 {
+        let total = carry[k] + income[k];
+        out[k] = total / unit;
+        carry[k] = total % unit;
+    }
+    out
+}
+
+/// The hour's step: trust, talent and candidates, growth, migration, rifts, garrison experience.
+fn hour_step(state: &mut GameState, calc: &EconCalc) {
+    let c = content();
+    let b = balance();
 
     // Trust drifts toward its target.
     for dc in &calc.districts {
@@ -570,4 +598,33 @@ pub fn militia_of(calc: &EconCalc, district: Option<u16>) -> i32 {
         .and_then(|d| calc.districts.iter().find(|x| x.id == d))
         .map(|x| x.militia)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Settling a share of the hour many times adds up to the hourly amount exactly, remainders
+    /// included, and one settlement per hour is the old hourly settlement.
+    #[test]
+    fn short_settlements_add_up_to_the_hour() {
+        let income = [37_000, 12_345, 9_999, 250_001];
+        for per_hour in [1, 6, 720] {
+            let (mut carry, mut hourly) = ([0; 4], [0; 4]);
+            let (mut sum, mut want) = ([0; 4], [0; 4]);
+            for _ in 0..5 {
+                let w = pay(&mut hourly, &income, 1);
+                for k in 0..4 {
+                    want[k] += w[k];
+                }
+                for _ in 0..per_hour {
+                    let got = pay(&mut carry, &income, per_hour);
+                    for k in 0..4 {
+                        sum[k] += got[k];
+                    }
+                }
+                assert_eq!(sum, want, "{per_hour} settlements an hour");
+            }
+        }
+    }
 }

@@ -264,6 +264,7 @@
   "modifier.dense_fog.name": "浓雾滞留期",
   "modifier.dense_fog.desc": "来敌多带 [侵蚀]；迷雾更浓，路线揭雾范围 -1（最少 1）。",
   "modifier.dense_fog.core_name": "雾心",
+  "map.tutorial.name": "教学关",
   "special.old_postman.name": "老邮差",
   "special.old_postman.side": "城市侧",
   "special.old_postman.rule": "他所在的路线可以穿过天险。",

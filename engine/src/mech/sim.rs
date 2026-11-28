@@ -3,8 +3,9 @@
 //! order, then let the 规章 (automation rules) react. Forecasts run the same loop on a copy.
 
 use crate::data::hooks;
+use crate::data::maps::Pace;
 use crate::data::{balance, content, OrgPerks, Tag};
-use crate::kernel::clock::{self, Timeline, HOUR};
+use crate::kernel::clock::{self, Timeline};
 use crate::kernel::geom::TILES;
 use crate::kernel::rng::Rng;
 use crate::mech::actions;
@@ -124,6 +125,7 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         reactions: Default::default(),
         armory: Default::default(),
         unlocks: None,
+        map: None,
     }
 }
 
@@ -279,6 +281,95 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
     Ok(())
 }
 
+/// A new game on a fixed map (`maps.json`) instead of the map choice: the cycle starts right
+/// away with the map's tiles, crew, resources and pace. `new_game` and `choose_map` stay as they
+/// are (random maps).
+pub fn new_map_game(seed: u64, now: i64, device: &str, map: &str) -> Result<GameState, String> {
+    let mut state = new_game(seed, now, device);
+    start_map(&mut state, map)?;
+    Ok(state)
+}
+
+/// Start the cycle on fixed map `map` (between cycles).
+pub fn start_map(state: &mut GameState, map: &str) -> Result<(), String> {
+    let b = balance();
+    if state.cycle.phase != Phase::ChoosingMap {
+        return Err(t!("err.cycle_started"));
+    }
+    let m = content().map(map).ok_or_else(|| t!("err.no_map"))?;
+    let g = mapgen::fixed(m);
+    let cy = &mut state.cycle;
+    cy.phase = Phase::Active;
+    cy.previews = vec![];
+    cy.seed = 0;
+    cy.modifier = String::new();
+    cy.map = Some(m.id.clone());
+    cy.started_at = state.time;
+    cy.tiles = g.tiles;
+    cy.districts = g.districts;
+    cy.resources = m.resources.clone();
+    world::reveal_frontier(cy);
+
+    // The map's crew, all in the first squad; specials kept from earlier cycles join the roster.
+    let mut ops = Vec::new();
+    for class in &m.crew {
+        let id = state.alloc_id();
+        let origin = Origin {
+            label: txt!("origin.hq"),
+            district: None,
+            profession: None,
+            flavor_trait: None,
+            policy_trait: None,
+            rarity_bonus_bp: 0,
+            min_rarity: 0,
+            lock_trait: None,
+        };
+        let mut op = operative::generate(&mut state.rng, id, class, &origin);
+        op.persona_mut().rarity = op.persona().rarity.min(1);
+        ops.push(op);
+    }
+    let first: Vec<u32> = ops.iter().take(b.squad_size).map(|o| o.id.0).collect();
+    for sp in &state.org.specials {
+        ops.push(sp.to_operative());
+    }
+    let sid = state.alloc_id();
+    for op in ops.iter_mut() {
+        if first.contains(&op.id.0) {
+            op.state.assignment = Assignment::Squad { squad: sid };
+        }
+    }
+    state.cycle.squads = vec![Squad {
+        id: sid,
+        name: l10n::Text::item("names.squad", 0),
+        members: first,
+        route: vec![],
+        trip: None,
+        last: None,
+        trips: 0,
+        rest_until: 0,
+        force: false,
+    }];
+    state.cycle.roster = ops.iter().map(|o| o.id).collect();
+    for op in ops {
+        state.cycle.entities.insert(op);
+    }
+    state.cycle.inventory = state.org.sealed.clone();
+    state.cycle.doctrines = state.org.archive.clone();
+    let n = state.cycle.number;
+    state.event(
+        EventKind::Info,
+        txt!(
+            "event.cycle_started",
+            n = n,
+            modifier = l10n::name("map", map)
+        ),
+        None,
+        None,
+        None,
+    );
+    Ok(())
+}
+
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct CycleResults {
     pub management: i64,
@@ -362,8 +453,8 @@ pub fn collapse(state: &mut GameState) -> Result<(), String> {
 /// itself is `kernel::clock`; a new periodic mechanic adds its next time to `next_event`, its
 /// check to `due` and its step to `instant`.
 impl Timeline for GameState {
-    /// The border, fixed for one instant.
-    type Frame = Vec<u16>;
+    /// The border and the pace, fixed for one instant.
+    type Frame = (Vec<u16>, Pace);
 
     fn now(&self) -> i64 {
         self.time
@@ -386,13 +477,17 @@ impl Timeline for GameState {
         }
     }
 
-    fn frame(&self) -> Vec<u16> {
-        world::border_tiles(&self.cycle)
+    fn frame(&self) -> (Vec<u16>, Pace) {
+        (
+            world::border_tiles(&self.cycle),
+            crate::mech::pace::of(&self.cycle),
+        )
     }
 
-    fn next_event(&self, border: &Vec<u16>) -> i64 {
+    fn next_event(&self, (border, pace): &(Vec<u16>, Pace)) -> i64 {
         let t = self.time;
-        let mut next = (t / HOUR + 1) * HOUR;
+        let every = pace.econ_interval;
+        let mut next = (t / every + 1) * every;
         for s in &self.cycle.squads {
             match &s.trip {
                 Some(trip) => next = next.min(trip.end.max(t + 1)),
@@ -404,24 +499,24 @@ impl Timeline for GameState {
             }
         }
         for &i in border {
-            next = next.min(defense::next_surge_after(i, t));
+            next = next.min(defense::next_surge_after(pace, i, t));
         }
         next
     }
 
-    fn due(&self, border: &Vec<u16>, t: i64) -> bool {
-        t % HOUR == 0
+    fn due(&self, (border, pace): &(Vec<u16>, Pace), t: i64) -> bool {
+        t % pace.econ_interval == 0
             || self.cycle.squads.iter().any(|s| {
                 s.trip.as_ref().is_some_and(|x| x.end == t)
                     || (s.trip.is_none() && s.rest_until == t)
             })
             || border
                 .iter()
-                .any(|i| defense::next_surge_after(*i, t - 1) == t)
+                .any(|i| defense::next_surge_after(pace, *i, t - 1) == t)
     }
 
-    fn instant(&mut self, border: &Vec<u16>, t: i64) {
-        process_instant(self, border, t);
+    fn instant(&mut self, (border, pace): &(Vec<u16>, Pace), t: i64) {
+        process_instant(self, border, pace, t);
     }
 }
 
@@ -430,7 +525,7 @@ pub fn advance(state: &mut GameState, target: i64) {
     clock::advance(state, target);
 }
 
-fn process_instant(state: &mut GameState, border: &[u16], t: i64) {
+fn process_instant(state: &mut GameState, border: &[u16], pace: &Pace, t: i64) {
     // 1. Trips returning (in squad order), then start the next trip right away.
     let ids: Vec<u32> = state.cycle.squads.iter().map(|s| s.id).collect();
     for id in &ids {
@@ -448,14 +543,17 @@ fn process_instant(state: &mut GameState, border: &[u16], t: i64) {
     // 2. Surges due now (tile order). Border is fixed for this instant.
     let calc = economy::calc(state);
     for &i in border {
-        if defense::next_surge_after(i, t - 1) == t {
+        if defense::next_surge_after(pace, i, t - 1) == t {
             defense::resolve_surge(state, &calc, i);
         }
     }
-    // 3. Hourly settlement.
-    if t % HOUR == 0 {
-        economy::hourly(state);
-        self_sufficiency_tick(state);
+    // 3. Settlement: resources every interval, the rest once per hour of the pace.
+    if t % pace.econ_interval == 0 {
+        let hour = t % pace.hour_secs() == 0;
+        economy::settle(state, hour);
+        if hour {
+            self_sufficiency_tick(state);
+        }
     }
     // 4. Rules and special operatives react.
     run_rules(state);
@@ -469,6 +567,7 @@ fn process_instant(state: &mut GameState, border: &[u16], t: i64) {
 /// Patrol gain per surge interval on each owned border tile, from current routes.
 pub fn patrol_rates(state: &GameState) -> BTreeMap<u16, i32> {
     let b = balance();
+    let pace = crate::mech::pace::of(&state.cycle);
     let mut out = BTreeMap::new();
     for s in &state.cycle.squads {
         if state.cycle.squad_size(s.id) == 0 || s.route.is_empty() {
@@ -483,7 +582,7 @@ pub fn patrol_rates(state: &GameState) -> BTreeMap<u16, i32> {
         if dur <= 0 {
             continue;
         }
-        let trips = b.surge_interval * 100 / dur; // x100
+        let trips = pace.surge_interval * 100 / dur; // x100
         for &i in &s.route {
             if state.cycle.tiles[i as usize].owned {
                 *out.entry(i).or_insert(0) += (b.warden_patrol as i64 * trips / 100) as i32;

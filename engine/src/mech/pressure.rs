@@ -16,9 +16,13 @@ pub fn level_at(tile: u16) -> i32 {
     ring(tile)
 }
 
-/// 这一局里一格的层级（同 [`level_at`]，但从局面问起，以后会读局面里的异界源）。
-pub fn depth(_cy: &Cycle, tile: u16) -> i32 {
-    level_at(tile)
+/// 这一局里一格的层级：固定地图的格子自带难度档（`Tile::level`），随机地图按 [`level_at`]
+/// （以后会读局面里的异界源）。
+pub fn depth(cy: &Cycle, tile: u16) -> i32 {
+    cy.tiles
+        .get(tile as usize)
+        .and_then(|t| t.level)
+        .unwrap_or_else(|| level_at(tile))
 }
 
 /// 进攻难度：路线上在这一格打的敌人按第几层算（至少 1）。掉落也按它算。
@@ -127,7 +131,8 @@ pub fn deepest_owned(cy: &Cycle) -> i32 {
 
 /// 新局开始时就镇守满的格子：最近的一层（快反规章）。
 pub fn starts_held(tiles: &[Tile], tile: u16) -> bool {
-    level_at(tile) == 1 && tiles[tile as usize].claimable_kind()
+    let t = &tiles[tile as usize];
+    t.level.unwrap_or_else(|| level_at(tile)) == 1 && t.claimable_kind()
 }
 
 /// 一组格子里最深的一层（路线统计用）。

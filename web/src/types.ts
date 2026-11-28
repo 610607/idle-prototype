@@ -176,6 +176,8 @@ export interface TileView {
   enemies: EnemyBrief[][];
   squads: number[];
   workers?: [number, number];
+  /** 曾经的用途 of a fixed map's plot (a facility id or `housing`). */
+  former?: string;
 }
 
 export interface TalentView {
@@ -431,6 +433,10 @@ export interface View {
   locked?: UnlockSystem[];
   /** The next one or two unlocks and how far along they are (absent when everything is open). */
   next?: NextUnlock[];
+  /** The part of the board a fixed map uses (absent: the whole board). */
+  bounds?: Bounds;
+  /** A fixed map's pace (absent on random maps). */
+  pace?: Pace;
 }
 
 /** Command groups / view blocks the unlock registry gates (`data::unlocks::System`). */
@@ -445,6 +451,29 @@ export interface NextUnlock {
   cond: string;
   have: number;
   need: number;
+}
+
+/** A board rectangle: left column, top row, width, height. */
+export interface Bounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** engine/src/data/maps.rs Pace: seconds. */
+export interface Pace {
+  travel_owned: number;
+  travel_unowned: number;
+  battle_round_secs: number;
+  battle_secs: number;
+  min_trip_secs: number;
+  econ_interval: number;
+  output_mult: number;
+  rest_after_loss: number;
+  surge_interval: number;
+  surge_slots: number;
+  tide_horizon: number;
 }
 
 export interface TaskView {
@@ -572,6 +601,8 @@ export interface RoutePreview {
   steps: { tile: number; label: string; fought: boolean; outcome: Outcome | null; rounds: number }[];
   outcome: Outcome | null;
   minutes: number;
+  /** Fixed maps only: the duration in seconds. */
+  seconds?: number;
   loot: Resources;
   drops: string[];
 }

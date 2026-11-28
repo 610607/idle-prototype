@@ -110,6 +110,9 @@ pub struct RoutePreview {
     pub steps: Vec<RouteStep>,
     pub outcome: Option<combat::Outcome>,
     pub minutes: i64,
+    /// The duration in seconds, on a fixed map only (its pace counts in seconds).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<i64>,
     pub loot: Resources,
     pub drops: Vec<String>,
 }
@@ -147,6 +150,13 @@ impl Engine {
     /// Whether the command's system (and the building or rule it names) is unlocked.
     pub fn allows(&self, cmd: &Command) -> bool {
         crate::mech::unlocks::check(&self.state, cmd).is_ok()
+    }
+
+    /// A new game on fixed map `map` (`maps.json`), e.g. `data::hooks::TUTORIAL_MAP`.
+    pub fn new_map(seed: u64, now: i64, device: &str, map: &str) -> Result<Engine, String> {
+        Ok(Engine::from_state(sim::new_map_game(
+            seed, now, device, map,
+        )?))
     }
 
     pub fn from_state(state: GameState) -> Engine {
@@ -220,7 +230,7 @@ impl Engine {
                 entries: vec![],
             });
         } else if self.tide.as_ref().map(|c| c.key) != Some(key) {
-            let entries = sim::forecast(&self.state, balance().tide_horizon);
+            let entries = sim::forecast(&self.state, self.state.cycle.pace().tide_horizon);
             self.tide = Some(TideCache { key, entries });
         }
         &self.tide.as_ref().unwrap().entries
@@ -478,7 +488,7 @@ impl Engine {
             },
             Ok(()) => {
                 let after_tide = if copy.cycle.phase == Phase::Active {
-                    sim::forecast(&copy, balance().tide_horizon)
+                    sim::forecast(&copy, copy.cycle.pace().tide_horizon)
                 } else {
                     vec![]
                 };
@@ -634,6 +644,7 @@ impl Engine {
             steps: vec![],
             outcome: None,
             minutes: 0,
+            seconds: None,
             loot: Resources::default(),
             drops: vec![],
         };
@@ -666,6 +677,12 @@ impl Engine {
             steps,
             outcome: Some(trip.outcome),
             minutes: (trip.end - trip.start + 59) / 60,
+            seconds: self
+                .state
+                .cycle
+                .map
+                .is_some()
+                .then_some(trip.end - trip.start),
             loot: trip.loot,
             drops: trip.drops,
         }

@@ -91,6 +91,16 @@
 - 可以导出存档文本，也可以粘贴存档读档。
 - 引擎里的自动玩家能生成一份玩到中途的存档：`cargo run --release --example midsave 1 60 $(date +%s)`（在 `engine/` 里运行，输出贴进「从文本读档」）。
 
+## 教学关（固定地图，开发中）
+
+阶段 3 在做的教学关是一张 7×7 的固定地图（`engine/content/maps.json` 的 `tutorial`），摆在 15×15 棋盘的正中，外面全是天险，只画中间这一块。它的节奏按秒走：行军每格 1 秒，一场战斗 3 秒，经济每 5 秒结算一次，产出是平时的 120 倍；一开始只有一名街头防暴卫。默认的新游戏还是随机地图三选一，教学关要单独开：
+
+- 文字版：`cargo run --release --example agent_cli -- new /tmp/tut.json 0 --map tutorial`，然后 `do /tmp/tut.json 1 --secs 6`（`--secs` 按秒等，`--wait` 仍按小时）。
+- 网页：地址后面加 `?map=tutorial`，会新开一局教学关并替换掉现在的存档（参数随即从地址里去掉，刷新不会再重开）。
+- 引擎：`Engine::new_map(种子, 时间, 设备, "tutorial")`，wasm 是 `WasmEngine.new_map(...)`。
+
+现在只摆了第一章的格子，数字都是初步的。
+
 ## 初版已知的问题
 
 这些是自动玩家跑 3 个种子各 7 天看到的，数据来自 `cargo run --release --example bot 3 168`：

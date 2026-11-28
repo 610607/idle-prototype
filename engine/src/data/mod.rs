@@ -3,6 +3,7 @@
 
 pub mod defs;
 pub mod hooks;
+pub mod maps;
 pub mod unlocks;
 
 use serde::{Deserialize, Serialize};
@@ -976,6 +977,10 @@ pub struct Balance {
     pub travel_unowned: i64,
     pub battle_round_secs: i64,
     pub rest_after_loss: i64,
+    /// Shortest trip, seconds (random maps; fixed maps carry their own pace).
+    pub min_trip_secs: i64,
+    /// Economy settlement interval, seconds (random maps).
+    pub econ_interval: i64,
     pub route_max_len: usize,
     pub squad_size: usize,
     /// Enemy HP and attack by the ring they stand on (basis points; index = ring, the last entry
@@ -1091,6 +1096,25 @@ pub struct Balance {
     /// Battles: a skill scaled by a stat gets +step_bp per point above the pivot, x10000.
     pub battle_stat_pivot: i32,
     pub battle_stat_step_bp: i64,
+}
+
+impl Balance {
+    /// The pace of a random map: the travel, battle, rest, settlement and surge times above.
+    pub fn pace(&self) -> maps::Pace {
+        maps::Pace {
+            travel_owned: self.travel_owned,
+            travel_unowned: self.travel_unowned,
+            battle_round_secs: self.battle_round_secs,
+            battle_secs: 0,
+            min_trip_secs: self.min_trip_secs,
+            econ_interval: self.econ_interval,
+            output_mult: 1,
+            rest_after_loss: self.rest_after_loss,
+            surge_interval: self.surge_interval,
+            surge_slots: self.surge_slots,
+            tide_horizon: self.tide_horizon,
+        }
+    }
 }
 
 /// What each organisation level unlocks. A list gives +1 for every entry at or below the level
@@ -1280,6 +1304,8 @@ pub struct Content {
     pub doctrines: Vec<DoctrineDef>,
     pub armory: Vec<ArmoryDef>,
     pub tasks: Vec<TaskDef>,
+    /// Fixed maps (`maps.json`).
+    pub maps: Vec<maps::MapDef>,
     /// The defenders that are not operatives (`defenders.json`): the HQ guard and the militia.
     pub defenders: BTreeMap<String, defs::DefenderDef>,
     /// Every kind above that is a thing in the world, as one definition table (`defs`).
@@ -1328,6 +1354,10 @@ impl Content {
     pub fn armory_track(&self, id: &str) -> Option<&ArmoryDef> {
         self.armory.iter().find(|a| a.id == id)
     }
+    /// A fixed map (`maps.json`).
+    pub fn map(&self, id: &str) -> Option<&maps::MapDef> {
+        self.maps.iter().find(|m| m.id == id)
+    }
     /// A definition from the one table (`defs`).
     pub fn def(&self, id: &str) -> Option<&defs::EntityDef> {
         self.defs.get(id)
@@ -1373,6 +1403,7 @@ const FILES: &[(&str, &str)] = &[
         include_str!("../../content/armory_tracks.json"),
     ),
     ("unlocks.json", include_str!("../../content/unlocks.json")),
+    ("maps.json", include_str!("../../content/maps.json")),
 ];
 
 fn parse<T: for<'de> Deserialize<'de>>(name: &str) -> T {
@@ -1436,6 +1467,7 @@ fn load() -> Content {
     let armory: Vec<ArmoryDef> = parse("armory_tracks.json");
     let defenders: Vec<defs::DefenderDef> = parse("defenders.json");
     let unlocks: unlocks::Registry = parse("unlocks.json");
+    let maps: Vec<maps::MapDef> = parse("maps.json");
     let table = defs::table(
         classes
             .iter()
@@ -1478,6 +1510,7 @@ fn load() -> Content {
         doctrines,
         armory,
         tasks,
+        maps,
         defenders: defenders.into_iter().map(|d| (d.id.clone(), d)).collect(),
         defs: table.by_id,
         def_clashes: table.clashes,
@@ -1578,6 +1611,9 @@ fn localize(c: &mut Content) {
         u.name = text("unlock", &u.id, "name");
         u.hint = text("unlock", &u.id, "hint");
     }
+    for m in &mut c.maps {
+        m.name = text("map", &m.id, "name");
+    }
     for t in &mut c.tasks {
         t.group = text("task", &t.id, "group");
         t.name = text("task", &t.id, "name");
@@ -1617,6 +1653,10 @@ pub fn balance() -> &'static Balance {
 pub fn validate() -> Vec<String> {
     let c = content();
     let mut errs = hooks::check(c);
+    errs.extend(c.balance.pace().check("balance.json pace"));
+    for m in &c.maps {
+        errs.extend(m.check(c));
+    }
     let skill = |id: &str, ctx: &str, errs: &mut Vec<String>| {
         if !c.skills.contains_key(id) {
             errs.push(format!("{ctx}: unknown skill {id}"));

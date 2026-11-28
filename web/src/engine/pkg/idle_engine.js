@@ -137,6 +137,34 @@ export class WasmEngine {
         return this;
     }
     /**
+     * A new game on a fixed map (`maps.json` id, e.g. `tutorial`).
+     * @param {number} seed
+     * @param {number} now
+     * @param {string} device
+     * @param {string} map
+     * @returns {WasmEngine}
+     */
+    static new_map(seed, now, device, map) {
+        const val3 = +seed;
+        const val4 = +now;
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passStringToWasm0(device, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passStringToWasm0(map, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+            if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+            throw e;
+        }
+        const ret = wasm.wasmengine_new_map(val3, val4, ptr0, len0, ptr1, len1);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return WasmEngine.__wrap(ret[0]);
+    }
+    /**
      * Parse-check a command without running it (lets the client validate saved macros).
      * @param {string} json
      * @returns {boolean}

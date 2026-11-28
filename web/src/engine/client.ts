@@ -52,6 +52,19 @@ export class Game {
     const content = JSON.parse(WasmEngine.content()) as ContentView;
     const balance = JSON.parse(WasmEngine.balance()) as Balance;
     const offset = readOffset();
+    // Debug entry: `?map=tutorial` starts a new game on that fixed map (maps.json), replacing the
+    // saved one; the parameter is dropped from the address so a reload keeps playing it.
+    const map = new URLSearchParams(window.location.search).get('map');
+    if (map) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('map');
+      window.history.replaceState(null, '', url.toString());
+      const seed = Math.floor(Math.random() * 2 ** 31);
+      const e = WasmEngine.new_map(seed, Math.floor(Date.now() / 1000) + offset, 'web', map);
+      const g = new Game(e, offset, content, balance);
+      g.persist();
+      return g;
+    }
     let saved: string | null = null;
     try {
       saved = localStorage.getItem(SAVE_KEY);

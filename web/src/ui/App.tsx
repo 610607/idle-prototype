@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Game } from '../engine/client';
 import { t, tn } from '../i18n';
 import { Icon } from '../icons';
-import type { Command, View } from '../types';
+import type { Bounds, Command, View } from '../types';
 import { ReportSheet } from './BattleReport';
 import { Board, WASH } from './Board';
 import { ConfirmDialog, fmtClock, fmtRate, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, SQUAD_HEX, useCtx, type ConfirmAsk, type Ctx, type RouteEdit, type Sheet } from './common';
@@ -423,11 +423,13 @@ function MapChoice() {
   );
 }
 
-function MiniMap({ barriers }: { barriers: number[] }) {
+function MiniMap({ barriers, bounds }: { barriers: number[]; bounds?: Bounds }) {
   const N = 15;
   const s = 8;
+  // A fixed map's rectangle only (random previews use the whole board).
+  const b = bounds ?? { x: 0, y: 0, w: N, h: N };
   return (
-    <svg viewBox={`0 0 ${N * s} ${N * s}`} style={{ width: '100%', maxWidth: 180, alignSelf: 'center' }} shapeRendering="crispEdges">
+    <svg viewBox={`${b.x * s} ${b.y * s} ${b.w * s} ${b.h * s}`} style={{ width: '100%', maxWidth: 180, alignSelf: 'center' }} shapeRendering="crispEdges">
       <rect width={N * s} height={N * s} fill="var(--map-bg)" />
       {Array.from({ length: N * N }, (_, i) => (
         <rect key={i} x={(i % N) * s} y={Math.floor(i / N) * s} width={s - 1} height={s - 1} fill={WASH[(Math.floor((i % N) / 5) + Math.floor(i / N / 5) * 3) % WASH.length]} opacity={0.35} />

@@ -42,6 +42,8 @@ fn blank_tile(terrain: Terrain) -> Tile {
         special_done: false,
         waves: vec![],
         last_surge: None,
+        level: None,
+        former: None,
     }
 }
 
@@ -381,6 +383,70 @@ pub fn preview(seed: u64, modifier: &str) -> MapPreview {
             .count() as i32,
         districts: g.districts.len() as i32,
     }
+}
+
+/// A fixed map (`maps.json`) laid on the board: its grid in the middle, barrier all around.
+/// Every tile on it carries its own 难度档 (`Tile::level`); the HQ is owned.
+pub fn fixed(map: &crate::data::maps::MapDef) -> GeneratedMap {
+    use crate::data::maps::MapTerrain;
+    let b = balance();
+    let mut tiles: Vec<Tile> = (0..TILES).map(|_| blank_tile(Terrain::Barrier)).collect();
+    for i in 0..TILES as u16 {
+        let Some(d) = map.tile(i) else { continue };
+        let t = &mut tiles[i as usize];
+        t.terrain = match d.terrain {
+            MapTerrain::Hq => Terrain::Hq,
+            MapTerrain::City => Terrain::City,
+            MapTerrain::Barrier => Terrain::Barrier,
+        };
+        t.revealed = d.revealed;
+        t.former = d.former.clone();
+        match d.terrain {
+            MapTerrain::Hq => {
+                t.owned = true;
+                t.warden = b.warden_max;
+                t.revealed = true;
+                t.level = Some(d.level.unwrap_or(0));
+            }
+            MapTerrain::Barrier => t.level = Some(d.level.unwrap_or(0)),
+            MapTerrain::City => {
+                t.level = Some(d.level.unwrap_or(map.level));
+                t.warden = d.warden.unwrap_or(map.warden);
+                t.danger_bp = d.danger_bp.unwrap_or(10_000);
+                t.natives = d.natives;
+                t.district = d.district;
+                t.waves = d.waves.clone();
+            }
+        }
+    }
+    let professions: Vec<String> = content().professions.iter().map(|p| p.id.clone()).collect();
+    let districts = map
+        .districts
+        .iter()
+        .enumerate()
+        .map(|(k, d)| {
+            let id = k as u16;
+            let members: Vec<u16> = (0..TILES as u16)
+                .filter(|i| tiles[*i as usize].district == Some(id))
+                .collect();
+            District {
+                id,
+                name: Text::item("names.district", d.name),
+                tiles: members,
+                trust: b.trust_start,
+                population: 0,
+                growth: 0,
+                talent: Default::default(),
+                instructors: Default::default(),
+                priority: professions.clone(),
+                policy: None,
+                flavor: d.flavor.clone(),
+                contiguous: false,
+                ever_contiguous: false,
+            }
+        })
+        .collect();
+    GeneratedMap { tiles, districts }
 }
 
 #[cfg(test)]

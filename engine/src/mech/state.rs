@@ -123,6 +123,12 @@ pub struct Tile {
     /// Result of the last surge here (for the self-sufficiency check).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_surge: Option<bool>,
+    /// 难度档 of a fixed map's tile (in place of the ring, `mech::pressure`); none on random maps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<i32>,
+    /// 曾经的用途 of a fixed map's plot: the facility id (or `housing`) it suits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub former: Option<String>,
 }
 
 impl Tile {
@@ -522,6 +528,9 @@ pub struct Cycle {
     /// What is unlocked (`mech::unlocks`); `None` is everything open, as in random-map games.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unlocks: Option<crate::mech::unlocks::Unlocks>,
+    /// The fixed map in play (`maps.json`); none on a random map.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub map: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -4,6 +4,7 @@
 
 use crate::data::defs::Orders;
 use crate::data::hooks;
+use crate::data::maps::Pace;
 use crate::data::{balance, content, FacilityDef, FixtureDef, Row, Tag, TraitEffect};
 use crate::kernel::geom;
 use crate::mech::combat::{self, enemy_spec, BattleInput, BattleKind, BattleReport, UnitSpec};
@@ -14,17 +15,19 @@ use crate::mech::state::{EventKind, GameState, Terrain, TideEntry};
 use crate::mech::world;
 use crate::{l10n, t, txt};
 
-pub fn slot_of(i: u16) -> i64 {
+pub fn slot_of(pace: &Pace, i: u16) -> i64 {
     let (x, y) = geom::xy(i);
-    ((x * 3 + y * 5) as i64).rem_euclid(balance().surge_slots)
+    ((x * 3 + y * 5) as i64).rem_euclid(pace.surge_slots.max(1))
 }
 
-/// First surge time strictly after `t` for tile `i`.
-pub fn next_surge_after(i: u16, t: i64) -> i64 {
-    let b = balance();
-    let phase = slot_of(i) * b.surge_interval / b.surge_slots;
-    let k = (t - phase).div_euclid(b.surge_interval) + 1;
-    phase + k * b.surge_interval
+/// First surge time strictly after `t` for tile `i` (`i64::MAX` on a map without surges).
+pub fn next_surge_after(pace: &Pace, i: u16, t: i64) -> i64 {
+    if pace.surge_interval <= 0 {
+        return i64::MAX;
+    }
+    let phase = slot_of(pace, i) * pace.surge_interval / pace.surge_slots;
+    let k = (t - phase).div_euclid(pace.surge_interval) + 1;
+    phase + k * pace.surge_interval
 }
 
 /// A defender that is not an operative (the HQ guard, a militia unit), from its definition

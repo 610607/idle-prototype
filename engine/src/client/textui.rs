@@ -321,6 +321,11 @@ pub fn new_game(seed: u64) -> Engine {
     e
 }
 
+/// A game on fixed map `map` (`maps.json`), started right away; no rules turned on.
+pub fn new_map_game(seed: u64, map: &str) -> Result<Engine, String> {
+    Engine::new_map(seed, T0, DEVICE, map)
+}
+
 /// The commands `new_game` sends to a fresh `Engine::new(seed, T0, DEVICE)`; a play session runs
 /// them with the trace on so they land in its journal.
 pub fn setup(e: &mut Engine) {
@@ -617,15 +622,17 @@ fn op_short(o: &OpView) -> String {
 /// Rows top to bottom; # owned, ! alert, * claimable, o unowned with enemies, . revealed empty,
 /// ? unknown, X barrier, H headquarters.
 fn map(v: &View) -> String {
+    // A fixed map draws only its own rectangle (board labels stay as they are).
     let n = geom::SIZE;
+    let (x0, y0, w, h) = v.bounds.map_or((0, 0, n, n), |b| (b.x, b.y, b.w, b.h));
     let mut o = String::from("    ");
-    for x in 0..n {
+    for x in x0..x0 + w {
         o.push((b'A' + x as u8) as char);
     }
     o.push('\n');
-    for y in 0..n {
+    for y in y0..y0 + h {
         o += &format!("{:>3} ", y + 1);
-        for x in 0..n {
+        for x in x0..x0 + w {
             let tv = &v.tiles[geom::idx(x, y).unwrap() as usize];
             o.push(if tv.terrain == "hq" {
                 'H'
@@ -650,6 +657,21 @@ fn map(v: &View) -> String {
     o += &t!("cli.map.legend");
     o.push('\n');
     o
+}
+
+/// 曾经的用途 of a fixed map's plot, as a suffix (empty when it has none).
+fn former(f: Option<&str>) -> String {
+    match f {
+        None => String::new(),
+        Some("housing") => t!("cli.board.former_housing"),
+        Some(id) => t!(
+            "cli.board.former",
+            name = content()
+                .facility(id)
+                .map(|x| x.name.clone())
+                .unwrap_or_else(|| id.to_string())
+        ),
+    }
 }
 
 fn line(o: &mut String, s: String) {
@@ -847,12 +869,20 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     let rate = |x: i64| format!("{:.1}", x as f64 / 100.0);
     line(
         &mut o,
-        t!(
-            "cli.board.title",
-            h = hour(e, &v),
-            total = opts.hours,
-            cycle = v.cycle
-        ),
+        if v.pace.is_some() {
+            t!(
+                "cli.board.title_secs",
+                s = e.state.time - v.started_at,
+                cycle = v.cycle
+            )
+        } else {
+            t!(
+                "cli.board.title",
+                h = hour(e, &v),
+                total = opts.hours,
+                cycle = v.cycle
+            )
+        },
     );
     if let Some((_, name, desc)) = &v.modifier {
         line(&mut o, t!("cli.board.climate", name = name, desc = desc));
@@ -956,7 +986,7 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         &mut o,
         t!(
             "cli.board.tide",
-            h = crate::data::balance().tide_horizon / 3600,
+            h = e.state.cycle.pace().tide_horizon / 3600,
             n = v.tide.len(),
             lost = lost.len(),
             list = if lost.is_empty() {
@@ -1050,6 +1080,8 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             t!("cli.board.force_next")
         } else if s.running.is_some() {
             t!("cli.board.on_road")
+        } else if s.rest_until > v.time && v.pace.is_some() {
+            t!("cli.board.resting_secs", s = s.rest_until - v.time)
         } else if s.rest_until > v.time {
             t!("cli.board.resting", m = (s.rest_until - v.time) / 60)
         } else {
@@ -1105,7 +1137,7 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
                     t!("cli.board.claimable")
                 } else {
                     String::new()
-                }
+                } + &former(x.former.as_deref())
             )
         })
         .collect();
@@ -1491,10 +1523,15 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
         }
         if let Some((r, p)) = best {
             let labels: Vec<String> = r.iter().map(|x| geom::label(*x)).collect();
+            let key = if p.seconds.is_some() {
+                "cli.route.option_secs"
+            } else {
+                "cli.route.option"
+            };
             out.push((
                 r,
                 t!(
-                    "cli.route.option",
+                    key,
                     route = labels.join("→"),
                     ring = ring,
                     danger = tv.danger_pct,
@@ -1502,7 +1539,8 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
                     terrain = terrain(tv.terrain),
                     foes = foes,
                     outcome = outcome(p.outcome),
-                    minutes = p.minutes
+                    minutes = p.minutes,
+                    seconds = p.seconds.unwrap_or(0)
                 ),
             ));
         }
