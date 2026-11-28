@@ -43,3 +43,4 @@
 {"t":345600,"cmd":{"cmd":"hire","candidate":128}}
 {"t":374400,"cmd":{"cmd":"pick_doctrine","doctrine":"shock_drill"}}
 {"t":460800,"cmd":{"cmd":"set_route","squad":4,"route":[111,110]}}
+{"t":489600,"cmd":{"cmd":"claim","tile":110}}

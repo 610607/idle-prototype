@@ -68,3 +68,8 @@
 {"t":345600,"cmd":{"cmd":"claim","tile":144}}
 {"t":345600,"cmd":{"cmd":"set_route","squad":4,"route":[66]}}
 {"t":374400,"cmd":{"cmd":"set_route","squad":4,"route":[67]}}
+{"t":403200,"cmd":{"cmd":"upgrade","track":"arms"}}
+{"t":403200,"cmd":{"cmd":"upgrade","track":"armor"}}
+{"t":403200,"cmd":{"cmd":"set_route","squad":4,"route":[67,52]}}
+{"t":432000,"cmd":{"cmd":"garrison","op":1,"tile":112}}
+{"t":432000,"cmd":{"cmd":"hire","candidate":303}}
