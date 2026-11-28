@@ -1,8 +1,8 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { Game } from '../engine/client';
-import { t } from '../i18n';
+import { t, type Key } from '../i18n';
 import { Icon } from '../icons';
-import type { Command, Delta, DryRun, Resources, Tag, View } from '../types';
+import type { Command, Delta, DryRun, Resources, Tag, UnlockSystem, View } from '../types';
 
 // ---------------------------------------------------------------------------
 // App context: the engine, the latest view, and the few UI actions every panel needs.
@@ -41,6 +41,8 @@ export interface Ctx {
   tabName: string;
   /** Switch the workspace to a tab (closing any open pages). */
   goTab: (t: 'command' | 'roster' | 'districts' | 'research' | 'hq') => void;
+  /** Ask, then drop this game and go back to the start screen. */
+  restart: () => void;
 }
 
 export interface ConfirmAsk {
@@ -100,6 +102,34 @@ export function fmtRate(v: number): string {
   // income arrives x100 per hour
   const x = v / 100;
   return (x >= 0 ? '+' : '') + (Number.isInteger(x) ? x.toFixed(0) : x.toFixed(1));
+}
+
+/** Whether a system's blocks and buttons show: not in the view's `locked` list (as the text client). */
+export function shows(view: View, sys: UnlockSystem): boolean {
+  return !view.locked?.includes(sys);
+}
+
+/** A fast map (the tutorial): an hour of output comes in well under an hour, so rates read per minute. */
+export function fastPace(view: View): boolean {
+  return !!view.pace && 3600 / Math.max(1, view.pace.output_mult) < 3600;
+}
+
+/** An income (x100 per hour) as the map counts it: per minute on a fast map, per hour otherwise. */
+export function fmtIncome(view: View, v: number): string {
+  if (!fastPace(view)) return t('delta.per_hour', { v: fmtRate(v) });
+  const x = v / 6000;
+  return t('common.rate.per_min', { v: (x >= 0 ? '+' : '') + (Number.isInteger(x) ? x.toFixed(0) : x.toFixed(1)) });
+}
+
+/** Seconds since the cycle began as m:ss (a fixed map counts in seconds). */
+export function fmtElapsed(secs: number): string {
+  const s = Math.max(0, Math.floor(secs));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** A facility's name and icon from the content (the build menu may still be locked). */
+export function facilityDef(game: Game, id: string): { name: string; icon: string } | undefined {
+  return (game.content.facilities as { id: string; name: string; icon: string }[]).find((f) => f.id === id);
 }
 
 export const OUTCOME_NAMES: Record<string, string> = {
@@ -213,12 +243,43 @@ export function Rarity({ r, name }: { r: number; name: string }) {
   return <span className={`rarity r${r}`}>{name}</span>;
 }
 
-export function DeltaList({ deltas }: { deltas: Delta[] }) {
+/** A catalog template as a pattern that matches its rendered text (`{x}` matches anything). */
+function templateRe(key: Key): RegExp {
+  const parts = t(key).split(/\{[A-Za-z0-9_]+\}/);
+  return new RegExp('^' + parts.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('(.*?)') + '$');
+}
+const PER_HOUR = templateRe('delta.per_hour');
+/** Dry-run rows about systems a map may not have open: (label pattern, shown while). */
+const DELTA_GATES: [RegExp, (v: View) => boolean][] = [
+  [templateRe('delta.border'), (v) => !!v.threat],
+  [templateRe('delta.tide_lost'), (v) => !!v.threat],
+  [templateRe('delta.lost_tiles'), (v) => !!v.threat],
+  [templateRe('delta.alerts'), (v) => !!v.threat],
+  [templateRe('delta.self_sufficient'), (v) => !!v.threat],
+  [templateRe('delta.power'), (v) => !!v.power],
+  // A fixed map's districts do not build up talent (the tutorial): its row would only mislead.
+  [templateRe('delta.talent'), (v) => !v.pace],
+];
+
+/** A dry-run value as this map counts it: "x/时" (per hour of the pace) becomes per minute on a fast map. */
+function deltaValue(view: View, s: string): string {
+  if (!fastPace(view)) return s;
+  const m = PER_HOUR.exec(s);
+  const x = m ? Number(m[1]) : NaN;
+  if (!m || Number.isNaN(x)) return s;
+  const perMin = (x * 60) / (3600 / Math.max(1, view.pace!.output_mult));
+  return t('common.rate.per_min', { v: (m[1]!.startsWith('+') ? '+' : '') + (Number.isInteger(perMin) ? perMin.toFixed(0) : perMin.toFixed(1)) });
+}
+
+export function DeltaList({ deltas: all }: { deltas: Delta[] }) {
+  const { view } = useCtx();
+  // Rows that do not move, and rows about a system that is not open here, say nothing.
+  const deltas = all.filter((d) => d.before !== d.after && DELTA_GATES.every(([re, open]) => !re.test(d.label) || open(view)));
   if (!deltas.length) return <div className="delta-empty">{t('common.delta.empty')}</div>;
   return (
     <div className="deltas">
       {deltas.map((d, i) => (
-        <DeltaRow key={i} d={d} />
+        <DeltaRow key={i} d={{ ...d, before: deltaValue(view, d.before), after: deltaValue(view, d.after) }} />
       ))}
     </div>
   );

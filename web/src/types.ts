@@ -683,6 +683,10 @@ export interface RoutePreview {
   seconds?: number;
   loot: Resources;
   drops: string[];
+  /** It would turn back in front of this tile (not a sure win there); `outcome` is that fight's. */
+  stopped?: number;
+  /** It would turn back for lack of HP (it wins that fight at full health). */
+  low_hp?: boolean;
 }
 
 // ---- combat.rs ----

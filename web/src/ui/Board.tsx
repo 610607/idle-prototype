@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { t } from '../i18n';
 import { BoardIcon } from '../icons';
 import type { TileView, View } from '../types';
-import { SQUAD_HEX, useCtx } from './common';
+import { facilityDef, shows, SQUAD_HEX, useCtx } from './common';
+import type { Game } from '../engine/client';
 
 const N = 15;
 const C = 32; // cell size: one 16px pixel icon sits at 1:1 in the middle
@@ -35,11 +36,12 @@ function center(i: number): [number, number] {
 }
 
 /** Hover text of a tile: its label, then whether it is ours and whether it is on alert. */
-function tileTitle(tile: TileView): string {
-  return `${tile.label}${tile.owned ? t('board.tile.owned') : ''}${tile.alert ? t('board.tile.alert') : ''}`;
+function tileTitle(tile: TileView, game: Game): string {
+  const former = tile.former ? (tile.former === 'housing' ? t('tile.former.housing') : t('tile.former.facility', { name: facilityDef(game, tile.former)?.name ?? tile.former })) : '';
+  return `${tile.label}${former ? t('board.tile.former', { former }) : ''}${tile.owned ? t('board.tile.owned') : ''}${tile.alert ? t('board.tile.alert') : ''}`;
 }
 
-function tileIcon(t: TileView, view: View): string | null {
+function tileIcon(t: TileView, game: Game): string | null {
   if (!t.revealed && t.terrain !== 'barrier') return null;
   switch (t.terrain) {
     case 'hq':
@@ -54,7 +56,8 @@ function tileIcon(t: TileView, view: View): string | null {
       if (t.owned) {
         if (t.usage === 'housing') return 'housing';
         if (t.usage === 'none') return null;
-        return view.facilities?.find((f) => f.id === t.usage)?.icon ?? 'unknown';
+        // From the content: a scripted building stands before the build menu opens.
+        return facilityDef(game, t.usage)?.icon ?? 'unknown';
       }
       return t.enemies[0]?.[0]?.icon ?? null;
     default:
@@ -217,7 +220,7 @@ export function Board() {
           const w = C - 1;
           const hidden = !t.revealed && t.terrain !== 'barrier';
           const wash = t.district !== undefined ? WASH[t.district % WASH.length]! : 'var(--steel)';
-          const icon = tileIcon(t, view);
+          const icon = tileIcon(t, game);
           const tide = nextTide.get(t.i);
           const soon = t.next_surge !== undefined && t.next_surge - now < 1800;
           let ground: React.ReactNode;
@@ -328,7 +331,7 @@ export function Board() {
                 </g>
               ) : null}
               <rect className="hover" x={px + 0.5} y={py + 0.5} width={w - 1} height={w - 1} fill="none" stroke={COL.ink} strokeWidth={1} pointerEvents="none" />
-              <title>{tileTitle(t)}</title>
+              <title>{tileTitle(t, game)}</title>
             </g>
           );
         })}
@@ -401,7 +404,7 @@ export function Board() {
         {selectedTile !== null && !routeEdit ? <Brackets x={xy(selectedTile)[0] * C} y={xy(selectedTile)[1] * C} color={COL.hazard} /> : null}
         {focusTile !== null && focusTile !== selectedTile ? <Brackets x={xy(focusTile)[0] * C} y={xy(focusTile)[1] * C} color={COL.ink} className="pulse" /> : null}
       </svg>
-      <Legend />
+      <Legend view={view} />
     </div>
   );
 }
@@ -415,7 +418,10 @@ function Swatch({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Legend() {
+function Legend({ view }: { view: View }) {
+  // Only what this map can show: no surges, garrisons or rifts before their systems open.
+  const threat = !!view.threat;
+  const rifts = view.tiles.some((x) => x.terrain === 'rift' && (x.revealed || x.owned));
   const row = (swatch: React.ReactNode, text: string) => (
     <span>
       {swatch}
@@ -458,7 +464,7 @@ function Legend() {
         </Swatch>,
         t('terrain.barrier'),
       )}
-      {row(
+      {rifts && row(
         <Swatch>
           <rect width="16" height="16" fill="var(--map-rift)" />
           <rect width="16" height="16" fill="url(#crack)" />
@@ -482,7 +488,7 @@ function Legend() {
         </Swatch>,
         t('board.legend.claimable'),
       )}
-      {row(
+      {threat && row(
         <Swatch>
           <rect x="3" y="2" width="9" height="12" fill={COL.bad} />
           <rect x="7" y="4" width="2" height="5" fill={COL.ink} />
@@ -490,14 +496,14 @@ function Legend() {
         </Swatch>,
         t('board.legend.alert'),
       )}
-      {row(
+      {threat && row(
         <Swatch>
           <rect width="16" height="16" fill={COL.ground} />
           <path d="M0 0h9l-9 9z" fill={COL.bad} />
         </Swatch>,
         t('board.legend.lost'),
       )}
-      {row(
+      {shows(view, 'garrison') && row(
         <Swatch>
           <rect x="4" y="2" width="1" height="12" fill={COL.ink} />
           <rect x="5" y="2" width="7" height="5" fill={COL.hazard} />
@@ -511,13 +517,13 @@ function Legend() {
         </Swatch>,
         t('board.legend.warden'),
       )}
-      {row(
+      {(view.squads.length > 1 || shows(view, 'routes')) && row(
         <Swatch>
           <rect x="0" y="6" width="16" height="4" fill={SQUAD_HEX[0]} />
         </Swatch>,
         t('board.legend.squad_a'),
       )}
-      {row(
+      {view.squads.length > 1 && row(
         <Swatch>
           <rect x="0" y="6" width="16" height="4" fill={SQUAD_HEX[1]} />
         </Swatch>,

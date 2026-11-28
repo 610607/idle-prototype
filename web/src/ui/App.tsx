@@ -5,8 +5,8 @@ import { Icon } from '../icons';
 import type { Bounds, Command, View } from '../types';
 import { ReportSheet } from './BattleReport';
 import { Board, WASH } from './Board';
-import { ConfirmDialog, fmtClock, fmtRate, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, SQUAD_HEX, useCtx, type ConfirmAsk, type Ctx, type RouteEdit, type Sheet } from './common';
-import { CommandPanel, Departments, DistrictsPanel, HintLine, HQPanel, NextUnlocks, PendingList, RecordsPanel, RosterPanel, TideStrip } from './Panels';
+import { ConfirmDialog, fmtClock, fmtElapsed, fmtIncome, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, shows, SQUAD_HEX, useCtx, type ConfirmAsk, type Ctx, type RouteEdit, type Sheet } from './common';
+import { ChapterEndDialog, CommandPanel, Departments, DistrictsPanel, HintLine, HQPanel, NextUnlocks, PendingList, RecordsPanel, RosterPanel, TideStrip } from './Panels';
 import { Archive, ResearchPanel } from './Research';
 import { CandidateSheet, DistrictSheet, OpSheet, SquadSheet, TideSheet } from './Sheets';
 import { TileSheet } from './TileSheet';
@@ -41,7 +41,13 @@ function sameSheet(a: Sheet, b: Sheet): boolean {
   }
 }
 
-export function App({ game }: { game: Game }) {
+/** Redraw and save intervals in ms: a fixed map's pace counts in seconds (a fight takes about five),
+ *  so it redraws every tick and saves often; a random map keeps the slow hourly rhythm. */
+function intervals(view: View): { redraw: number; save: number } {
+  return view.pace ? { redraw: 1000, save: 3000 } : { redraw: 5000, save: 10_000 };
+}
+
+export function App({ game, onRestart }: { game: Game; onRestart: () => void }) {
   const [view, setView] = useState<View>(() => game.view());
   const [now, setNow] = useState(() => game.now());
   const [tab, setTab] = useState<Tab>(() => (window.matchMedia('(max-width: 900px)').matches ? 'map' : 'command'));
@@ -58,14 +64,17 @@ export function App({ game }: { game: Game }) {
     lastRefresh.current = Date.now();
   }, [game]);
 
-  // Clock: advance the engine every second; rebuild the view when something happened or every 5s.
+  // Clock: advance the engine every second; rebuild the view when something happened, or at the
+  // map's redraw interval; save at its save interval.
+  const fixed = !!view.pace;
   useEffect(() => {
+    const every = intervals(game.view());
     const id = window.setInterval(() => {
       const n = game.tick();
       setNow(game.now());
-      if (n > 0 || Date.now() - lastRefresh.current > 5000) refresh();
+      if (n > 0 || Date.now() - lastRefresh.current >= every.redraw - 50) refresh();
     }, 1000);
-    const save = window.setInterval(() => game.persist(), 10_000);
+    const save = window.setInterval(() => game.persist(), every.save);
     const onHide = () => game.persist();
     const onShow = () => {
       if (document.visibilityState === 'visible') {
@@ -83,12 +92,7 @@ export function App({ game }: { game: Game }) {
       window.removeEventListener('pagehide', onHide);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, refresh]);
-
-  useEffect(() => {
-    if (game.loadError) toast(t('app.load_error', { err: game.loadError }), true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [game, refresh, fixed]);
 
   useEffect(() => {
     if (focusTile === null) return;
@@ -163,9 +167,18 @@ export function App({ game }: { game: Game }) {
     setTab(t);
     setPages([]);
   }, []);
+  const restart = useCallback(() => {
+    setAsk({
+      title: t('app.restart.title'),
+      body: t('app.restart.body'),
+      ok: t('app.restart.ok'),
+      danger: true,
+      onOk: onRestart,
+    });
+  }, [onRestart]);
   const ctx: Ctx = useMemo(
-    () => ({ game, view, now, open, pages, popTo, selectedTile, confirm: setAsk, run, toast, routeEdit, setRouteEdit, focusTile, setFocusTile, tabName, goTab }),
-    [game, view, now, open, pages, popTo, selectedTile, run, toast, routeEdit, focusTile, tabName, goTab],
+    () => ({ game, view, now, open, pages, popTo, selectedTile, confirm: setAsk, run, toast, routeEdit, setRouteEdit, focusTile, setFocusTile, tabName, goTab, restart }),
+    [game, view, now, open, pages, popTo, selectedTile, run, toast, routeEdit, focusTile, tabName, goTab, restart],
   );
 
   useEffect(() => {
@@ -223,6 +236,10 @@ export function App({ game }: { game: Game }) {
               <PendingList />
             </div>
             <div className="work">
+              {/* Phones show one column at a time: the hint follows the player into the workspace. */}
+              <div className="work-hint">
+                <HintLine compact />
+              </div>
               <div className="work-tabs" role="tablist">
                 {TABS.filter((t) => t.id !== 'research' || view.research).map((t) => (
                   <button key={t.id} className="tab" role="tab" aria-selected={!pages.length && workTab === t.id} onClick={() => pick(t.id)}>
@@ -257,6 +274,7 @@ export function App({ game }: { game: Game }) {
           </div>
         )}
       </div>
+      <ChapterEndDialog />
       {ask ? <ConfirmDialog ask={ask} onDone={() => setAsk(null)} /> : null}
       {toastMsg ? (
         <div className={'toast' + (toastMsg.error ? ' error' : '')} role="status">
@@ -288,14 +306,17 @@ function SheetHost({ sheet, onClose }: { sheet: Sheet; onClose: () => void }) {
 }
 
 function TopBar() {
-  const { view, now, game } = useCtx();
+  const { view, now, game, restart } = useCtx();
+  // While systems are still locked (the tutorial), a stock shows once there is any or it comes in,
+  // as on the text board; scrap always shows.
+  const sparse = !!view.locked?.length;
   return (
     <header className="topbar">
       <span className="brand">
         <span className="stamp">{t('app.brand.stamp')}</span>
         <h1>{t('app.brand.name')}</h1>
         <span className="cycle">
-          {t('app.cycle', { n: view.cycle })}
+          {view.pace && view.phase === 'active' ? t('app.map_tutorial') : t('app.cycle', { n: view.cycle })}
           {view.modifier ? ` · ${view.modifier[1]}` : ''}
         </span>
       </span>
@@ -305,14 +326,15 @@ function TopBar() {
             const cap = game.balance.storage_cap[k] ?? 0;
             const have = view.resources[k] ?? 0;
             // Medicine shows once there is any, or a clinic makes it, or healing is open.
-            if (k === 'medicine' && !have && !view.income[i] && (view.locked ?? []).includes('medicine')) return null;
+            if (k === 'medicine' && !have && !view.income[i] && !shows(view, 'medicine')) return null;
+            if (sparse && k !== 'scrap' && k !== 'medicine' && !have && !view.income[i]) return null;
             const full = have >= cap;
             return (
-            <span key={k} className={'res-item' + (full ? ' bad' : '')} title={full ? t('app.res.full', { name: RES_NAMES[k], cap }) : RES_NAMES[k]}>
-              <Icon id={`res-${k}`} />
-              <span className="num">{full ? `${have}/${cap}` : have}</span>
-              {view.income[i] ? <span className="rate">{t('delta.per_hour', { v: fmtRate(view.income[i]!) })}</span> : null}
-            </span>
+              <span key={k} className={'res-item' + (full ? ' bad' : '')} title={full ? t('app.res.full', { name: RES_NAMES[k], cap }) : RES_NAMES[k]}>
+                <Icon id={`res-${k}`} />
+                <span className="num">{full ? `${have}/${cap}` : have}</span>
+                {view.income[i] ? <span className="rate">{fmtIncome(view, view.income[i]!)}</span> : null}
+              </span>
             );
           })}
           {view.power ? (
@@ -323,7 +345,7 @@ function TopBar() {
               </span>
             </span>
           ) : null}
-          {view.self_sufficient ? (
+          {view.self_sufficient && view.threat ? (
             <span className="chip good" title={t('app.res.self_sufficient_hint')}>
               {t('app.res.self_sufficient')}
             </span>
@@ -332,9 +354,13 @@ function TopBar() {
       ) : null}
       <span className="clock">
         {game.offset ? <span className="chip warn">{t('app.fast_forward', { h: Math.round(game.offset / 3600) })}</span> : null}
-        <span className="readout">
+        <button className="btn ghost small restart" onClick={restart} title={t('app.restart.hint')}>
+          {t('app.restart.button')}
+        </button>
+        {/* A fixed map counts from its start in seconds; a random map shows the time of day. */}
+        <span className="readout" title={view.pace && view.phase === 'active' ? t('app.elapsed') : undefined}>
           <Icon id="clock" />
-          <span className="num">{fmtClock(now)}</span>
+          <span className="num">{view.pace && view.phase === 'active' ? fmtElapsed(now - view.started_at) : fmtClock(now)}</span>
         </span>
       </span>
     </header>
@@ -359,7 +385,11 @@ function RouteEditor() {
           preview.ok ? (
             <div className="small">
               {t('app.route.preview')}
-              <b className={preview.outcome === 'victory' ? 'good' : 'bad'}>{OUTCOME_NAMES[preview.outcome ?? 'victory']}</b>
+              {preview.stopped !== undefined ? (
+                <b className="warn">{t('app.route.turns_back')}</b>
+              ) : (
+                <b className={preview.outcome === 'victory' ? 'good' : 'bad'}>{OUTCOME_NAMES[preview.outcome ?? 'victory']}</b>
+              )}
               {preview.steps
                 .filter((s) => s.fought)
                 .map((s) => (
@@ -369,7 +399,12 @@ function RouteEditor() {
                     {s.outcome === 'victory' ? '✓' : '✗'}
                   </span>
                 ))}
-              <span className="muted">{t('app.route.minutes', { n: preview.minutes })}</span>
+              <span className="muted">{preview.seconds !== undefined ? t('app.route.seconds', { n: preview.seconds }) : t('app.route.minutes', { n: preview.minutes })}</span>
+              {preview.low_hp ? (
+                <div className="warn">{t('app.route.low_hp')}</div>
+              ) : preview.stopped !== undefined ? (
+                <div className="warn">{t('app.route.stops', { tile: view.tiles[preview.stopped]!.label, outcome: OUTCOME_NAMES[preview.outcome ?? 'emergency'] })}</div>
+              ) : null}
             </div>
           ) : (
             <div className="small bad">{preview.error}</div>
