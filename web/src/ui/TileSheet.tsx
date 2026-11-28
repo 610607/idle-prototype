@@ -117,25 +117,31 @@ function Confirm({ cmd, label, danger, okText, onDone }: { cmd: Command; label: 
 }
 
 function ClaimBlock({ t }: { t: TileView }) {
-  const { game } = useCtx();
+  const { game, view } = useCtx();
   const dry = useMemo(() => game.dryRun({ cmd: 'claim', tile: t.i }), [game, t.i]);
+  // The claim line says whether the tile holds once claimed, and who holds it if nobody stationed would.
+  const line = view.pending.find((p) => p.kind === 'claim' && p.tile === t.i);
+  const guard = line?.op !== undefined ? view.operatives.find((o) => o.id === line.op) : undefined;
   return (
     <div className="card striped good">
       <Section title={t.terrain === 'rift' ? tr('tile.claim.title_rift') : tr('tile.claim.title')} icon="check" tone="good" hint={tr('tile.claim.hint')}>
+        {line && <p className="small" style={{ margin: '0 0 6px' }}>{line.text}</p>}
         <DryRunView dry={dry} />
-        <div className="row" style={{ marginTop: 8 }}>
-          <ClaimButton tile={t.i} ok={dry.ok} />
+        <div className="row" style={{ marginTop: 8, gap: 6 }}>
+          {guard && <ClaimButton tile={t.i} ok={dry.ok} guard={guard.id} label={tr('tile.claim.button_guard', { name: guard.name })} />}
+          <ClaimButton tile={t.i} ok={dry.ok} label={tr('tile.claim.button')} plain={!!guard} />
         </div>
       </Section>
     </div>
   );
 }
 
-function ClaimButton({ tile, ok }: { tile: number; ok: boolean }) {
+function ClaimButton({ tile, ok, guard, label, plain }: { tile: number; ok: boolean; guard?: number; label: string; plain?: boolean }) {
   const { run } = useCtx();
+  const cmd = guard === undefined ? { cmd: 'claim' as const, tile } : { cmd: 'claim' as const, tile, garrison: guard };
   return (
-    <button className="btn primary" disabled={!ok} onClick={() => run({ cmd: 'claim', tile }, tr('tile.claim.done'))}>
-      {tr('tile.claim.button')}
+    <button className={plain ? 'btn' : 'btn primary'} disabled={!ok} onClick={() => run(cmd, tr('tile.claim.done'))}>
+      {label}
     </button>
   );
 }

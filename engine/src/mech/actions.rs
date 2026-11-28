@@ -13,6 +13,20 @@ use crate::{l10n, t, txt};
 
 pub type ActResult = Result<(), String>;
 
+/// Claim `tile`, then station `guard` there.
+pub fn claim_with(state: &mut GameState, tile: u16, guard: Option<u32>) -> ActResult {
+    if let Some(op) = guard {
+        if state.op(op).is_none() {
+            return Err(t!("err.no_op"));
+        }
+    }
+    claim(state, tile)?;
+    match guard {
+        Some(op) => garrison(state, op, Some(tile)),
+        None => Ok(()),
+    }
+}
+
 pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
     let i = tile as usize;
     let t = state.cycle.tiles.get(i).ok_or_else(|| t!("err.no_tile"))?;

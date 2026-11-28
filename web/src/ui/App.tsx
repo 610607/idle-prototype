@@ -296,13 +296,17 @@ function TopBar() {
       </span>
       {view.phase === 'active' ? (
         <div className="res">
-          {RES_KEYS.map((k, i) => (
-            <span key={k} className="res-item" title={RES_NAMES[k]}>
+          {RES_KEYS.map((k, i) => {
+            const cap = game.balance.storage_cap[k];
+            const full = view.resources[k] >= cap;
+            return (
+            <span key={k} className={'res-item' + (full ? ' bad' : '')} title={full ? t('app.res.full', { name: RES_NAMES[k], cap }) : RES_NAMES[k]}>
               <Icon id={`res-${k}`} />
-              <span className="num">{view.resources[k]}</span>
+              <span className="num">{full ? `${view.resources[k]}/${cap}` : view.resources[k]}</span>
               {view.income[i] ? <span className="rate">{t('delta.per_hour', { v: fmtRate(view.income[i]!) })}</span> : null}
             </span>
-          ))}
+            );
+          })}
           <span className={'res-item ' + (view.power[0] < view.power[1] ? 'bad' : '')} title={t('app.res.power')}>
             <Icon id="power" />
             <span className="num">

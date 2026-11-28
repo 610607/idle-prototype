@@ -1,0 +1,10 @@
+{
+  "protocol": 1,
+  "build": "d5b6c0be",
+  "seed": 2,
+  "player": "haiku-conqueror",
+  "schedule": "every:24",
+  "hours": 168,
+  "lang": "zh-CN",
+  "research": true
+}

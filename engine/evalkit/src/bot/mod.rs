@@ -239,7 +239,13 @@ impl Bot {
                 .map(|t| t.i)
                 .collect::<Vec<_>>()
             {
-                let _ = self.act(e, &Command::Claim { tile: i });
+                let _ = self.act(
+                    e,
+                    &Command::Claim {
+                        tile: i,
+                        garrison: None,
+                    },
+                );
             }
         }
         self.districts(e);

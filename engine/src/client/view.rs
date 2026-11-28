@@ -1423,11 +1423,29 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         } else {
             "view.pending.claim"
         };
+        use crate::mech::defense;
+        let (hold, guard) = match defense::claim_forecast(state, i) {
+            defense::ClaimForecast::Holds => (t!("view.pending.claim_holds"), None),
+            defense::ClaimForecast::Guard(op) => (
+                t!(
+                    "view.pending.claim_guard",
+                    name = state.op(op).map(|o| o.name.render()).unwrap_or_default()
+                ),
+                Some(op),
+            ),
+            defense::ClaimForecast::Falls => (t!("view.pending.claim_falls"), None),
+        };
         pending.push(PendingView {
             kind: "claim",
-            text: t!(key, tile = geom::label(i), before = before, after = after),
+            text: t!(
+                key,
+                tile = geom::label(i),
+                before = before,
+                after = after,
+                hold = hold
+            ),
             tile: Some(i),
-            op: None,
+            op: guard,
             candidate: None,
             district: None,
         });

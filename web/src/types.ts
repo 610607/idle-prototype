@@ -640,6 +640,7 @@ export interface Balance {
   warden_route_win: number;
   warden_counter_restore: number;
   warden_counter_restore_clinic: number;
+  storage_cap: Resources;
   org_perks: { archive: number[] };
 }
 
@@ -660,7 +661,7 @@ export type Command =
   | { cmd: 'assault'; squad: number }
   | { cmd: 'set_squad'; squad: number; members: number[] }
   | { cmd: 'garrison'; op: number; tile: number | null }
-  | { cmd: 'claim'; tile: number }
+  | { cmd: 'claim'; tile: number; garrison?: number }
   | { cmd: 'build'; tile: number; facility: string | null }
   | { cmd: 'counter'; tile: number }
   | { cmd: 'abandon'; tile: number }
