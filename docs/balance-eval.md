@@ -342,6 +342,36 @@ L1 实战（`calibrate field greedy`，机器人第 6/12/24/48 小时的真实�
 - **威胁列**（设计 v2 阶段 1）：手里的东西都算进分数，分数就是威胁，所以每个词条还有一份威胁代价。`threat` 是拿着它加多少分（装备按 `balance.score.item`，学说按 `score.doctrine`，特质跟着队员走、不另算），`surge_pct` 是在参考玩家第 72 小时上下的威胁（`THREAT_REF` = 1100）处，这些分让来潮强多少（百分比）。读法：环当量除以来潮增幅，越大越值。
 - 首次读数：学说里 `overclock`（+0.30 环）和 `react`（+0.23 环）偏高；`ionize` 单独测为 0，它要和 `react` 配合才生效，组合要成对测（未做）。
 
+## 教学关
+
+阶段 3 S8 起，教学关第一章（`--map tutorial`，节奏按秒）进了评估的正常流程。
+
+**走法机器人**（`evalkit/src/tutorial.rs`）：一个看局面的小机器人，每 `think` 秒看一眼，能做的都做：按固定的偏好顺序打格子、占格（钱够就占）、收下送来的人、成立部门、开用药线、治伤（低于三分之二血、药够治满或至少治三分之一才点）、有人手就多建一座废材站、路线能过门就画到门口，否则亲手派遣。`think` 1 是一看到就做的玩家，5～8 秒是先读一遍再动手的玩家。它量出各里程碑的秒数（`tutorial.secs.<里程碑>`：`first_win`、`first_claim`、`scrapyard`、`clinic`、`low_hp`、`first_heal`、`first_short`、`dispatch_office`、`office_founded`、`route_set`、`residents`、`striker`、`striker_hired`、`gate_stop`、`gate_won`）、用了几条命令（`tutorial.commands`）、两次操作之间最长隔了几秒（`tutorial.longest_idle`，玩家无事可做的最长一段；真人读字的时间没算进去）、第几仗之前第一次因为血量不够停下（`tutorial.first_short`，时刻是 `tutorial.secs.first_short`）。
+
+```bash
+cargo run --release --example eval -- tutorial [--think 1] [--seeds 4]       # 每个种子一列，看各里程碑
+WALK_LOG=0 cargo run --release --example eval -- tutorial --seeds 1          # 种子 0 的命令、事件和终局局面
+cargo run --release --example eval -- run greedy --start tutorial [--think 1] --seeds 8 --hours 72 --out /tmp/tg.json
+cargo run --release --example eval -- review /tmp/tg.json                    # 对照 goals.json 的 tutorial_chapter1 和基线
+```
+
+**连跑两局**（`eval run --start tutorial`，`run::Start::Tutorial`）：每个种子先由走法机器人打完第一章，再 `leave_map`、选第一张随机地图、开三条规章（和 `textui::setup` 一样），然后由指定的人格接着玩随机地图。教学关放在 `T0` 之前两小时开打（`TUTORIAL_LEAD`），打完在选图页等到 `T0` 才选图，所以第二局从 `T0` 开始，所有按小时的读数和普通的局一样读；走法不受开局时刻影响（测试 `the_walk_does_not_depend_on_the_start_time`）。结果文件记 `"start": "tutorial"`，人格名写成 `tutorial+<人格>`（如 `tutorial+greedy`），基线另存 `eval/baseline/tutorial+greedy.json`；`tutorial.*` 和第二局的全部指标在同一个文件里，命令计数是两局之和。第二局成立过的部门开局就在（`seat_departments`），地图也和同种子的普通局不一样（随机数已经被教学关用过），所以第二局的读数不和普通基线逐种子比。这种跑法不写会话目录（`--sessions` 只给普通开局）。
+
+**目标**：`goals.json` 的 `tutorial_chapter1`（`"run": "tutorial"`，只读这种跑法的结果，门槛只由 `tutorial+greedy` 判）：打下门的时刻 p50 在 60～180 秒（时间按对数刻度看，约是 104 秒的 ×/÷1.7），两次操作之间最长 p50 不超过 20 秒，命令 15～40 条，第一次血量不够不在头两仗；第一次血量不够的时刻和第一次掉到一半血的时刻只观察。基线（2026-11-28，8 个种子，`think` 1，72 小时）：打下门 p50 约 90 秒，最长等待 p50 20 秒。
+
+**盲区**：普通开局里 `leave_map` 没人用（随机地图没有章末），`heal`、`dispatch`、`found_department`、`set_med_line` 也几乎只在教学关有意义；`--start tutorial` 的跑法里这五条都有人用，看 `commands.never` 要看这种跑法的结果。
+
+**标准走法**（`engine/eval/tutorial_walk.json`）：走法机器人在种子 0、`think` 5 下打的一局，记下每条被接受的命令和时刻，外加每个里程碑的窗口（`windows`，开局后的秒数，闭区间）。`cargo test` 的 `standard_walkthrough_still_finishes_chapter_one` 按同样的步长重放：哪条命令被拒绝（写明第几条、第几秒、什么命令、引擎的理由）、到 `end` 还没打下门、哪个里程碑落在窗口外，都会失败。改了第一章的数（`maps.json` 的教学关、`unlocks.json` 的教学关配置、敌人、节奏）以后这个测试不过，说明标准走法走不通了：先看是不是有意的；有意的就重录。
+
+```bash
+cargo run --release --example eval -- tutorial --check     # 重放，打印每个里程碑现在的时刻、窗口和录制时的时刻
+cargo run --release --example eval -- tutorial --record    # 用机器人重录（保留已有的窗口；新里程碑给“三分之二到一倍半”的窗口）
+```
+
+重录不改窗口：窗口是设计意图（“第几秒前后应该到这一步”），要挪就手改 `windows` 并写明原因。重放必须按录制的步长推进时钟，因为闲着的小队在推进时钟那一刻才出发，步长是这局游戏的一部分。
+
+**S8 的数**（只改教学关的数据，随机地图不变，六个人格的局面轨迹逐字节相同）：改之前机器人（`think` 1）177～243 秒打下门，最长等待 30～40 秒，都在攒第 6、7 格的钱。改成：占格基价 10 → 8 废材、倍数 ×1.3 → ×1.25，送的废材站自带 6 → 8 人（每分钟 36 → 48 废材），巷战突击手和招募都改成占满 6 格就来（原来 7 格，招募的条件写在 `unlocks.json` 教学关配置的 `when.hire`）。改完 `think` 1 是 65～123 秒打下门、最长等待 20～25 秒，`think` 5～8 是 60～128 秒、最长等待不超过 20 秒。代价是这一章短了一半：按 [教学关](design-v2-tutorial.md) 第一章约 8 分钟的设想，真人读提示和局面的时间（约 25 条命令、14 句提示）要占大头，机器人量不出来，要等真人试玩再定；要让它更长又不添空等，得加内容（更多的步骤），不是调数。
+
 ## 新系统怎么接入
 
 加一个系统或词条时，同一个改动里补齐：

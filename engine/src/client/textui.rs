@@ -319,6 +319,41 @@ pub fn parse_json(j: &str) -> Result<Command, String> {
     serde_json::from_value(v).map_err(|e| t!("cli.bad_json", err = e))
 }
 
+/// Seconds in one `--wait` unit: an hour on a map with the normal pace, a second on a fast map
+/// (the tutorial's "hour" is half a minute, so waiting there goes by the second).
+pub fn wait_unit(v: &View) -> i64 {
+    match v.pace.as_ref() {
+        Some(p) if p.hour_secs() < 3600 => 1,
+        _ => 3600,
+    }
+}
+
+/// The longest single wait in seconds: `MAX_WAIT` of the map's hours (four hours on a random
+/// map, two minutes on the tutorial).
+pub fn max_wait_secs(v: &View) -> i64 {
+    MAX_WAIT * v.pace.as_ref().map_or(3600, |p| p.hour_secs())
+}
+
+/// "…过了 N 小时" for whole hours on a normal map, else in minutes and seconds.
+pub fn waited_text(v: &View, secs: i64) -> String {
+    if wait_unit(v) == 3600 && secs % 3600 == 0 {
+        t!("cli.run.waited", h = secs / 3600)
+    } else {
+        t!("cli.run.waited_secs", time = clock_text(secs))
+    }
+}
+
+/// A span of seconds as "N 秒" or "M 分 S 秒".
+pub fn clock_text(secs: i64) -> String {
+    if secs < 60 {
+        t!("cli.time.secs", s = secs)
+    } else if secs % 60 == 0 {
+        t!("cli.time.mins", m = secs / 60)
+    } else {
+        t!("cli.time.mins_secs", m = secs / 60, s = secs % 60)
+    }
+}
+
 /// Hours into the cycle; 0 between cycles.
 pub fn hour(e: &Engine, v: &View) -> i64 {
     if v.phase != Phase::Active {
@@ -919,7 +954,7 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         if v.pace.is_some() {
             t!(
                 "cli.board.title_secs",
-                s = e.state.time - v.started_at,
+                time = clock_text(e.state.time - v.started_at),
                 cycle = v.cycle
             )
         } else {
@@ -2361,6 +2396,13 @@ pub fn menu_text(e: &mut Engine, items: &[Item]) -> String {
     if v.phase != Phase::Active {
         // The hints below are about the map.
         return o;
+    }
+    if wait_unit(&v) == 1 {
+        // A fast map: say that waiting goes by the second here.
+        line(
+            &mut o,
+            t!("cli.menu.wait_secs", max = clock_text(max_wait_secs(&v))),
+        );
     }
     if !v.locked.is_empty() {
         // The hints below name routes, squads and garrisons, which may still be locked.

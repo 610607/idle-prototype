@@ -298,7 +298,7 @@ fn dispatched(e: &Engine) -> i32 {
 }
 
 /// The tutorial map starts with the tutorial unlock profile: only dispatching and claiming;
-/// the former clinic opens healing, three tiles open building, seven open hiring (with the
+/// the former clinic opens healing, three tiles open building, six open hiring (with the
 /// walk-in striker; docs/design-v2-tutorial.md chapter one, docs/unlocks.md).
 #[test]
 fn the_tutorial_opens_systems_as_chapter_one_goes() {
@@ -351,7 +351,7 @@ fn the_tutorial_opens_systems_as_chapter_one_goes() {
     assert!(v.shows(System::Build) && !v.shows(System::Hire));
     assert_eq!(
         (v.next[0].id.as_str(), v.next[0].have, v.next[0].need),
-        ("hire", 3, 7)
+        ("hire", 3, 6)
     );
     assert!(!e.allows(&Command::Hire { candidate: 1 }));
     assert!(!v.shows(System::Research) && !v.shows(System::Routes));
@@ -445,7 +445,7 @@ fn chapter_one_opening_dispatches_founds_the_dispatch_office_and_sets_a_route() 
         1,
         "only the dispatch office in chapter one"
     );
-    // Claims get dearer: 10, 13, 17 scrap for the first three (maps.json costs, ×1.3).
+    // Claims get dearer: 8, 10, 13 scrap for the first three (maps.json costs, ×1.25).
     let mut prices = vec![];
     for tile in ["I10", "G10", "H9"].map(at) {
         prices.push(e.view().claim_price.unwrap().scrap);
@@ -458,7 +458,7 @@ fn chapter_one_opening_dispatches_founds_the_dispatch_office_and_sets_a_route() 
             e.command(&Command::Heal { op: id, hp: None }).unwrap();
         }
     }
-    assert_eq!(prices, [10, 13, 17]);
+    assert_eq!(prices, [8, 10, 13]);
     // A claimable tile is not fought again: the dispatch is refused.
     sortie(&mut e, at("H8"));
     assert!(e.state.cycle.is_claimable(at("H8")));

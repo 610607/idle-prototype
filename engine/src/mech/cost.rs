@@ -240,19 +240,19 @@ mod tests {
         assert_eq!(build_price(&s, "scrapyard").unwrap(), yard);
         let mut t = sim::new_game(3, 1_000_000, "test");
         sim::start_map(&mut t, hooks::TUTORIAL_MAP).unwrap();
-        assert_eq!(claim_price(&t).scrap, 10);
-        t.cycle.stats.tiles_claimed = 2;
         let c = content()
             .map(hooks::TUTORIAL_MAP)
             .unwrap()
             .costs
             .clone()
             .unwrap();
+        assert_eq!(claim_price(&t).scrap, c.claim_base.scrap);
+        t.cycle.stats.tiles_claimed = 2;
         assert_eq!(
             claim_price(&t).scrap,
             grow(c.claim_base.scrap, c.claim_mult_bp, 2)
         );
-        assert!(claim_price(&t).scrap > 10);
+        assert!(claim_price(&t).scrap > c.claim_base.scrap);
     }
 
     #[test]

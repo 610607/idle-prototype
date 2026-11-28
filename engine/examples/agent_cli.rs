@@ -9,6 +9,7 @@ use idle_engine::client::textui::session::{
     self, Action, Feel, Observation, Schedule, Score, Setup,
 };
 use idle_engine::client::textui::{self, Options, MAX_WAIT};
+use idle_engine::mech::state::Phase;
 use idle_engine::t;
 use std::fs;
 use std::io::Write;
@@ -251,7 +252,7 @@ fn main() {
                         wait = next.parse().unwrap_or(0);
                         i += 1;
                     }
-                    "--secs" => {
+                    "--wait-secs" | "--secs" => {
                         secs = next.parse().unwrap_or(0);
                         i += 1;
                     }
@@ -297,21 +298,30 @@ fn main() {
                 println!("{line}");
                 done.push(line);
             }
+            // `--wait` counts the map's own unit (hours on a random map, seconds on a fast map
+            // such as the tutorial); `--wait-secs` always counts seconds. Together they stop at
+            // the longest single wait and at the end of the played hours.
             let v = e.view();
-            let h = textui::hour(&e, &v);
-            let wait = wait.clamp(0, MAX_WAIT).min(opts.hours - h).max(0);
-            if wait > 0 {
+            let unit = textui::wait_unit(&v);
+            let left = if v.phase == Phase::Active {
+                (opts.hours * 3600 - (e.state.time - v.started_at)).max(0)
+            } else {
+                0
+            };
+            let total = (wait.max(0) * unit + secs.max(0))
+                .min(textui::max_wait_secs(&v))
+                .min(left);
+            if total > 0 {
                 let now = e.state.time;
-                e.advance(now + wait * 3600);
-                println!("{}", t!("cli.run.waited", h = wait));
+                e.advance(now + total);
+                println!("{}", textui::waited_text(&v, total));
             }
-            // Seconds, for maps with a fast pace (at most as long as the longest wait).
-            let secs = secs.clamp(0, MAX_WAIT * 3600);
-            if secs > 0 {
-                let now = e.state.time;
-                e.advance(now + secs);
-                println!("{}", t!("cli.run.waited_secs", s = secs));
-            }
+            // The log keeps the old fields: whole hours in `wait`, the rest in `secs`.
+            let (wait, secs) = if unit == 1 {
+                (0, total)
+            } else {
+                (total / 3600, total % 3600)
+            };
             let claimed = textui::claim_tasks(&mut e);
             if !claimed.is_empty() {
                 let tasks = claimed.join(&t!("cli.sep.list"));
