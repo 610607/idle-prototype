@@ -88,8 +88,8 @@ fn tiles() -> Vec<Tile> {
                 "dense_fog"
             },
         );
-        for (i, t) in m.tiles.iter().enumerate() {
-            let r = ring(i as u16);
+        for (i, t) in m.tiles() {
+            let r = ring(i);
             if t.waves.is_empty() || t.terrain == Terrain::Hq || !(4..=6).contains(&r) {
                 continue;
             }

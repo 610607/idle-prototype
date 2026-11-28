@@ -43,8 +43,8 @@ pub fn encounters() -> Vec<Vec<Enc>> {
     for seed in 0..40u64 {
         for modifier in ["static_turbulence", "dense_fog"] {
             let m = mapgen::generate(seed, modifier);
-            for (i, t) in m.tiles.iter().enumerate() {
-                let r = ring(i as u16);
+            for (i, t) in m.tiles() {
+                let r = ring(i);
                 if t.waves.is_empty() || t.terrain == Terrain::Hq || r < 1 || r > RINGS {
                     continue;
                 }
@@ -128,8 +128,7 @@ pub fn member(
             op.traits = pool.into_iter().take(2).collect();
         }
     }
-    op.equipment = equip.map(|s| s.to_string());
-    op
+    operative::with_item(&op, equip)
 }
 
 pub fn fight(allies: &[UnitSpec], e: &Enc, record: bool) -> BattleReport {

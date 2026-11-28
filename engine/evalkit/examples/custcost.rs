@@ -15,7 +15,7 @@ use evalkit::bot;
 use idle_engine::client::api::Engine;
 use idle_engine::data::{balance, content};
 use idle_engine::mech::commands::Command;
-use idle_engine::mech::state::{Cycle, GameState};
+use idle_engine::mech::state::GameState;
 use idle_engine::{mech::economy, mech::world};
 
 const T0: i64 = 1_700_000_000;
@@ -62,7 +62,7 @@ struct Out {
 fn run(e: &mut Engine, at: i64, district: u16, mut track: impl FnMut(i64, i32)) {
     for h in 1..=AFTER {
         e.advance(T0 + (at + h) * 3600);
-        track(h, e.state.cycle.districts[district as usize].population);
+        track(h, e.state.cycle.district(district).population);
     }
 }
 
@@ -76,8 +76,8 @@ fn eligible(state: &GameState) -> Vec<(u16, String, bool)> {
         .filter_map(|d| {
             let (p, w) = d.workers.iter().max_by_key(|(_, w)| **w)?;
             (*w >= balance().customize_base).then(|| {
-                let tiles = &state.cycle.districts[d.id as usize].tiles;
-                (d.id, p.clone(), tiles.iter().any(|t| border.contains(t)))
+                let mut tiles = state.cycle.district_tiles(d.id);
+                (d.id, p.clone(), tiles.any(|t| border.contains(&t)))
             })
         })
         .collect()
@@ -124,7 +124,7 @@ fn main() {
             for h in 1..=AFTER {
                 ctl.advance(T0 + (at + h) * 3600);
                 for (k, (d, _, _)) in picks.iter().enumerate() {
-                    control_pop[k][h as usize] = ctl.state.cycle.districts[*d as usize].population;
+                    control_pop[k][h as usize] = ctl.state.cycle.district(*d).population;
                 }
             }
             for (pi, (district, prof, is_border)) in picks.iter().enumerate() {
@@ -133,8 +133,8 @@ fn main() {
                 let g = if *is_border { 0 } else { 1 };
                 for (k, o) in ORDERS.iter().enumerate() {
                     let mut x = Engine::from_state(base.clone());
-                    let before = x.state.cycle.districts[*district as usize].population;
-                    let trust = x.state.cycle.districts[*district as usize].trust;
+                    let before = x.state.cycle.district(*district).population;
+                    let trust = x.state.cycle.district(*district).trust;
                     let cmd = Command::Customize {
                         district: *district,
                         profession: prof.clone(),
@@ -145,7 +145,7 @@ fn main() {
                     if x.command(&cmd).is_err() {
                         continue;
                     }
-                    let cost = before - x.state.cycle.districts[*district as usize].population;
+                    let cost = before - x.state.cycle.district(*district).population;
                     let mut regrow = None;
                     run(&mut x, at, *district, |h, p| {
                         if regrow.is_none() && p >= control_pop[pi][h as usize] {
@@ -156,7 +156,7 @@ fn main() {
                     if k == 1 {
                         trust_regrow.push((trust as f64, regrow));
                     }
-                    let (a, b): (&Cycle, &Cycle) = (&ctl.state.cycle, &x.state.cycle);
+                    let (a, b) = (&ctl.state.cycle, &x.state.cycle);
                     let s = &mut sums[g][k];
                     s.scrap += (a.resources.scrap - b.resources.scrap) as f64;
                     s.parts += (a.resources.parts - b.resources.parts) as f64;

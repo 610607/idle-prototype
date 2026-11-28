@@ -141,16 +141,16 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
         .iter()
         .find(|s| s.id == squad_id)?
         .clone();
-    if squad.route.is_empty() || squad.members.is_empty() {
+    let members: Vec<u32> = state.cycle.members(squad_id).collect();
+    if squad.route.is_empty() || members.is_empty() {
         return None;
     }
-    if validate(state, &squad.members, &squad.route).is_err() {
+    if validate(state, &members, &squad.route).is_err() {
         return None;
     }
-    let specs: Vec<UnitSpec> = squad
-        .members
-        .iter()
-        .filter_map(|id| state.op(*id))
+    let specs: Vec<UnitSpec> = state
+        .cycle
+        .member_ops(squad_id)
         .map(operative::spec)
         .collect();
     if specs.is_empty() {
@@ -303,7 +303,7 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
     let Some(trip) = state.cycle.squads[si].trip.take() else {
         return;
     };
-    let members = state.cycle.squads[si].members.clone();
+    let members: Vec<u32> = state.cycle.members(squad_id).collect();
     let mut wins = 0;
     for r in &trip.results {
         if r.outcome != Outcome::Victory {

@@ -519,10 +519,9 @@ pub fn pace(
             let (e, _) = crate::run::new_game(seed, crate::run::Persona::REFERENCE);
             let cy = &e.state.cycle;
             let mut n = 0.0;
-            for (i, tile) in cy.tiles.iter().enumerate() {
-                let i = i as u16;
+            for (i, tile) in cy.tiles() {
                 if idle_engine::kernel::geom::ring(i) != r
-                    || tile.owned
+                    || cy.is_owned(i)
                     || tile.waves.is_empty()
                     || matches!(
                         tile.terrain,

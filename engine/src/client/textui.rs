@@ -1940,7 +1940,7 @@ mod tests {
             .take(2)
             .map(|x| x.id.clone())
             .collect();
-        e.state.cycle.inventory.extend(items.iter().cloned());
+        e.state.cycle.inventory.extend(items.iter().cloned()); // state-write: test setup
         let v = e.view();
         let text = board(&mut e, now, &opts) + &info(&mut e);
         assert!(!text.contains("cli."), "unresolved key in:\n{text}");

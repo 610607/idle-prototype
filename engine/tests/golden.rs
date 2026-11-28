@@ -39,7 +39,7 @@ fn base() -> GameState {
 
 /// The starting crew as battle units.
 fn crew(s: &GameState) -> Vec<UnitSpec> {
-    s.cycle.operatives.iter().map(operative::spec).collect()
+    s.cycle.operatives().map(operative::spec).collect()
 }
 
 /// A starting operative of `class`, generated the way `sim::choose_map` makes the crew, from a
@@ -69,12 +69,12 @@ fn tile_on(s: &GameState, ring: i32, ok: impl Fn(&GameState, u16) -> bool) -> u1
 
 /// A plain hostile city tile with enemies on it.
 fn city(s: &GameState, i: u16) -> bool {
-    let t = &s.cycle.tiles[i as usize];
-    t.terrain == Terrain::City && !t.owned && !t.waves.is_empty()
+    let t = s.cycle.tile(i);
+    t.terrain == Terrain::City && !s.cycle.is_owned(i) && !t.waves.is_empty()
 }
 
 fn waves_of(s: &GameState, i: u16) -> usize {
-    s.cycle.tiles[i as usize].waves.len()
+    s.cycle.tile(i).waves.len()
 }
 
 /// Replaces the enemies of a tile and takes its lair strength off.
@@ -86,7 +86,7 @@ fn set_waves(s: &mut GameState, i: u16, waves: Vec<Vec<String>>) {
 
 fn core_tile(s: &GameState) -> u16 {
     (0..TILES as u16)
-        .find(|i| s.cycle.tiles[*i as usize].special == Some(SpecialKind::Core))
+        .find(|i| s.cycle.tile(*i).special == Some(SpecialKind::Core))
         .expect("the map has a core")
 }
 
@@ -106,11 +106,10 @@ fn set_armory(s: &mut GameState, level: i32) {
 /// enough residents and materials to staff and pay for anything built there. Returns the tile.
 fn held_tile(s: &mut GameState) -> u16 {
     let tile = tile_on(s, 1, |s, i| {
-        let t = &s.cycle.tiles[i as usize];
-        t.terrain == Terrain::City && t.district.is_some()
+        s.cycle.tile(i).terrain == Terrain::City && s.cycle.district_of(i).is_some()
     });
-    let guard = s.cycle.operatives[0].id;
-    let d = s.cycle.tiles[tile as usize].district.unwrap() as usize;
+    let guard = s.cycle.operatives().next().unwrap().id;
+    let d = s.cycle.district_of(tile).unwrap() as usize;
     s.cycle.tiles[tile as usize].warden = balance().warden_max;
     s.cycle.districts[d].population = 40;
     s.cycle.resources.scrap = 10_000;

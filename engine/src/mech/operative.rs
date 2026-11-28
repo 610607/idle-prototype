@@ -206,6 +206,14 @@ pub fn spec(op: &Operative) -> UnitSpec {
     }
 }
 
+/// A detached copy of `op` carrying `item` instead of its own equipment, for previews and
+/// measurements (`spec` of the copy is the operative with that item). Never put back into a state.
+pub fn with_item(op: &Operative, item: Option<&str>) -> Operative {
+    let mut copy = op.clone();
+    copy.equipment = item.map(str::to_string);
+    copy
+}
+
 /// Map-layer effects an operative carries (routes / garrisons).
 pub fn has_map_effect(op: &Operative, f: impl Fn(&TraitEffect) -> bool) -> bool {
     effects(op).iter().any(|(_, e)| f(e))

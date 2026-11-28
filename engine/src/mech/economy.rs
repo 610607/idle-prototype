@@ -6,9 +6,7 @@ use crate::data::hooks;
 use crate::data::{balance, content, FacilityKind};
 use crate::kernel::geom::{self, TILES};
 use crate::mech::operative::{self, Origin};
-use crate::mech::state::{
-    Assignment, Candidate, Dial, EventKind, GameState, SpecialKind, Terrain, TileUse,
-};
+use crate::mech::state::{Candidate, Dial, EventKind, GameState, SpecialKind, Terrain, TileUse};
 use crate::{l10n, txt};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -79,7 +77,7 @@ pub fn calc(state: &GameState) -> EconCalc {
             ..Default::default()
         };
         let mut tiles_by_prof: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-        for &t in &d.tiles {
+        for t in cy.district_tiles(d.id) {
             let tile = &cy.tiles[t as usize];
             if !tile.owned {
                 continue;
@@ -150,8 +148,7 @@ pub fn calc(state: &GameState) -> EconCalc {
     // 3. Output.
     for f in fac.iter_mut() {
         let def = c.facility(&f.facility).unwrap();
-        let tile = &cy.tiles[f.tile as usize];
-        let d = &cy.districts[tile.district.unwrap() as usize];
+        let d = cy.district(cy.district_of(f.tile).unwrap());
         let policy = d.policy.as_deref().and_then(|p| c.policy(p));
         f.powered = def.power == 0 || out.power_bp >= 10_000;
         for (k, per) in &def.output {
@@ -168,7 +165,7 @@ pub fn calc(state: &GameState) -> EconCalc {
                 bonus += *p.facility_bp.get(&f.facility).unwrap_or(&0) as i64;
             }
             // Markets boost their own district.
-            for &t in &d.tiles {
+            for t in cy.district_tiles(d.id) {
                 let tt = &cy.tiles[t as usize];
                 if tt.owned && !tt.alert() {
                     if let Some(mdef) = tt.usage.facility().and_then(|m| c.facility(m)) {
@@ -201,7 +198,7 @@ pub fn calc(state: &GameState) -> EconCalc {
         let mut service = 0;
         let mut rift_adj = 0;
         let mut landmark = false;
-        for &t in &d.tiles {
+        for t in cy.district_tiles(d.id) {
             let tile = &cy.tiles[t as usize];
             if !tile.owned {
                 continue;
@@ -251,16 +248,15 @@ pub fn calc(state: &GameState) -> EconCalc {
         if dc.unhoused > 0 {
             factors.push(("trust.unhoused", -(dc.unhoused / 3).clamp(1, 20)));
         }
-        let alerts = d
-            .tiles
-            .iter()
-            .filter(|t| cy.tiles[**t as usize].alert())
+        let alerts = cy
+            .district_tiles(d.id)
+            .filter(|t| cy.tiles[*t as usize].alert())
             .count() as i32;
         if alerts > 0 {
             factors.push(("trust.alerts", -15 * alerts));
         }
-        let needs_power = d.tiles.iter().any(|t| {
-            let tt = &cy.tiles[*t as usize];
+        let needs_power = cy.district_tiles(d.id).any(|t| {
+            let tt = &cy.tiles[t as usize];
             tt.owned
                 && tt
                     .usage
@@ -271,12 +267,8 @@ pub fn calc(state: &GameState) -> EconCalc {
         if out.power_bp < 10_000 && needs_power {
             factors.push(("trust.blackout", -10));
         }
-        let talker = cy.operatives.iter().any(|o| match o.assignment {
-            Assignment::Garrison { tile } => {
-                cy.tiles[tile as usize].district == Some(d.id)
-                    && o.traits.iter().any(|t| t == hooks::SILVER_TONGUE)
-            }
-            _ => false,
+        let talker = cy.garrisons().any(|(o, tile)| {
+            cy.district_of(tile) == Some(d.id) && o.traits.iter().any(|t| t == hooks::SILVER_TONGUE)
         });
         if talker {
             factors.push(("trust.garrison", 3));
@@ -285,18 +277,17 @@ pub fn calc(state: &GameState) -> EconCalc {
         dc.trust_factors = factors;
 
         // Talent: workers x trust x (training + instructors + policy).
-        let training: i32 = d
-            .tiles
-            .iter()
+        let training: i32 = cy
+            .district_tiles(d.id)
             .filter_map(|t| {
-                let tt = &cy.tiles[*t as usize];
+                let tt = &cy.tiles[t as usize];
                 if !tt.owned || tt.alert() {
                     return None;
                 }
                 let f = c.facility(tt.usage.facility()?)?;
                 let staffed = fac
                     .iter()
-                    .any(|x| x.tile == *t && (x.workers > 0 || x.jobs == 0));
+                    .any(|x| x.tile == t && (x.workers > 0 || x.jobs == 0));
                 (f.talent_bp > 0 && staffed).then_some(f.talent_bp)
             })
             .sum();
@@ -439,15 +430,9 @@ pub fn hourly(state: &mut GameState) {
     // Garrison experience.
     let rift_garrisons: Vec<u32> = state
         .cycle
-        .operatives
-        .iter()
-        .filter(|o| match o.assignment {
-            Assignment::Garrison { tile } => {
-                state.cycle.tiles[tile as usize].terrain == Terrain::Rift
-            }
-            _ => false,
-        })
-        .map(|o| o.id)
+        .garrisons()
+        .filter(|&(_, tile)| state.cycle.tiles[tile as usize].terrain == Terrain::Rift)
+        .map(|(o, _)| o.id)
         .collect();
     for id in rift_garrisons {
         crate::mech::sim::bump_counter(state, id, "rift_garrison_hours", 1);

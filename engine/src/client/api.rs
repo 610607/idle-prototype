@@ -10,6 +10,7 @@ use crate::mech::combat::{self, BattleReport};
 use crate::mech::commands::{self, Command};
 use crate::mech::defense;
 use crate::mech::economy;
+use crate::mech::query::Post;
 use crate::mech::routes;
 use crate::mech::sim;
 use crate::mech::state::{GameState, Phase, TideEntry};
@@ -239,7 +240,7 @@ impl Engine {
                 .districts
                 .iter()
                 .filter(|d| d.owned > 0)
-                .map(|d| (cy.districts[d.id as usize].name.clone(), d.trust_target))
+                .map(|d| (cy.district(d.id).name.clone(), d.trust_target))
                 .collect(),
             unhoused: calc.districts.iter().map(|d| d.unhoused).sum(),
             housing: calc.districts.iter().map(|d| d.housing).sum(),
@@ -249,9 +250,9 @@ impl Engine {
                 .map(|d| d.talent_rate.values().sum::<i32>())
                 .sum(),
             self_sufficient: sim::self_sufficient(state),
-            roster: cy.operatives.len(),
-            population: cy.districts.iter().map(|d| d.population).sum(),
-            candidates: cy.candidates.len(),
+            roster: cy.roster_size(),
+            population: cy.districts().map(|d| d.population).sum(),
+            candidates: cy.candidate_count(),
         }
     }
 
@@ -496,7 +497,7 @@ impl Engine {
     /// Every candidate for a tile's garrison with the next surge fought out in advance.
     pub fn garrison_options(&self, tile: u16) -> Vec<GarrisonOption> {
         let cy = &self.state.cycle;
-        let current = world::garrison_on(cy, tile);
+        let current = cy.garrison_on(tile);
         let mut out = Vec::new();
         let summarize = |r: &BattleReport| {
             let (hp, max) = r
@@ -529,21 +530,19 @@ impl Engine {
                 warden_gain: wg,
             });
         }
-        for o in &cy.operatives {
+        for o in cy.operatives() {
             let Some((r, _)) = defense::preview(&self.state, tile, Some(Some(o.id)), false) else {
                 continue;
             };
             let (held, lw, tw, rounds, hp, wg) = summarize(&r);
-            let busy = match o.assignment {
-                crate::mech::state::Assignment::Idle => None,
-                crate::mech::state::Assignment::Garrison { tile: t } if t == tile => None,
-                crate::mech::state::Assignment::Garrison { tile: t } => {
+            let busy = match cy.post(o) {
+                Post::Idle => None,
+                Post::Garrison { tile: t } if t == tile => None,
+                Post::Garrison { tile: t } => {
                     Some(t!("view.garrison.busy_garrison", tile = geom::label(t)))
                 }
-                crate::mech::state::Assignment::Squad { squad } => cy
-                    .squads
-                    .iter()
-                    .find(|s| s.id == squad)
+                Post::Squad { squad } => cy
+                    .squad(squad)
                     .map(|s| t!("view.garrison.busy_squad", squad = s.name)),
             };
             let icon = crate::data::content()
@@ -591,7 +590,7 @@ impl Engine {
 
     /// Replay a fight from a squad's running or last trip with the full cause-chain log.
     pub fn trip_battle(&self, squad: u32, tile: u16) -> Option<BattleReport> {
-        let s = self.state.cycle.squads.iter().find(|s| s.id == squad)?;
+        let s = self.state.cycle.squad(squad)?;
         let trip = s
             .trip
             .as_ref()
@@ -621,7 +620,7 @@ impl Engine {
         if let Err(e) = crate::mech::actions::set_route(&mut copy, squad, route) {
             return empty(e);
         }
-        if let Some(sq) = copy.cycle.squads.iter_mut().find(|s| s.id == squad) {
+        if let Some(sq) = copy.squad_mut(squad) {
             sq.trip = None;
         }
         let t = copy.time;
@@ -719,7 +718,7 @@ mod tests {
         let v = e.view();
         let border = v.tiles.iter().find(|t| t.border).map(|t| t.i).unwrap();
         let opts = e.garrison_options(border);
-        assert_eq!(opts.len(), e.state.cycle.operatives.len() + 1);
+        assert_eq!(opts.len(), e.state.cycle.roster_size() + 1);
     }
 
     #[test]
@@ -749,7 +748,7 @@ mod tests {
         }
         assert!(set);
         e.advance(start + 60);
-        let s = e.state.cycle.squads.iter().find(|s| s.id == sq).unwrap();
+        let s = e.state.cycle.squad(sq).unwrap();
         let trip = s.trip.as_ref().or(s.last.as_ref()).unwrap().clone();
         if let Some(r) = trip.results.first() {
             let replay = e.trip_battle(sq, r.tile).unwrap();

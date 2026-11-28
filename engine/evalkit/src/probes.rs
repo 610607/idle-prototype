@@ -110,8 +110,11 @@ fn hands_off(e: &Engine, h: i64, m: &mut Metrics) {
     use idle_engine::mech::score;
     let mut c = Engine::from_state(e.state.clone());
     c.state.trace = Some(Vec::new());
-    let owned = |c: &Engine| c.state.cycle.tiles.iter().filter(|t| t.owned).count() as f64;
-    let alerts = |c: &Engine| c.state.cycle.tiles.iter().filter(|t| t.alert()).count() as f64;
+    let owned = |c: &Engine| c.state.cycle.owned_tiles().count() as f64;
+    let alerts = |c: &Engine| {
+        let cy = &c.state.cycle;
+        cy.tiles().filter(|&(i, _)| cy.is_alert(i)).count() as f64
+    };
     let (t0, owned0, alerts0) = (c.state.time, owned(&c), alerts(&c));
     c.advance(t0 + 24 * 3600);
     let day1 = score::total(&c.state) as f64;
@@ -181,12 +184,12 @@ impl Pace {
 
     fn checkpoint(&self, e: &Engine, h: i64, deepest: i32, m: &mut Metrics) {
         let cy = &e.state.cycle;
-        let owned = cy.tiles.iter().filter(|t| t.owned).count();
+        let owned = cy.owned_tiles().count();
         m.insert(format!("owned.h{h}"), Some(owned as f64));
         m.insert(format!("ring.h{h}"), Some(deepest as f64));
         let score = sim::cycle_results(&e.state).total;
         m.insert(format!("score.h{h}"), Some(score as f64));
-        m.insert(format!("ops.h{h}"), Some(cy.operatives.len() as f64));
+        m.insert(format!("ops.h{h}"), Some(cy.roster_size() as f64));
         let level: i32 = cy.armory.values().map(|t| t.level).sum();
         let breaks: i32 = cy.armory.values().map(|t| t.breaks).sum();
         m.insert(format!("armory.level.h{h}"), Some(level as f64));
@@ -212,27 +215,21 @@ impl Pace {
 fn winnable(e: &Engine, deepest: i32, ahead: i32) -> Option<f64> {
     use idle_engine::kernel::geom::neighbors;
     let cy = &e.state.cycle;
-    let squad = cy.squads.iter().find(|s| !s.members.is_empty())?.id;
+    let squad = cy.manned_squads().next()?.id;
     let (mut win, mut all) = (0.0, 0.0);
     let open = |i: u16| {
-        let t = &cy.tiles[i as usize];
-        !t.owned && t.terrain != idle_engine::mech::state::Terrain::Barrier
+        !cy.is_owned(i) && cy.tile(i).terrain != idle_engine::mech::state::Terrain::Barrier
     };
-    for (i, t) in cy.tiles.iter().enumerate() {
-        let i = i as u16;
+    for (i, t) in cy.tiles() {
         if !open(i) || t.waves.is_empty() || ring(i) != deepest + ahead {
             continue;
         }
         let route = if ahead == 1 {
-            neighbors(i)
-                .any(|n| cy.tiles[n as usize].owned)
-                .then(|| vec![i])
+            neighbors(i).any(|n| cy.is_owned(n)).then(|| vec![i])
         } else {
             neighbors(i)
                 .find(|&n| {
-                    open(n)
-                        && ring(n) == deepest + 1
-                        && neighbors(n).any(|o| cy.tiles[o as usize].owned)
+                    open(n) && ring(n) == deepest + 1 && neighbors(n).any(|o| cy.is_owned(o))
                 })
                 .map(|n| vec![n, i])
         };

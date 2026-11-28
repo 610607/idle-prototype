@@ -17,7 +17,7 @@ use idle_engine::mech::combat::UnitSpec;
 use idle_engine::mech::commands::Command;
 use idle_engine::mech::operative;
 use idle_engine::mech::routes;
-use idle_engine::mech::state::{Assignment, GameState, Operative};
+use idle_engine::mech::state::{GameState, Operative};
 
 /// Turns between lineup and item passes, and between tactic passes.
 const LINEUP_EVERY: u32 = 6;
@@ -69,16 +69,9 @@ fn score(st: &GameState, ops: &[Operative], tiles: &[u16]) -> Score {
 /// Non-empty squads with their members and trial tiles (squads with nothing to fight left out).
 fn squads(st: &GameState) -> Vec<(u32, Vec<Operative>, Vec<u16>)> {
     st.cycle
-        .squads
-        .iter()
-        .filter(|s| !s.members.is_empty())
+        .manned_squads()
         .map(|s| {
-            let ops: Vec<Operative> = s
-                .members
-                .iter()
-                .filter_map(|id| st.op(*id))
-                .cloned()
-                .collect();
+            let ops: Vec<Operative> = st.cycle.member_ops(s.id).cloned().collect();
             let tiles = trial_tiles(st, &ops);
             (s.id, ops, tiles)
         })
@@ -107,9 +100,8 @@ impl Bot {
                 let st = &e.state;
                 let bench: Vec<&Operative> = st
                     .cycle
-                    .operatives
-                    .iter()
-                    .filter(|o| o.assignment == Assignment::Idle && o.rest_until <= st.time)
+                    .idle_operatives()
+                    .filter(|o| o.rest_until <= st.time)
                     .collect();
                 let base = score(st, &members, tiles);
                 let mut best: Option<(Score, Vec<u32>)> = None;
@@ -123,11 +115,7 @@ impl Bot {
                         }
                     }
                 }
-                let travelling = st
-                    .cycle
-                    .squads
-                    .iter()
-                    .any(|s| s.id == squad && s.trip.is_some());
+                let travelling = st.cycle.squad(squad).is_some_and(|s| s.trip.is_some());
                 best.filter(|(s, _)| !travelling || s.0 > base.0)
             };
             if let Some((_, ids)) = pick {
@@ -146,7 +134,7 @@ impl Bot {
     fn equip(&mut self, e: &mut Engine) {
         let pick = {
             let st = &e.state;
-            let mut items = st.cycle.inventory.clone();
+            let mut items: Vec<String> = st.cycle.inventory().map(String::from).collect();
             items.sort();
             items.dedup();
             let mut best: Option<((i64, i64), u32, String)> = None;
@@ -156,7 +144,7 @@ impl Bot {
                 for item in &items {
                     for k in 0..members.len() {
                         let mut trial = members.clone();
-                        trial[k].equipment = Some(item.clone());
+                        trial[k] = operative::with_item(&trial[k], Some(item));
                         let s = score(st, &trial, tiles);
                         let gain = (s.0 as i64 - base.0 as i64, s.1 - base.1);
                         if s > base && best.as_ref().is_none_or(|b| gain > b.0) {
@@ -232,18 +220,17 @@ impl Bot {
     pub(super) fn queue(&mut self, e: &mut Engine) {
         let b = balance();
         let window = pool_cap(&e.state);
-        if e.state.cycle.operatives.len() < b.roster_cap {
-            if self.every(CUSTOMIZE_EVERY) && e.state.cycle.candidates.is_empty() {
+        if e.state.cycle.roster_size() < b.roster_cap {
+            if self.every(CUSTOMIZE_EVERY) && e.state.cycle.candidate_count() == 0 {
                 self.order(e);
             }
             return;
         }
-        if e.state.cycle.candidates.len() > window {
+        if e.state.cycle.candidate_count() > window {
             let plain: Vec<u32> = e
                 .state
                 .cycle
-                .candidates
-                .iter()
+                .candidates()
                 .take(window)
                 .filter(|c| c.op.rarity == 0 && c.op.special.is_none())
                 .map(|c| c.id)
@@ -261,7 +248,7 @@ impl Bot {
             let st = &e.state;
             let mut best: Option<(Score, u32, u32, u32, Vec<u32>)> = None;
             let squads = squads(st);
-            for c in st.cycle.candidates.iter().take(window) {
+            for c in st.cycle.candidates().take(window) {
                 let cost = if c.op.special.is_some() {
                     0
                 } else {

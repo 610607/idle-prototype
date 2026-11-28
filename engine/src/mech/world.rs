@@ -4,7 +4,7 @@ use crate::data::{content, TraitEffect};
 use crate::kernel::geom::{self, TILES};
 use crate::mech::operative;
 use crate::mech::pressure;
-use crate::mech::state::{Assignment, Cycle, GameState, SpecialKind, Terrain};
+use crate::mech::state::{Cycle, GameState, SpecialKind, Terrain};
 
 /// A tile is a surge source if it is unowned, passable, and not the core.
 pub fn is_hostile(c: &Cycle, i: u16) -> bool {
@@ -44,10 +44,7 @@ pub fn surge_source(c: &Cycle, i: u16) -> Option<u16> {
 }
 
 pub fn garrison_on(c: &Cycle, tile: u16) -> Option<u32> {
-    c.operatives
-        .iter()
-        .find(|o| o.assignment == Assignment::Garrison { tile })
-        .map(|o| o.id)
+    c.garrison_on(tile)
 }
 
 /// The operative defending `tile`: its own garrison, or a shared-garrison operative elsewhere in the district.
@@ -56,24 +53,18 @@ pub fn defender_for(state: &GameState, tile: u16) -> Option<u32> {
     if let Some(id) = garrison_on(c, tile) {
         return Some(id);
     }
-    let d = c.tiles[tile as usize].district?;
-    c.operatives
-        .iter()
-        .find(|o| match o.assignment {
-            Assignment::Garrison { tile: g } => {
-                c.tiles[g as usize].district == Some(d)
-                    && operative::has_map_effect(o, |e| matches!(e, TraitEffect::SharedGarrison))
-            }
-            _ => false,
+    let d = c.district_of(tile)?;
+    c.garrisons()
+        .find(|&(o, g)| {
+            c.district_of(g) == Some(d)
+                && operative::has_map_effect(o, |e| matches!(e, TraitEffect::SharedGarrison))
         })
-        .map(|o| o.id)
+        .map(|(o, _)| o.id)
 }
 
 pub fn district_owned(c: &Cycle, d: u16) -> usize {
-    c.districts[d as usize]
-        .tiles
-        .iter()
-        .filter(|t| c.tiles[**t as usize].owned)
+    c.district_tiles(d)
+        .filter(|t| c.tiles[*t as usize].owned)
         .count()
 }
 

@@ -12,13 +12,13 @@ pub fn deepest_owned(st: &GameState) -> i32 {
 /// Tiles a route could fight on: unowned, with enemies, not barrier or HQ.
 pub fn fightable(st: &GameState) -> impl Iterator<Item = u16> + '_ {
     st.cycle
-        .tiles
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| {
-            !t.owned && !t.waves.is_empty() && !matches!(t.terrain, Terrain::Barrier | Terrain::Hq)
+        .tiles()
+        .filter(|&(i, t)| {
+            !st.cycle.is_owned(i)
+                && !t.waves.is_empty()
+                && !matches!(t.terrain, Terrain::Barrier | Terrain::Hq)
         })
-        .map(|(i, _)| i as u16)
+        .map(|(i, _)| i)
 }
 
 /// Scrap, parts and intel in stock.
@@ -31,18 +31,14 @@ pub fn spendable(st: &GameState) -> [i64; 3] {
 /// `bare`: traits and equipment taken off (for the on/off comparison in `calibrate`).
 pub fn squad_units(st: &GameState, bare: bool) -> Vec<Vec<UnitSpec>> {
     st.cycle
-        .squads
-        .iter()
-        .filter(|s| !s.members.is_empty())
+        .manned_squads()
         .map(|s| {
-            s.members
-                .iter()
-                .filter_map(|id| st.op(*id))
+            st.cycle
+                .member_ops(s.id)
                 .map(|op| {
                     if bare {
-                        let mut op = op.clone();
+                        let mut op = operative::with_item(op, None);
                         op.traits.clear();
-                        op.equipment = None;
                         operative::spec(&op)
                     } else {
                         operative::spec(op)

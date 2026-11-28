@@ -61,10 +61,9 @@ pub fn breakdown(state: &GameState) -> Vec<Item> {
         .filter(|t| t.terrain == Terrain::Rift)
         .count() as i64;
     let contiguous = cy.districts.iter().filter(|d| d.contiguous).count() as i64;
-    let items = cy.inventory.len() as i64
-        + cy.operatives
-            .iter()
-            .filter(|o| o.equipment.is_some())
+    let items = cy.inventory_len() as i64
+        + cy.operatives()
+            .filter(|o| cy.equipment(o).is_some())
             .count() as i64;
     let armory = cy
         .armory
@@ -113,7 +112,7 @@ pub fn breakdown(state: &GameState) -> Vec<Item> {
             "doctrines",
             "results.doctrines",
             Defense,
-            cy.doctrines.len() as i64 * w.doctrine,
+            cy.doctrine_count() as i64 * w.doctrine,
         ),
         item("armory", "results.armory", Defense, armory),
         item("tiles", "results.tiles", Exploration, tiles * w.tile),

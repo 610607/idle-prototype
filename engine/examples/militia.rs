@@ -23,7 +23,7 @@ fn main() {
         };
         let starters = ["vanguard", "marksman", "medic"]
             .map(|c| operative::spec(&operative::generate(&mut rng, 1, c, &origin)));
-        for (i, t) in m.tiles.iter().enumerate() {
+        for (i, t) in m.tiles() {
             if t.waves.is_empty() || t.terrain == Terrain::Hq {
                 continue;
             }
