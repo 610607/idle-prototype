@@ -1,0 +1,1185 @@
+{
+  "persona": "turtle",
+  "hours": 72,
+  "patch": null,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "metrics": {
+    "armory.breaks.h12": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "armory.breaks.h24": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "armory.breaks.h48": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "armory.breaks.h6": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "armory.breaks.h72": [
+      1.0,
+      0.0,
+      1.0
+    ],
+    "armory.level.h12": [
+      9.0,
+      7.0,
+      9.0
+    ],
+    "armory.level.h24": [
+      17.0,
+      16.0,
+      12.0
+    ],
+    "armory.level.h48": [
+      24.0,
+      24.0,
+      30.0
+    ],
+    "armory.level.h6": [
+      3.0,
+      2.0,
+      2.0
+    ],
+    "armory.level.h72": [
+      30.0,
+      24.0,
+      30.0
+    ],
+    "deep_win.h12": [
+      1.0,
+      1.0,
+      null
+    ],
+    "deep_win.h24": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "deep_win.h48": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "deep_win.h6": [
+      null,
+      1.0,
+      null
+    ],
+    "deep_win.h72": [
+      1.0,
+      1.0,
+      null
+    ],
+    "frontier_win.h12": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "frontier_win.h24": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "frontier_win.h48": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "frontier_win.h6": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "frontier_win.h72": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "handsoff.alerted.h24": [
+      0.05555555555555555,
+      0.25,
+      0.47368421052631576
+    ],
+    "handsoff.alerted.h72": [
+      0.09090909090909091,
+      0.0,
+      0.0196078431372549
+    ],
+    "handsoff.day2_lost.h24": [
+      0.0,
+      7.0,
+      2.0
+    ],
+    "handsoff.day2_lost.h72": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "handsoff.growth.h24": [
+      0.010067114093959731,
+      -0.008356545961002786,
+      -0.05240174672489083
+    ],
+    "handsoff.growth.h72": [
+      0.005917159763313609,
+      0.005917159763313609,
+      0.007215007215007215
+    ],
+    "handsoff.owned_lost.h24": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "handsoff.owned_lost.h72": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "handsoff.surge_lost.h24": [
+      2.0,
+      15.5,
+      14.0
+    ],
+    "handsoff.surge_lost.h72": [
+      6.0,
+      0.0,
+      0.5
+    ],
+    "handsoff.trip_lost.h24": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "handsoff.trip_lost.h72": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "hired": [
+      9.0,
+      9.0,
+      9.0
+    ],
+    "intel_in.h12": [
+      40.0,
+      43.0,
+      44.0
+    ],
+    "intel_in.h24": [
+      69.0,
+      60.0,
+      64.0
+    ],
+    "intel_in.h48": [
+      154.0,
+      91.0,
+      124.0
+    ],
+    "intel_in.h6": [
+      39.0,
+      40.0,
+      41.0
+    ],
+    "intel_in.h72": [
+      395.0,
+      104.0,
+      237.0
+    ],
+    "ops.h12": [
+      3.0,
+      3.0,
+      3.0
+    ],
+    "ops.h24": [
+      4.0,
+      3.0,
+      4.0
+    ],
+    "ops.h48": [
+      10.0,
+      8.0,
+      10.0
+    ],
+    "ops.h6": [
+      3.0,
+      3.0,
+      3.0
+    ],
+    "ops.h72": [
+      12.0,
+      12.0,
+      12.0
+    ],
+    "owned.h12": [
+      3.0,
+      5.0,
+      5.0
+    ],
+    "owned.h24": [
+      18.0,
+      24.0,
+      19.0
+    ],
+    "owned.h48": [
+      46.0,
+      41.0,
+      46.0
+    ],
+    "owned.h6": [
+      3.0,
+      4.0,
+      4.0
+    ],
+    "owned.h72": [
+      55.0,
+      42.0,
+      51.0
+    ],
+    "payoff.auto_share.d1": [
+      0.03529411764705882,
+      0.07777777777777778,
+      0.023809523809523808
+    ],
+    "payoff.auto_share.d2": [
+      0.16216216216216217,
+      0.12987012987012986,
+      0.12195121951219512
+    ],
+    "payoff.auto_share.d3": [
+      0.11538461538461539,
+      0.047619047619047616,
+      0.15384615384615385
+    ],
+    "payoff.auto_share.d4": [
+      null,
+      null,
+      null
+    ],
+    "payoff.auto_share.d5": [
+      null,
+      null,
+      null
+    ],
+    "payoff.auto_share.d6": [
+      null,
+      null,
+      null
+    ],
+    "payoff.auto_share.d7": [
+      null,
+      null,
+      null
+    ],
+    "payoff.count.armory": [
+      1.0,
+      0.0,
+      1.0
+    ],
+    "payoff.count.codex": [
+      3.0,
+      3.0,
+      3.0
+    ],
+    "payoff.count.contiguous": [
+      6.0,
+      7.0,
+      11.0
+    ],
+    "payoff.count.core": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "payoff.count.drop": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "payoff.count.frontier_open": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "payoff.count.novelty": [
+      18.0,
+      16.0,
+      17.0
+    ],
+    "payoff.count.research": [
+      3.0,
+      2.0,
+      3.0
+    ],
+    "payoff.count.rift": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "payoff.count.ring": [
+      4.0,
+      3.0,
+      4.0
+    ],
+    "payoff.count.self_sufficient": [
+      3.0,
+      0.0,
+      1.0
+    ],
+    "payoff.count.special": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "payoff.count.trait": [
+      10.0,
+      10.0,
+      10.0
+    ],
+    "payoff.finale": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "payoff.flip.research.1": [
+      3.0,
+      3.0,
+      8.0
+    ],
+    "payoff.flip.research.10": [
+      null,
+      null,
+      null
+    ],
+    "payoff.flip.research.2": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "payoff.flip.research.3": [
+      7.0,
+      6.0,
+      7.0
+    ],
+    "payoff.flip.research.4": [
+      0.0,
+      null,
+      1.0
+    ],
+    "payoff.flip.research.5": [
+      2.0,
+      null,
+      0.0
+    ],
+    "payoff.flip.research.6": [
+      0.0,
+      null,
+      null
+    ],
+    "payoff.flip.research.7": [
+      null,
+      null,
+      null
+    ],
+    "payoff.flip.research.8": [
+      null,
+      null,
+      null
+    ],
+    "payoff.flip.research.9": [
+      null,
+      null,
+      null
+    ],
+    "payoff.frontier.margin.h12": [
+      3.9441775232416276,
+      1.2542526448739306,
+      2.3294860683145213
+    ],
+    "payoff.frontier.margin.h24": [
+      2.11707006611757,
+      0.2938305047093042,
+      2.469649571477656
+    ],
+    "payoff.frontier.margin.h48": [
+      0.47817700848249195,
+      0.42007289561278804,
+      0.8438019360425151
+    ],
+    "payoff.frontier.margin.h6": [
+      3.655480563645902,
+      4.375399312158414,
+      4.844445246103666
+    ],
+    "payoff.frontier.margin.h72": [
+      0.21586941823357483,
+      0.42007289561278804,
+      0.3113158149950321
+    ],
+    "payoff.gap_max_h.big.d1": [
+      34.0,
+      63.638888888888886,
+      29.65
+    ],
+    "payoff.gap_max_h.big.d2_3": [
+      24.0,
+      63.638888888888886,
+      33.0
+    ],
+    "payoff.gap_max_h.big.d4_7": [
+      null,
+      null,
+      null
+    ],
+    "payoff.gap_max_h.d1": [
+      5.636111111111111,
+      6.186111111111111,
+      3.7777777777777786
+    ],
+    "payoff.gap_max_h.d2_3": [
+      9.722222222222221,
+      17.22222222222222,
+      9.722222222222221
+    ],
+    "payoff.gap_max_h.d4_7": [
+      null,
+      null,
+      null
+    ],
+    "payoff.gap_p90_h.d1": [
+      3.8625000000000007,
+      4.433333333333337,
+      3.252222222222223
+    ],
+    "payoff.gap_p90_h.d2_3": [
+      5.028333333333338,
+      6.321111111111112,
+      4.967500000000004
+    ],
+    "payoff.gap_p90_h.d4_7": [
+      null,
+      null,
+      null
+    ],
+    "payoff.growth.ladder": [
+      10.0,
+      6.0,
+      10.0
+    ],
+    "payoff.growth.power": [
+      0.8450217051095587,
+      0.8454871262754319,
+      0.9938411397633106
+    ],
+    "payoff.hook_h": [
+      0.35,
+      0.35,
+      0.35
+    ],
+    "payoff.ladder.h12": [
+      24.0,
+      23.0,
+      22.0
+    ],
+    "payoff.ladder.h24": [
+      24.0,
+      24.0,
+      24.0
+    ],
+    "payoff.ladder.h48": [
+      30.0,
+      26.0,
+      30.0
+    ],
+    "payoff.ladder.h6": [
+      22.0,
+      24.0,
+      21.0
+    ],
+    "payoff.ladder.h72": [
+      30.0,
+      26.0,
+      30.0
+    ],
+    "payoff.ladder.size": [
+      104.0,
+      104.0,
+      104.0
+    ],
+    "payoff.ladder_gain.research.1": [
+      2.0,
+      4.0,
+      1.0
+    ],
+    "payoff.ladder_gain.research.10": [
+      null,
+      null,
+      null
+    ],
+    "payoff.ladder_gain.research.2": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "payoff.ladder_gain.research.3": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "payoff.ladder_gain.research.4": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "payoff.ladder_gain.research.5": [
+      3.0,
+      1.0,
+      3.0
+    ],
+    "payoff.ladder_gain.research.6": [
+      0.0,
+      null,
+      3.0
+    ],
+    "payoff.ladder_gain.research.7": [
+      0.0,
+      null,
+      0.0
+    ],
+    "payoff.ladder_gain.research.8": [
+      0.0,
+      null,
+      0.0
+    ],
+    "payoff.ladder_gain.research.9": [
+      0.0,
+      null,
+      null
+    ],
+    "payoff.lines.d1": [
+      7.0,
+      6.0,
+      7.0
+    ],
+    "payoff.lines.d2_3": [
+      8.0,
+      7.0,
+      8.0
+    ],
+    "payoff.lines.d4_7": [
+      null,
+      null,
+      null
+    ],
+    "payoff.m.research.1": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "payoff.m.research.10": [
+      null,
+      null,
+      null
+    ],
+    "payoff.m.research.2": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "payoff.m.research.3": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "payoff.m.research.4": [
+      0.0,
+      null,
+      0.14963788237398734
+    ],
+    "payoff.m.research.5": [
+      0.0,
+      null,
+      0.0
+    ],
+    "payoff.m.research.6": [
+      0.0,
+      null,
+      null
+    ],
+    "payoff.m.research.7": [
+      null,
+      null,
+      null
+    ],
+    "payoff.m.research.8": [
+      null,
+      null,
+      null
+    ],
+    "payoff.m.research.9": [
+      null,
+      null,
+      null
+    ],
+    "payoff.model_ratio.research": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "payoff.novelty.d1": [
+      9.0,
+      7.0,
+      12.0
+    ],
+    "payoff.novelty.d2": [
+      7.0,
+      7.0,
+      3.0
+    ],
+    "payoff.novelty.d3": [
+      2.0,
+      2.0,
+      2.0
+    ],
+    "payoff.novelty.d4": [
+      null,
+      null,
+      null
+    ],
+    "payoff.novelty.d5": [
+      null,
+      null,
+      null
+    ],
+    "payoff.novelty.d6": [
+      null,
+      null,
+      null
+    ],
+    "payoff.novelty.d7": [
+      null,
+      null,
+      null
+    ],
+    "payoff.peak_rank": [
+      -1.0,
+      -1.0,
+      -1.0
+    ],
+    "payoff.power.h12": [
+      0.41960439370690267,
+      0.409419620742708,
+      0.467307871854649
+    ],
+    "payoff.power.h24": [
+      0.5378756249435599,
+      0.551044304813345,
+      0.5235127718479701
+    ],
+    "payoff.power.h48": [
+      0.6974971518623198,
+      0.7226463497620121,
+      0.7689639803752035
+    ],
+    "payoff.power.h6": [
+      0.3882983618393,
+      0.4021692186328984,
+      0.4283270422355812
+    ],
+    "payoff.power.h72": [
+      0.6974971518623198,
+      0.7226463497620121,
+      0.8530048259680699
+    ],
+    "payoff.rate_drop.max": [
+      1.0212765957446808,
+      1.1914893617021276,
+      40.0
+    ],
+    "payoff.research.flips": [
+      12.0,
+      9.0,
+      26.0
+    ],
+    "payoff.research.ladder_gain": [
+      5.0,
+      5.0,
+      7.0
+    ],
+    "payoff.research.m_max": [
+      0.0,
+      0.0,
+      0.14963788237398734
+    ],
+    "payoff.sawtooth.power": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "payoff.self_sufficient.share": [
+      0.09722222222222222,
+      0.0,
+      0.05555555555555555
+    ],
+    "payoff.t.contiguous.1": [
+      14.0,
+      15.0,
+      15.0
+    ],
+    "payoff.t.contiguous.2": [
+      14.0,
+      15.35,
+      28.0
+    ],
+    "payoff.t.contiguous.3": [
+      25.625,
+      18.355555555555554,
+      28.0
+    ],
+    "payoff.t.core.1": [
+      null,
+      null,
+      null
+    ],
+    "payoff.t.research.1": [
+      2.0,
+      2.0,
+      2.0
+    ],
+    "payoff.t.research.10": [
+      null,
+      null,
+      null
+    ],
+    "payoff.t.research.2": [
+      4.0,
+      4.0,
+      4.0
+    ],
+    "payoff.t.research.3": [
+      30.0,
+      42.0,
+      33.0
+    ],
+    "payoff.t.research.4": [
+      45.0,
+      null,
+      56.0
+    ],
+    "payoff.t.research.5": [
+      63.0,
+      null,
+      71.0
+    ],
+    "payoff.t.research.6": [
+      70.0,
+      null,
+      null
+    ],
+    "payoff.t.research.7": [
+      null,
+      null,
+      null
+    ],
+    "payoff.t.research.8": [
+      null,
+      null,
+      null
+    ],
+    "payoff.t.research.9": [
+      null,
+      null,
+      null
+    ],
+    "payoff.t.self_sufficient.1": [
+      4.0,
+      null,
+      5.0
+    ],
+    "payoff.visit_hit.h1": [
+      0.375,
+      0.3333333333333333,
+      0.4305555555555556
+    ],
+    "payoff.visit_hit.h4": [
+      0.8333333333333334,
+      0.6666666666666666,
+      0.8333333333333334
+    ],
+    "payoff.visit_hit.h8": [
+      1.0,
+      0.7777777777777778,
+      0.8888888888888888
+    ],
+    "payoff.wall.break_research": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "payoff.wall.count": [
+      2.0,
+      1.0,
+      2.0
+    ],
+    "payoff.wall.idle_share": [
+      0.24,
+      0.1,
+      0.4482758620689655
+    ],
+    "payoff.wall.max_h": [
+      22.0,
+      20.0,
+      24.0
+    ],
+    "payoff.wall.share": [
+      0.3472222222222222,
+      0.2777777777777778,
+      0.4027777777777778
+    ],
+    "plateau.h": [
+      null,
+      null,
+      null
+    ],
+    "plateau.score": [
+      null,
+      null,
+      null
+    ],
+    "power.h12": [
+      149.0850495522606,
+      150.67346149869923,
+      166.3818980538448
+    ],
+    "power.h24": [
+      188.38938398965055,
+      196.052258339454,
+      183.5109588008302
+    ],
+    "power.h48": [
+      240.91772454512352,
+      253.42530260414014,
+      263.1389138839028
+    ],
+    "power.h6": [
+      138.69593361018195,
+      146.92166620345685,
+      153.06795876341985
+    ],
+    "power.h72": [
+      240.91772454512352,
+      253.42530260414014,
+      285.04553320478465
+    ],
+    "reach_h.r1": [
+      1.0833333333333333,
+      1.0833333333333333,
+      1.0833333333333333
+    ],
+    "reach_h.r2": [
+      14.083333333333334,
+      8.416666666666666,
+      9.416666666666666
+    ],
+    "reach_h.r3": [
+      25.666666666666668,
+      21.666666666666668,
+      25.666666666666668
+    ],
+    "reach_h.r4": [
+      50.75,
+      null,
+      48.75
+    ],
+    "reach_h.r5": [
+      null,
+      null,
+      null
+    ],
+    "reach_h.r6": [
+      null,
+      null,
+      null
+    ],
+    "reach_h.r7": [
+      null,
+      null,
+      null
+    ],
+    "research.draws": [
+      6.0,
+      3.0,
+      5.0
+    ],
+    "rho_frontier.h12": [
+      2.3019703045769395,
+      0.2229087056737254,
+      0.27439508645887345
+    ],
+    "rho_frontier.h24": [
+      0.3484707666997832,
+      0.06186314205059302,
+      0.3338014279645967
+    ],
+    "rho_frontier.h48": [
+      0.08781190823939003,
+      0.10336850209893872,
+      0.10565132204085977
+    ],
+    "rho_frontier.h6": [
+      1.9923194992211575,
+      2.2356469360023854,
+      2.632987615697585
+    ],
+    "rho_frontier.h72": [
+      0.03351754271077391,
+      0.10336850209893872,
+      0.048190240175207746
+    ],
+    "ring.h12": [
+      1.0,
+      2.0,
+      2.0
+    ],
+    "ring.h24": [
+      2.0,
+      3.0,
+      2.0
+    ],
+    "ring.h48": [
+      3.0,
+      3.0,
+      3.0
+    ],
+    "ring.h6": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "ring.h72": [
+      4.0,
+      3.0,
+      4.0
+    ],
+    "route_battles.frontier": [
+      53.0,
+      14.0,
+      45.0
+    ],
+    "route_win.deep": [
+      null,
+      null,
+      null
+    ],
+    "route_win.frontier": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "route_win.inner": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "score.drop": [
+      0.04497354497354497,
+      0.14358108108108109,
+      0.06542056074766354
+    ],
+    "score.final": [
+      722.0,
+      507.0,
+      700.0
+    ],
+    "score.h12": [
+      88.0,
+      110.0,
+      107.0
+    ],
+    "score.h24": [
+      280.0,
+      357.0,
+      296.0
+    ],
+    "score.h48": [
+      656.0,
+      554.0,
+      679.0
+    ],
+    "score.h6": [
+      81.0,
+      91.0,
+      93.0
+    ],
+    "score.h72": [
+      722.0,
+      507.0,
+      700.0
+    ],
+    "score.peak": [
+      756.0,
+      592.0,
+      749.0
+    ],
+    "score_rate.h24_vs_peak": [
+      0.7722122838401907,
+      0.9278169014084507,
+      0.7956989247311829
+    ],
+    "score_rate.peak_h": [
+      37.0,
+      31.0,
+      6.0
+    ],
+    "share.defense": [
+      0.2880886426592798,
+      0.33925049309664695,
+      0.2857142857142857
+    ],
+    "share.exploration": [
+      0.23684210526315788,
+      0.21104536489151873,
+      0.23285714285714285
+    ],
+    "share.management": [
+      0.47506925207756234,
+      0.44970414201183434,
+      0.48142857142857143
+    ],
+    "spend_gap.max_h": [
+      5.0,
+      17.0,
+      11.0
+    ],
+    "spend_hours.share": [
+      0.7083333333333334,
+      0.5277777777777778,
+      0.6944444444444444
+    ],
+    "stock_h.intel.h12": [
+      12.0,
+      10.0,
+      12.0
+    ],
+    "stock_h.intel.h24": [
+      10.941176470588236,
+      13.2,
+      13.0
+    ],
+    "stock_h.intel.h48": [
+      0.9729729729729729,
+      7.0,
+      10.90909090909091
+    ],
+    "stock_h.intel.h6": [
+      1.5,
+      2.4,
+      3.0
+    ],
+    "stock_h.intel.h72": [
+      3.046875,
+      60.0,
+      1.68
+    ],
+    "stock_h.parts.h12": [
+      null,
+      null,
+      13.0
+    ],
+    "stock_h.parts.h24": [
+      null,
+      null,
+      null
+    ],
+    "stock_h.parts.h48": [
+      10.071428571428571,
+      null,
+      8.454545454545455
+    ],
+    "stock_h.parts.h6": [
+      null,
+      null,
+      null
+    ],
+    "stock_h.parts.h72": [
+      150.0,
+      null,
+      null
+    ],
+    "stock_h.scrap.h12": [
+      3.875,
+      4.08421052631579,
+      3.501466275659824
+    ],
+    "stock_h.scrap.h24": [
+      2.704225352112676,
+      2.550351288056206,
+      3.634782608695652
+    ],
+    "stock_h.scrap.h48": [
+      20.425531914893618,
+      60.75949367088608,
+      6.732117812061712
+    ],
+    "stock_h.scrap.h6": [
+      6.25,
+      6.392857142857143,
+      6.214285714285714
+    ],
+    "stock_h.scrap.h72": [
+      60.0,
+      null,
+      null
+    ],
+    "stop.h": [
+      72.0,
+      72.0,
+      72.0
+    ],
+    "surge_lost.all": [
+      0.3517786561264822,
+      0.5523255813953488,
+      0.3411764705882353
+    ],
+    "surge_lost.edge": [
+      0.356,
+      0.5535714285714286,
+      0.35655737704918034
+    ],
+    "surge_lost.inside": [
+      0.0,
+      0.5,
+      0.0
+    ]
+  },
+  "commands": {
+    "abandon": 3,
+    "build": 119,
+    "choose_map": 3,
+    "claim": 95,
+    "claim_task": 28,
+    "counter": 2,
+    "garrison": 85,
+    "hire": 13,
+    "pick_doctrine": 14,
+    "research": 14,
+    "set_dial": 3,
+    "set_policy": 7,
+    "set_route": 145,
+    "set_rule": 9,
+    "upgrade": 86
+  },
+  "build": "d5b6c0be"
+}
