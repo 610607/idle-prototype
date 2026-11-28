@@ -1,0 +1,39 @@
+t_s,clock,kind,id,label,detail
+0,0:00,start,,game ready (RNA visible),url=http://127.0.0.1:8765/index.html cps=3.5 minutes=15
+0,0:00,tab_visible,3-label,Evolve,
+0,0:00,tab_visible,17-label,Settings,
+0,0:00,race_start,,Protoplasm,
+0,0:00,res_visible,resRNA,RNA,0 / 100
+0,0:00,btn_visible,evolution-rna,RNA,affordable=true
+0,0:00,btn_affordable,evolution-rna,RNA,visible=true
+0.6,0:00,res_visible,resDNA,DNA,0 / 100
+0.6,0:00,btn_visible,evolution-dna,Form DNA,affordable=true
+0.6,0:00,btn_affordable,evolution-dna,Form DNA,visible=true
+0.6,0:00,first_buy,evolution-dna,Form DNA,
+4.6,0:04,btn_visible,evolution-organelles,Organelles,affordable=false
+7.4,0:07,btn_visible,evolution-membrane,Membrane,affordable=true
+7.4,0:07,btn_affordable,evolution-membrane,Membrane,visible=true
+7.5,0:07,first_buy,evolution-membrane,Membrane,
+97.1,1:37,btn_affordable,evolution-organelles,Organelles,visible=true
+97.5,1:37,first_buy,evolution-organelles,Organelles,
+129.4,2:09,btn_visible,evolution-nucleus,Nucleus,affordable=false
+181.1,3:01,btn_affordable,evolution-nucleus,Nucleus,visible=true
+217.2,3:37,first_buy,evolution-nucleus,Nucleus,
+217.4,3:37,btn_visible,evolution-eukaryotic_cell,Eukaryotic Cell,affordable=false
+221.1,3:41,btn_affordable,evolution-eukaryotic_cell,Eukaryotic Cell,visible=true
+221.2,3:41,first_buy,evolution-eukaryotic_cell,Eukaryotic Cell,
+221.4,3:41,btn_visible,evolution-mitochondria,Mitochondria,affordable=false
+221.7,3:41,btn_visible,evolution-sexual_reproduction,Sexual Reproduction,affordable=false
+433.1,7:13,btn_affordable,evolution-mitochondria,Mitochondria,visible=true
+516,8:36,first_buy,evolution-mitochondria,Mitochondria,
+537.1,8:57,btn_affordable,evolution-sexual_reproduction,Sexual Reproduction,visible=true
+537.2,8:57,first_buy,evolution-sexual_reproduction,Sexual Reproduction,
+537.4,8:57,btn_visible,evolution-phagocytosis,Phagocytosis,affordable=false
+537.4,8:57,btn_visible,evolution-chloroplasts,Chloroplasts,affordable=false
+537.4,8:57,btn_visible,evolution-chitin,Chitin,affordable=false
+784,13:04,btn_affordable,evolution-phagocytosis,Phagocytosis,visible=true
+784,13:04,btn_affordable,evolution-chloroplasts,Chloroplasts,visible=true
+784,13:04,btn_affordable,evolution-chitin,Chitin,visible=true
+785.2,13:05,first_buy,evolution-phagocytosis,Phagocytosis,
+785.4,13:05,btn_visible,evolution-multicellular,Multicellular,affordable=false
+900,15:00,end,,run finished,"clicks=3150 buys=1054 kinds={""rna"":2096,""evo_buy"":1054} pageErrors=0"
