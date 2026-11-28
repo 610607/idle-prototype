@@ -1,0 +1,4 @@
+{"t":0,"cmd":{"cmd":"choose_map","index":0}}
+{"t":0,"cmd":{"cmd":"set_rule","rule":"auto_claim","on":true}}
+{"t":0,"cmd":{"cmd":"set_rule","rule":"auto_recruit","on":true}}
+{"t":0,"cmd":{"cmd":"set_rule","rule":"auto_counter","on":true}}

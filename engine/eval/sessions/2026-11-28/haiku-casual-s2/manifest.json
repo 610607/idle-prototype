@@ -1,0 +1,10 @@
+{
+  "protocol": 1,
+  "build": "ab0ca702",
+  "seed": 2,
+  "player": "haiku-casual",
+  "schedule": "week-decay",
+  "hours": 168,
+  "lang": "zh-CN",
+  "research": true
+}
