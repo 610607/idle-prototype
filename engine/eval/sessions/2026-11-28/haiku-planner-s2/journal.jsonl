@@ -95,3 +95,7 @@
 {"t":374400,"cmd":{"cmd":"hire","candidate":137}}
 {"t":374400,"cmd":{"cmd":"hire","candidate":142}}
 {"t":374400,"cmd":{"cmd":"garrison","op":102,"tile":99}}
+{"t":403200,"cmd":{"cmd":"upgrade","track":"arms"}}
+{"t":403200,"cmd":{"cmd":"upgrade","track":"armor"}}
+{"t":403200,"cmd":{"cmd":"upgrade","track":"drills"}}
+{"t":403200,"cmd":{"cmd":"hire","candidate":151}}
