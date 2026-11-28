@@ -67,6 +67,7 @@
     "tutorial": {
       "open": ["dispatch", "claim"],
       "when": {
+        "hire": { "own_tiles": { "n": 6 } },
         "healing": { "own_former": { "former": "clinic" } },
         "med_line": { "done": { "action": "heal", "n": 3 } }
       }

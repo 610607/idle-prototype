@@ -558,9 +558,10 @@ mod tests {
         assert!(is_open(&s, "build"));
         assert!(!is_open(&s, "hire"));
         let n = next(&s, 2);
-        assert_eq!((n[0].id.as_str(), n[0].have, n[0].need), ("hire", 3, 7));
-        // Housing is now buildable; building it does not open hiring, seven tiles do (checked
-        // after the next command). A former clinic plot opens healing.
+        assert_eq!((n[0].id.as_str(), n[0].have, n[0].need), ("hire", 3, 6));
+        // Housing is now buildable; building it does not open hiring, six tiles do (the tutorial
+        // profile's own condition, checked after the next command). A former clinic plot opens
+        // healing.
         apply(
             &mut s,
             &Command::Build {

@@ -243,6 +243,10 @@ pub struct RunFile {
     /// How the run stopped (`Stop::label`); absent for a fixed-hours run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub until: Option<String>,
+    /// Where the games started (`Start::label`): `tutorial` when chapter one was played first;
+    /// absent for a fresh start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<String>,
     pub patch: Option<String>,
     pub seeds: Vec<u64>,
     pub metrics: BTreeMap<String, Vec<Option<f64>>>,
@@ -457,6 +461,83 @@ pub fn play_bot(seed: u64, persona: Persona, stop: Stop) -> (Game, BTreeMap<Stri
     (g, bot.used().clone())
 }
 
+/// Where a measured game starts (`eval run --start`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Start {
+    /// A new game on a random map: what every persona and the golden traces play.
+    Fresh,
+    /// Chapter one of the tutorial first, played by the walkthrough (`tutorial.rs`, looking every
+    /// `think` seconds), then `leave_map`, the map choice and the usual setup; the persona plays
+    /// the random map after it. The second cycle has the departments founded in the tutorial.
+    Tutorial { think: i64 },
+}
+
+impl Start {
+    /// `fresh` or `tutorial`.
+    pub fn parse(s: &str, think: i64) -> Option<Start> {
+        match s {
+            "fresh" => Some(Start::Fresh),
+            "tutorial" => Some(Start::Tutorial { think }),
+            _ => None,
+        }
+    }
+
+    /// The `start` a run file records (`None` for a fresh start).
+    pub fn label(&self) -> Option<String> {
+        match self {
+            Start::Fresh => None,
+            Start::Tutorial { .. } => Some("tutorial".into()),
+        }
+    }
+
+    /// The name a run file gives the persona: `tutorial+greedy` after the tutorial, so it has a
+    /// baseline of its own.
+    pub fn persona_name(&self, persona: Persona) -> String {
+        match self {
+            Start::Fresh => persona.name(),
+            Start::Tutorial { .. } => format!("tutorial+{}", persona.name()),
+        }
+    }
+}
+
+/// How long before `T0` a `Start::Tutorial` game begins: the tutorial is played in this time,
+/// then the clock waits at the map choice until `T0`, so the random map starts at `T0` and every
+/// hour-based probe reads as in a fresh game.
+pub const TUTORIAL_LEAD: i64 = 7200;
+
+/// One bot game after the tutorial (`Start::Tutorial`): the walkthrough's metrics (`tutorial.*`)
+/// and commands are added to the persona's.
+pub fn play_after_tutorial(
+    seed: u64,
+    persona: Persona,
+    stop: Stop,
+    think: i64,
+) -> (Game, BTreeMap<String, u32>) {
+    let (walk, mut e) =
+        crate::tutorial::play_at(seed, think, TUTORIAL_LEAD - 60, T0 - TUTORIAL_LEAD);
+    let mut bot = Bot::new(persona.policy());
+    assert!(
+        walk.at.contains_key("gate_won") && bot.act(&mut e, &Command::LeaveMap).is_ok(),
+        "seed {seed}: the walkthrough did not finish chapter one: {:?}",
+        walk.at
+    );
+    e.advance(T0);
+    for cmd in setup_cmds() {
+        bot.act(&mut e, cmd).unwrap();
+    }
+    let mut driver = Driver::Bot(persona, bot);
+    let mut g = measure_until(e, &mut driver, stop);
+    let Driver::Bot(_, bot) = driver else {
+        unreachable!()
+    };
+    g.metrics.extend(crate::tutorial::metrics(&walk));
+    let mut used = walk.used.clone();
+    for (k, n) in bot.used() {
+        *used.entry(k.clone()).or_insert(0) += n;
+    }
+    (g, used)
+}
+
 /// One measured game.
 pub struct Game {
     pub metrics: Metrics,
@@ -541,6 +622,23 @@ pub fn run(
     threads: usize,
     sessions: Option<&Path>,
 ) -> RunFile {
+    run_from(persona, seeds, stop, threads, sessions, Start::Fresh)
+}
+
+/// [`run`] from `start`. A run after the tutorial writes no session directories (a session
+/// replays one cycle from a fresh game).
+pub fn run_from(
+    persona: Persona,
+    seeds: &[u64],
+    stop: Stop,
+    threads: usize,
+    sessions: Option<&Path>,
+    start: Start,
+) -> RunFile {
+    assert!(
+        start == Start::Fresh || sessions.is_none(),
+        "--sessions only for a fresh start"
+    );
     let chunks: Vec<Vec<u64>> = (0..threads)
         .map(|k| seeds.iter().copied().skip(k).step_by(threads).collect())
         .collect();
@@ -552,7 +650,12 @@ pub fn run(
                     chunk
                         .into_iter()
                         .map(|seed| {
-                            let (mut g, used) = play_bot(seed, persona, stop);
+                            let (mut g, used) = match start {
+                                Start::Fresh => play_bot(seed, persona, stop),
+                                Start::Tutorial { think } => {
+                                    play_after_tutorial(seed, persona, stop, think)
+                                }
+                            };
                             if let Some(out) = sessions {
                                 let dir = out.join(format!("{}-s{seed}", persona.name()));
                                 let hours = g.hours;
@@ -567,8 +670,9 @@ pub fn run(
             .collect();
         hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
     });
-    let mut f = RunFile::collect(persona.name(), stop.max_hours, results);
+    let mut f = RunFile::collect(start.persona_name(persona), stop.max_hours, results);
     f.until = stop.label();
+    f.start = start.label();
     f
 }
 
@@ -714,6 +818,37 @@ mod tests {
             assert!(e.state.cycle.unlocks.is_some(), "{}", style.name());
             assert!(!bot.used().contains_key("research"), "{}", style.name());
         }
+    }
+
+    /// `--start tutorial`: chapter one by the walkthrough, then the persona on a random map from
+    /// `T0`; the chapter's commands count, so none of them reads as never used.
+    #[test]
+    fn a_run_can_start_on_the_tutorial() {
+        let (g, used) = play_after_tutorial(1, Persona::REFERENCE, Stop::hours(2), 5);
+        assert_eq!(g.e.state.cycle.started_at, T0);
+        assert_eq!(g.e.state.cycle.number, 2);
+        assert!(g.metrics["tutorial.secs.gate_won"].is_some());
+        assert!(g.metrics.contains_key("owned.h6") || g.metrics.contains_key("score.final"));
+        for c in [
+            "leave_map",
+            "found_department",
+            "dispatch",
+            "heal",
+            "set_med_line",
+            "choose_map",
+        ] {
+            assert!(used.contains_key(c), "{c} unused: {used:?}");
+        }
+        let f = run_from(
+            Persona::REFERENCE,
+            &[1],
+            Stop::hours(1),
+            1,
+            None,
+            Start::Tutorial { think: 5 },
+        );
+        assert_eq!(f.persona, "tutorial+greedy");
+        assert_eq!(f.start.as_deref(), Some("tutorial"));
     }
 
     #[test]

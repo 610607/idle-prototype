@@ -2,7 +2,7 @@
 //! cleanly and reads the same for people and LLMs.
 //!
 //! ```text
-//! cargo run --release --example eval -- run [persona] [--seeds N] [--hours H] [--until hours|plateau[:W[:tol]]] [--patch JSON] [--out FILE] [--sessions OUTDIR]
+//! cargo run --release --example eval -- run [persona] [--start fresh|tutorial [--think S]] [--seeds N] [--hours H] [--until hours|plateau[:W[:tol]]] [--patch JSON] [--out FILE] [--sessions OUTDIR]
 //! cargo run --release --example eval -- session DIR… [--out FILE]   # replay play sessions (docs/eval-interface.md)
 //! cargo run --release --example eval -- session DIR… --bless        # add a missing view_sha / re-record save_sha
 //! cargo run --release --example eval -- check FILE [GOALS]       # goal checks (eval/goals.json)
@@ -19,6 +19,8 @@
 //! cargo run --release --example eval -- payoff SEED [persona] [--hours H] [--patch JSON]   # 爽点时间轴
 //! cargo run --release --example eval -- metrics [RUN.json]      # metric registry (eval/metrics.json)
 //! cargo run --release --example eval -- tutorial [--think S] [--seeds N]   # chapter-one walkthrough, seconds to each milestone
+//! cargo run --release --example eval -- tutorial --check                   # replay the standard walkthrough (eval/tutorial_walk.json)
+//! cargo run --release --example eval -- tutorial --record [--seed N] [--think S]   # re-record it (keeps its windows)
 //! ```
 //!
 //! Personas: `greedy` (the reference bot: nearest ring first), `explorer` (deepest winnable target
@@ -152,7 +154,11 @@ fn main() {
             let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
             let seeds: Vec<u64> = (0..n).collect();
             let sessions = arg(&args, "--sessions").map(std::path::PathBuf::from);
-            let mut f = run::run(persona, &seeds, stop, threads, sessions.as_deref());
+            let think: i64 = arg(&args, "--think").map_or(1, |s| s.parse().unwrap());
+            let from = arg(&args, "--start").unwrap_or_else(|| "fresh".into());
+            let start = run::Start::parse(&from, think)
+                .unwrap_or_else(|| panic!("--start: fresh or tutorial, not {from}"));
+            let mut f = run::run_from(persona, &seeds, stop, threads, sessions.as_deref(), start);
             f.patch = patch;
             f.build = Some(idle_engine::mech::fingerprint());
             print_summary(&f);
@@ -289,9 +295,51 @@ fn main() {
             }
         }
         Some("tutorial") => {
+            use evalkit::tutorial;
+            if args.iter().any(|a| a == "--record") {
+                let s = tutorial::load_standard_or_default();
+                let seed: u64 = arg(&args, "--seed").map_or(s.0, |x| x.parse().unwrap());
+                let think: i64 = arg(&args, "--think").map_or(s.1, |x| x.parse().unwrap());
+                let outside = tutorial::record(seed, think);
+                println!("→ {}", tutorial::standard_path());
+                for o in &outside {
+                    println!("outside its window: {o}");
+                }
+                if !outside.is_empty() {
+                    std::process::exit(1);
+                }
+                return;
+            }
+            if args.iter().any(|a| a == "--check") {
+                let s = tutorial::load_standard();
+                let bad = tutorial::check_standard(&s);
+                let r = tutorial::replay_standard(&s).ok();
+                println!(
+                    "standard walkthrough {} · seed {} · think {} s · {} commands",
+                    tutorial::standard_path(),
+                    s.seed,
+                    s.think,
+                    s.commands.len()
+                );
+                for (k, [lo, hi]) in &s.windows {
+                    let now = r.as_ref().and_then(|r| r.at.get(k));
+                    println!(
+                        "  {k:<16} {:>5}  window {lo}..{hi}  recorded {}",
+                        now.map_or("-".into(), |t| t.to_string()),
+                        s.recorded.get(k).map_or("-".into(), |t| t.to_string())
+                    );
+                }
+                for b in &bad {
+                    println!("FAIL {b}");
+                }
+                if !bad.is_empty() {
+                    std::process::exit(1);
+                }
+                return;
+            }
             let think: i64 = arg(&args, "--think").map_or(1, |s| s.parse().unwrap());
             let seeds: u64 = arg(&args, "--seeds").map_or(4, |s| s.parse().unwrap());
-            evalkit::tutorial::print(think, seeds);
+            tutorial::print(think, seeds);
         }
         Some("numbers") => calib::numbers(),
         Some("pace") => {

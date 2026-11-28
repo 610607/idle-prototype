@@ -80,7 +80,8 @@ pub struct Goal {
     pub doc: String,
     pub checks: BTreeMap<String, Vec<Band>>,
     /// Which runs the goal reads: "hours" (fixed-length runs, the default), "plateau" (runs
-    /// played to the plateau, `eval run --until plateau`) or "any".
+    /// played to the plateau, `eval run --until plateau`), "tutorial" (runs that played the
+    /// tutorial's chapter one first, `eval run --start tutorial`) or "any".
     #[serde(default = "default_run")]
     pub run: String,
     /// Personas whose results can fail this gate: the goal's own `gate_personas` when it names
@@ -101,6 +102,7 @@ impl Goal {
         match self.run.as_str() {
             "plateau" => plateau,
             "any" => true,
+            "tutorial" => f.start.as_deref() == Some("tutorial"),
             _ => !plateau,
         }
     }
@@ -129,8 +131,8 @@ pub fn load(path: &str) -> Vec<Goal> {
             g.id
         );
         assert!(
-            ["hours", "plateau", "any"].contains(&g.run.as_str()),
-            "{path}: {}: run must be hours, plateau or any",
+            ["hours", "plateau", "any", "tutorial"].contains(&g.run.as_str()),
+            "{path}: {}: run must be hours, plateau, any or tutorial",
             g.id
         );
         assert!(
@@ -721,6 +723,11 @@ mod tests {
         assert!(goal("hours").reads(&hours) && !goal("hours").reads(&plateau));
         assert!(goal("plateau").reads(&plateau) && !goal("plateau").reads(&hours));
         assert!(goal("any").reads(&hours) && goal("any").reads(&plateau));
+        let after = RunFile {
+            start: Some("tutorial".into()),
+            ..Default::default()
+        };
+        assert!(goal("tutorial").reads(&after) && !goal("tutorial").reads(&hours));
         assert_eq!(
             evaluate(std::slice::from_ref(&goal("plateau")), &hours).len(),
             0

@@ -27,7 +27,7 @@
     "districts": [{ "name": 0, "flavor": "street_smart" }],
     "crew": ["vanguard"],
     "unlocks": "tutorial",
-    "costs": { "claim_base": { "scrap": 10 }, "claim_mult_bp": 13000, "build_mult_bp": 15000 },
+    "costs": { "claim_base": { "scrap": 8 }, "claim_mult_bp": 12500, "build_mult_bp": 15000 },
     "resources": { "scrap": 20, "parts": 0, "intel": 0, "crystal": 0, "medicine": 10 },
     "talent": false,
     "pass_claimable": true,
@@ -41,7 +41,7 @@
       {
         "id": "scrapyard",
         "when": { "own_tile": { "tile": "I10" } },
-        "give": { "tile": "I10", "facility": "scrapyard", "staff": 6 },
+        "give": { "tile": "I10", "facility": "scrapyard", "staff": 8 },
         "hint": true
       },
       {
@@ -61,7 +61,7 @@
       },
       {
         "id": "striker",
-        "when": { "own_tiles": { "n": 7 } },
+        "when": { "own_tiles": { "n": 6 } },
         "give": { "candidate": { "class": "striker", "free": true, "joins": true } },
         "hint": true
       },

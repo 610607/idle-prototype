@@ -1,5 +1,5 @@
 {
-  "_doc": "设计目标（docs/balance-eval.md §评估者）。每条目标用一句话写体验，绑定几项指标的区间。kind：experience 是游戏该有的样子，selfcheck 是评估工具自己还可信。level：gate 不过就让 check / review 以退出码 1 结束；watch 只报告。gate_personas：只有这些人格（参考玩家）的结果能让门槛不过，其他人格超出区间记为观察（打法读数）；为空表示所有人格；单条目标可以自带 gate_personas（比如只检查压分玩家的那条）。run：读哪种跑法的结果，hours 按小时跑（默认）、plateau 跑到平台、any 都读。区间可以写 vs：拿这个人格的统计量除以 vs 人格同一统计量再比（同一次 review 里有就用，没有就读它的基线）。checks 的格式同旧 bands.json：{指标 id: [{stat, min, max, personas, missing_fails, watch}]}；personas 为空表示所有人格，以 * 结尾表示前缀（如 llm:*）。2026-11-27 和设计者逐条确认过：目标是设计意图，实测不达标就改游戏，不放宽区间。",
+  "_doc": "设计目标（docs/balance-eval.md §评估者）。每条目标用一句话写体验，绑定几项指标的区间。kind：experience 是游戏该有的样子，selfcheck 是评估工具自己还可信。level：gate 不过就让 check / review 以退出码 1 结束；watch 只报告。gate_personas：只有这些人格（参考玩家）的结果能让门槛不过，其他人格超出区间记为观察（打法读数）；为空表示所有人格；单条目标可以自带 gate_personas（比如只检查压分玩家的那条）。run：读哪种跑法的结果，hours 按小时跑（默认）、plateau 跑到平台、tutorial 先打教学关第一章再玩随机地图（eval run --start tutorial，人格名是 tutorial+<人格>）、any 都读。区间可以写 vs：拿这个人格的统计量除以 vs 人格同一统计量再比（同一次 review 里有就用，没有就读它的基线）。checks 的格式同旧 bands.json：{指标 id: [{stat, min, max, personas, missing_fails, watch}]}；personas 为空表示所有人格，以 * 结尾表示前缀（如 llm:*）。2026-11-27 和设计者逐条确认过：目标是设计意图，实测不达标就改游戏，不放宽区间。",
   "gate_personas": ["greedy"],
   "goals": [
     {
@@ -186,6 +186,29 @@
       "checks": {
         "score.h168": [{ "stat": "p50", "max": 0.95, "vs": "greedy", "personas": ["sandbag"] }],
         "score.final": [{ "stat": "p50", "max": 1.0, "vs": "greedy", "personas": ["sandbag"], "watch": true }]
+      }
+    },
+    {
+      "id": "tutorial_chapter1",
+      "kind": "experience",
+      "level": "gate",
+      "text": "教学关第一章紧凑：标准走法的机器人一看到能做的就做，一两分钟打下门；中间没有长时间无事可做（两次操作之间不超过约二十秒）；第一次因为血量不够停下不在头两仗",
+      "doc": "docs/design-v2-stage3.md S8；docs/design-v2-tutorial.md 第一章；docs/balance-eval.md §教学关",
+      "run": "tutorial",
+      "gate_personas": ["tutorial+greedy"],
+      "checks": {
+        "tutorial.secs.gate_won": [
+          { "stat": "p50", "min": 60, "max": 180, "missing_fails": true },
+          { "stat": "p90", "max": 300, "missing_fails": true, "watch": true }
+        ],
+        "tutorial.commands": [{ "stat": "p50", "min": 15, "max": 40 }],
+        "tutorial.longest_idle": [
+          { "stat": "p50", "max": 20 },
+          { "stat": "p90", "max": 30, "watch": true }
+        ],
+        "tutorial.first_short": [{ "stat": "p10", "min": 3 }],
+        "tutorial.secs.first_short": [{ "stat": "p50", "min": 20, "max": 120, "watch": true }],
+        "tutorial.secs.low_hp": [{ "stat": "p50", "min": 10, "max": 90, "watch": true }]
       }
     },
     {

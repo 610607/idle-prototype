@@ -205,7 +205,7 @@ cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --session
 
 - **协议版本**：`protocol` 字段。只加可选字段不算不兼容；删字段、改含义、改目录结构要加一，并在这里写明变化。
 - **会话过期**：见上一节，按重放后的存档指纹判断，有 `view_sha` 时也比局面指纹（重放时有命令被拒绝也算过期）。
-- **协议变更记录**：2026-11-28，final.json 加可选字段 `view_sha`，版本仍是 1。
+- **协议变更记录**：2026-11-28，final.json 加可选字段 `view_sha`，版本仍是 1。2026-11-28（阶段 3 S8）：会话的观察、行动和目录都没改，版本仍是 1。会话还是只玩一轮随机地图、回访时刻按小时排，**不能从教学关开始，也不能跨局**（[阶段 3 实现规格](design-v2-stage3.md) S8 写的“一次会话可以跨局，`protocol` 加一”留到以后做）。教学关现在用 `agent_cli new … --map tutorial` + `do`（`--wait` 在教学关按秒）试玩，或者由评估工具的走法机器人跑（`eval tutorial`、`eval run --start tutorial`，见 [数值评估](balance-eval.md)“教学关”）；这两样都不经过会话协议。做跨局会话时要改的：manifest 记开局的地图（`tutorial`），日程能按秒排（教学关的一小时是 30 秒），重放从 `Engine::new_map` 开局，`leave_map`、`choose_map` 从“轮回之间”挪成会话里能发的命令。
 - **菜单 id**：由命令内容算出，不随菜单顺序变化。
 - **测试**（`cargo test`）：
   - 会话本身（`engine/tests/session.rs`）：模拟玩家通过库接口和 `serve` 各玩一局，命令日志重放得到同一个终局存档和同一个局面指纹；被拒绝的行动不改目录。
