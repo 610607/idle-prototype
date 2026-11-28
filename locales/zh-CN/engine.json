@@ -225,5 +225,6 @@
   "unlock.cond.stopped_at": "路线停在 {tile} 前面",
   "unlock.cond.done.heal": "亲手治疗 {n} 次",
   "view.pending.claim_quiet": "{tile} 可占领",
-  "err.dispatch_claimable": "{tile} 已经可以占领了：占下它就行，不用再打"
+  "err.dispatch_claimable": "{tile} 已经可以占领了：占下它就行，不用再打",
+  "err.map_not_done": "这一章还没打完，现在走不了"
 }

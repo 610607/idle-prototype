@@ -494,6 +494,18 @@ export interface View {
   pace?: Pace;
   /** A fixed map's current one-line hint (`mech::script`); absent when there is none. */
   hint?: HintView;
+  /** The fixed map's chapter is over: what to say; `leave_map` is open. */
+  chapter_end?: HintView;
+  /** 规章和档案: records kept, then the next one or two (absent before any, off fixed maps). */
+  records?: RecordView[];
+}
+
+/** One 规章和档案 entry: did X → got Y. */
+export interface RecordView {
+  id: string;
+  did: string;
+  got: string;
+  done: boolean;
 }
 
 /** The scripted hint shown now and when it came up. */
@@ -806,4 +818,5 @@ export type Command =
   | { cmd: 'heal'; op: number; hp?: number }
   | { cmd: 'set_med_line'; on: boolean; below_pct: number; reserve: number }
   | { cmd: 'dispatch'; squad: number; tile: number }
-  | { cmd: 'found_department'; department: string };
+  | { cmd: 'found_department'; department: string }
+  | { cmd: 'leave_map' };

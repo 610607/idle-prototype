@@ -53,7 +53,7 @@
   "name.person": "{family}{given}",
   "event.department_founded": "成立了{name}",
   "origin.walk_in": "自己找上门来的",
-  "event.hint.tutorial.opening": "隔壁街口有东西在晃，看样子想收这条街的过路费。去看看；东边那块地以前是废材站。",
+  "event.hint.tutorial.opening": "有人从总部最底下那间屋子爬了上来，什么都不记得，只记得一句：我们得把底下那间屋子修好。先从门口开始：隔壁那格有东西在晃，去看看；东边那块地以前是废材站。",
   "event.hint.tutorial.first_win": "清干净了，对方连收据都没留。花点废材占下它：有人守着，它就是公所的。",
   "event.hint.tutorial.first_claim": "这格归公所了。往外每多占一格，都比上一格贵一点：地价这东西，崩落了也照样涨。",
   "event.hint.tutorial.scrapyard": "这里以前是废材站。架子还在，几个老师傅端着搪瓷缸子回来上工了。",
@@ -66,5 +66,8 @@
   "event.hint.tutorial.dispatch_office": "这条路你们已经亲手走了好几趟。该有人专门管排班了。",
   "event.hint.tutorial.routes": "调度部门排好了班。画一条路线，小队会自己一趟趟跑；往北那条通到变电所门口。",
   "event.hint.tutorial.gate_stop": "变电所里蹲着一伙帮派，还养了只看门兽，自称此路是他们开的。照现在这样打不过：多一个人会不一样。",
-  "event.hint.tutorial.gate_won": "窝点打服了，小头目连夜搬了家。往北、往东、往西的路都通了。"
+  "event.hint.tutorial.gate_won": "窝点打服了，小头目连夜搬了家。往北、往东、往西的路都通了。",
+  "event.ending.tutorial": "路通了。变电所那伙人认了公所的规矩，往北、往东、往西都看得见了；底下那间屋子还是那么小。",
+  "event.record": "底下那间屋子又修好一点：{did}。{got}",
+  "event.map_left": "离开{map}。下一程去哪儿，从三张地图里挑；成立过的部门跟着走。"
 }

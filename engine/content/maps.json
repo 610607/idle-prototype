@@ -33,6 +33,7 @@
     "pass_claimable": true,
     "offline_cap_secs": 28800,
     "med_reserve": 5,
+    "ending": { "when": { "won_tile": { "tile": "H7" } }, "record": "north_road" },
     "script": [
       { "id": "opening", "when": "always", "hint": true },
       { "id": "first_win", "when": { "done": { "action": "route_win", "n": 1 } }, "hint": true },

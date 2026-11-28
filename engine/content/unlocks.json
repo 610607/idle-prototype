@@ -61,6 +61,7 @@
     { "id": "collapse", "gates": ["collapse", "score", "org_level"], "when": "never" }
   ],
   "ungated_facilities": [],
+  "records": [{ "id": "north_road" }, { "id": "glass_heart" }],
   "profiles": {
     "default": { "all": true },
     "tutorial": {

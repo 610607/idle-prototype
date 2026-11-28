@@ -962,6 +962,56 @@ pub struct View {
     /// A fixed map's current one-line hint (`mech::script`); absent when there is none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hint: Option<HintView>,
+    /// The fixed map's chapter is over (`MapDef::ending`): what to say, and that `leave_map` is
+    /// open. Absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chapter_end: Option<HintView>,
+    /// 规章和档案 (`Org::records`): every record kept, then the next one or two not done yet.
+    /// Absent before any record is kept outside a fixed map (a plain random-map game).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub records: Vec<RecordView>,
+}
+
+/// One entry of the 规章和档案 page: did X → got Y.
+#[derive(Serialize, Clone, Debug)]
+pub struct RecordView {
+    pub id: String,
+    pub did: String,
+    pub got: String,
+    /// Kept by the organisation; false: one of the next ones, not done yet.
+    pub done: bool,
+}
+
+/// How many records not done yet the page lists (designer decision: the next one or two).
+const NEXT_RECORDS: usize = 2;
+
+pub fn records_view(state: &GameState) -> Vec<RecordView> {
+    if state.org.records.is_empty() && state.cycle.script.is_none() {
+        return vec![];
+    }
+    let all = &content().unlocks.records;
+    let done = all.iter().filter(|r| state.org.records.contains(&r.id));
+    let next = all
+        .iter()
+        .filter(|r| !state.org.records.contains(&r.id))
+        .take(NEXT_RECORDS);
+    done.chain(next)
+        .map(|r| RecordView {
+            id: r.id.clone(),
+            did: r.did.clone(),
+            got: r.got.clone(),
+            done: state.org.records.contains(&r.id),
+        })
+        .collect()
+}
+
+pub fn chapter_end_view(state: &GameState) -> Option<HintView> {
+    let t = crate::mech::script::ended(state)?;
+    let map = state.cycle.map.as_deref()?;
+    Some(HintView {
+        text: crate::l10n::tr(&format!("event.ending.{map}")),
+        t,
+    })
 }
 
 /// The hint shown now: its text and when it came up.
@@ -1627,6 +1677,8 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             bounds: None,
             pace: None,
             hint: None,
+            chapter_end: None,
+            records: records_view(state),
         };
     }
 
@@ -2086,6 +2138,8 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         bounds: fixed.map(|f| f.0),
         pace: fixed.map(|f| f.1),
         hint: hint_view(state),
+        chapter_end: chapter_end_view(state),
+        records: records_view(state),
     }
 }
 

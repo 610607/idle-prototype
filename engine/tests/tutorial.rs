@@ -649,6 +649,46 @@ fn chapter_one_plays_through_to_the_gate_with_the_menu() {
         hint.text,
         idle_engine::l10n::tr("event.hint.tutorial.gate_won")
     );
+    // The chapter is over: the record is kept, the way on to a formal run is first in the menu.
+    let v = e.view();
+    assert!(v.chapter_end.is_some());
+    let records: Vec<(&str, bool)> = v.records.iter().map(|r| (r.id.as_str(), r.done)).collect();
+    assert_eq!(records, [("north_road", true), ("glass_heart", false)]);
+    assert!(e.state.org.records.contains("north_road"));
+    let items = textui::menu(&mut e, &opts);
+    assert!(matches!(items[0].cmd, Command::LeaveMap));
+    e.command(&Command::LeaveMap).unwrap();
+    let v = e.view();
+    assert_eq!(v.phase, idle_engine::mech::state::Phase::ChoosingMap);
+    assert_eq!(v.previews.len(), 3);
+    assert_eq!(v.records.len(), 2, "the page stays with the organisation");
+    let text = textui::board(&mut e, T0, &opts);
+    assert!(text.contains(&idle_engine::l10n::tr("record.north_road.did")));
+    // The formal run: a random map, everything open, the dispatch office in place for free.
+    e.command(&Command::ChooseMap { index: 0 }).unwrap();
+    assert!(e.state.cycle.unlocks.is_none());
+    assert!(e.state.cycle.map.is_none() && e.state.cycle.script.is_none());
+    assert!(e.state.org.departments.contains("dispatch_office"));
+    assert!(e.view().chapter_end.is_none());
+}
+
+/// Leaving the map is only possible once its chapter is over.
+#[test]
+fn the_tutorial_cannot_be_left_before_the_gate() {
+    let mut e = tutorial(0);
+    assert!(e.view().chapter_end.is_none());
+    assert_eq!(
+        e.command(&Command::LeaveMap),
+        Err(idle_engine::t!("err.map_not_done"))
+    );
+    let v = e.view();
+    let records: Vec<(&str, bool)> = v.records.iter().map(|r| (r.id.as_str(), r.done)).collect();
+    assert_eq!(records, [("north_road", false), ("glass_heart", false)]);
+    // A random-map game has no page until something is kept.
+    let mut r = Engine::new(0, T0, "test");
+    r.command(&Command::ChooseMap { index: 0 }).unwrap();
+    assert!(r.view().records.is_empty());
+    assert!(!r.view_json().contains("\"records\""));
 }
 
 /// A long absence on the tutorial: the first hours are played out, the rest is skipped as if

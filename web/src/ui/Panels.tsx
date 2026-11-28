@@ -214,9 +214,36 @@ export function Departments() {
 /** The next one or two unlocks and how far along they are; absent in games with everything open. */
 /** A fixed map's one-line hint (S7; the highlight comes with S9). It never blocks anything. */
 export function HintLine() {
-  const { view } = useCtx();
+  const { view, run } = useCtx();
+  if (view.chapter_end) {
+    return (
+      <div className="hint-line small">
+        <b>{t('panels.chapter_end.title')}</b> {view.chapter_end.text}{' '}
+        <button className="btn small primary" onClick={() => run({ cmd: 'leave_map' }, t('panels.chapter_end.left'))}>
+          {t('panels.chapter_end.leave')}
+        </button>
+      </div>
+    );
+  }
   if (!view.hint) return null;
   return <div className="hint-line small">{view.hint.text}</div>;
+}
+
+/** The organisation's 规章和档案: records kept, then the next one or two (S7, minimal). */
+export function RecordsPanel() {
+  const { view } = useCtx();
+  if (!view.records?.length) return null;
+  return (
+    <Section title={t('panels.records.title')} icon="check" tone="hazard">
+      <div className="stack" style={{ gap: 4 }}>
+        {view.records.map((r) => (
+          <div key={r.id} className={'small ' + (r.done ? '' : 'faint')}>
+            {r.done ? '✓' : '·'} {r.did} → {r.got}
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
 }
 
 export function NextUnlocks() {
@@ -665,6 +692,7 @@ export function HQPanel() {
   return (
     <>
     {view.phase === 'active' && view.armory?.length ? <ArmoryPanel /> : null}
+    <RecordsPanel />
     <div className="split">
       <div className="col">
         <Section title={t('panels.org.title', { level: org.level })} icon="org" tone="hazard" hint={org.next ? `${org.exp}/${org.next}` : `${org.exp}`}>

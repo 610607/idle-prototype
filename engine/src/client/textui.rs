@@ -64,6 +64,7 @@ pub fn reach(cmd: &Command) -> Reach {
         Command::SetRoute { .. }
         | Command::Dispatch { .. }
         | Command::FoundDepartment { .. }
+        | Command::LeaveMap
         | Command::Assault { .. }
         | Command::Garrison { .. }
         | Command::Claim { .. }
@@ -198,6 +199,7 @@ pub fn samples() -> Vec<Command> {
         Command::FoundDepartment {
             department: "dispatch_office".into(),
         },
+        Command::LeaveMap,
     ]
 }
 
@@ -899,6 +901,7 @@ fn between(v: &View, since: i64) -> String {
     );
     library(&mut o, v);
     hq(&mut o, v);
+    records(&mut o, v);
     events(&mut o, v, since);
     o
 }
@@ -931,7 +934,9 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     if let Some((_, name, desc)) = &v.modifier {
         line(&mut o, t!("cli.board.climate", name = name, desc = desc));
     }
-    if let Some(h) = &v.hint {
+    if let Some(end) = &v.chapter_end {
+        line(&mut o, t!("cli.board.chapter_end", text = end.text));
+    } else if let Some(h) = &v.hint {
         line(&mut o, t!("cli.board.hint", text = h.text));
     }
     // A fast map counts per minute and leaves out what it has none of; a random map keeps the
@@ -1509,6 +1514,9 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         &mut o,
         t!("cli.board.facilities", list = none_or(&names, " ")),
     );
+    if v.chapter_end.is_some() {
+        records(&mut o, &v);
+    }
     events(&mut o, &v, since);
     if !v.pending.is_empty() {
         line(&mut o, t!("cli.board.pending"));
@@ -1518,6 +1526,28 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     }
     next_lines(&mut o, &v);
     o
+}
+
+/// The organisation's 规章和档案: records kept, then the next one or two.
+fn records(o: &mut String, v: &View) {
+    if v.records.is_empty() {
+        return;
+    }
+    line(o, t!("cli.records.title"));
+    for r in &v.records {
+        line(
+            o,
+            t!(
+                if r.done {
+                    "cli.records.open"
+                } else {
+                    "cli.records.next"
+                },
+                did = r.did,
+                got = r.got
+            ),
+        );
+    }
 }
 
 /// The departments: founded, ready, or how far along (with what founding costs).
@@ -1659,6 +1689,7 @@ pub fn info(e: &mut Engine) -> String {
         }
     }
     hq(&mut o, &v);
+    records(&mut o, &v);
     library(&mut o, &v);
     line(&mut o, t!("cli.info.commands"));
     let tag_ids: Vec<String> = Tag::ALL
@@ -2099,6 +2130,8 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
                     let x = &v.tiles[*i as usize];
                     (
                         x.former.as_deref() == Some(f.id.as_str()),
+                        // Not the plot that was homes before: people live there.
+                        x.former.as_deref() != Some(crate::data::unlocks::HOUSING),
                         d.housing - crate::data::balance().housing_capacity >= d.population,
                         *idle,
                         std::cmp::Reverse(*i),
@@ -2292,6 +2325,24 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
                 cmd: Command::SetRoute { squad: s.id, route },
             });
         }
+    }
+    // The chapter is over: the way on to a formal run comes first.
+    if v.chapter_end.is_some() {
+        let map = e
+            .state
+            .cycle
+            .map
+            .as_deref()
+            .and_then(|id| content().map(id))
+            .map(|m| m.name.clone())
+            .unwrap_or_default();
+        m.insert(
+            0,
+            Item {
+                label: t!("cli.menu.leave_map", map = map),
+                cmd: Command::LeaveMap,
+            },
+        );
     }
     if !crate::mech::unlocks::all_open(&e.state) {
         m.retain(|i| e.allows(&i.cmd));
@@ -2649,7 +2700,9 @@ mod tests {
                 None => assert!(
                     matches!(
                         c,
-                        Command::ChooseMap { .. } | Command::FoundDepartment { .. }
+                        Command::ChooseMap { .. }
+                            | Command::FoundDepartment { .. }
+                            | Command::LeaveMap
                     ),
                     "{c:?} is ungated"
                 ),

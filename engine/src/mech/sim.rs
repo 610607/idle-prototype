@@ -417,6 +417,31 @@ pub fn cycle_results(state: &GameState) -> CycleResults {
     }
 }
 
+/// Leave a fixed map whose ending was reached: the cycle ends (nothing to bank: the tutorial
+/// scores nothing) and the next one starts at the map choice, random maps, everything open,
+/// founded departments in place (`seat_departments` in `choose_map`). Kept specials stay kept.
+pub fn leave_map(state: &mut GameState) -> Result<(), String> {
+    if state.cycle.phase != Phase::Active {
+        return Err(t!("err.cycle_not_started"));
+    }
+    if crate::mech::script::ended(state).is_none() {
+        return Err(t!("err.map_not_done"));
+    }
+    let map = state.cycle.map.clone().unwrap_or_default();
+    state.org.cycles += 1;
+    let pv = previews(&mut state.rng);
+    let next = state.cycle.number + 1;
+    state.cycle = empty_cycle(next, pv);
+    state.event(
+        EventKind::Info,
+        txt!("event.map_left", map = l10n::name("map", &map)),
+        None,
+        None,
+        None,
+    );
+    Ok(())
+}
+
 /// 收束防线: bank this cycle's results and start choosing the next map.
 pub fn collapse(state: &mut GameState) -> Result<(), String> {
     if state.cycle.phase != Phase::Active {

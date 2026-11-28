@@ -148,6 +148,9 @@ pub enum Command {
     FoundDepartment {
         department: String,
     },
+    /// Leave a fixed map whose chapter is over (`MapDef::ending`) and choose a random map for
+    /// the formal run (`ChooseMap`); founded departments are in place there for free.
+    LeaveMap,
 }
 
 impl Command {
@@ -232,6 +235,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         } => crate::mech::medic::set_med_line(state, *on, *below_pct, *reserve),
         Command::Dispatch { squad, tile } => actions::dispatch(state, *squad, *tile),
         Command::FoundDepartment { department } => crate::mech::unlocks::found(state, department),
+        Command::LeaveMap => sim::leave_map(state),
     };
     if r.is_ok() {
         state.revision += 1;
@@ -250,6 +254,8 @@ impl Command {
             Command::Dispatch { .. } => Some(System::Dispatch),
             // Founding is always possible; each department's own `shown_after` gates it.
             Command::FoundDepartment { .. } => None,
+            // Only possible once the map's chapter is over (`sim::leave_map` checks).
+            Command::LeaveMap => None,
             Command::SetRoute { .. } | Command::Assault { .. } => Some(System::Routes),
             Command::SetSquad { .. } => Some(System::Squad),
             Command::Garrison { .. } => Some(System::Garrison),

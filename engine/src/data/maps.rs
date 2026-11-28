@@ -440,6 +440,10 @@ impl MapDef {
                     end.record
                 ));
             }
+            let key = format!("event.ending.{}", self.id);
+            if !crate::l10n::has(&key) {
+                errs.push(format!("{ctx}: no text {key}"));
+            }
         }
         if self.offline_cap_secs < 0 {
             errs.push(format!("{ctx}: offline_cap_secs must not be negative"));

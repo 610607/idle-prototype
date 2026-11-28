@@ -9,7 +9,7 @@ use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SAVE_VERSION: u32 = 10;
+pub const SAVE_VERSION: u32 = 11;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

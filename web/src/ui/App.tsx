@@ -6,7 +6,7 @@ import type { Bounds, Command, View } from '../types';
 import { ReportSheet } from './BattleReport';
 import { Board, WASH } from './Board';
 import { ConfirmDialog, fmtClock, fmtRate, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, SQUAD_HEX, useCtx, type ConfirmAsk, type Ctx, type RouteEdit, type Sheet } from './common';
-import { CommandPanel, Departments, DistrictsPanel, HintLine, HQPanel, NextUnlocks, PendingList, RosterPanel, TideStrip } from './Panels';
+import { CommandPanel, Departments, DistrictsPanel, HintLine, HQPanel, NextUnlocks, PendingList, RecordsPanel, RosterPanel, TideStrip } from './Panels';
 import { Archive, ResearchPanel } from './Research';
 import { CandidateSheet, DistrictSheet, OpSheet, SquadSheet, TideSheet } from './Sheets';
 import { TileSheet } from './TileSheet';
@@ -404,6 +404,7 @@ function MapChoice() {
           <h2 style={{ fontSize: 26 }}>{t('app.choose.title', { n: view.cycle })}</h2>
           <p className="muted">{t('app.choose.intro')}</p>
         </div>
+        <RecordsPanel />
         <div className="mapchoice">
           {view.previews.map((p) => (
             <div key={p.index} className="card rivet stack">

@@ -23,6 +23,9 @@ pub struct Script {
     /// When that hint fired.
     #[serde(default)]
     pub hint_at: i64,
+    /// When the map's ending was reached (`MapDef::ending`): the chapter is over.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended: Option<i64>,
 }
 
 /// The script state a cycle on `map` starts with (none when the map has no script).
@@ -58,6 +61,43 @@ pub fn refresh(state: &mut GameState) {
         // What it gave may open unlocks (a clinic opens healing).
         crate::mech::unlocks::refresh(state);
     }
+    end(state, map);
+}
+
+/// The map's ending: once its condition holds, the chapter is over (said once) and the
+/// organisation keeps the record for good.
+fn end(state: &mut GameState, map: &MapDef) {
+    let Some(end) = &map.ending else { return };
+    if state.cycle.script.as_ref().unwrap().ended.is_some() || !met(state, &end.when) {
+        return;
+    }
+    let now = state.time;
+    state.cycle.script.as_mut().unwrap().ended = Some(now);
+    state.event(
+        EventKind::Hint,
+        crate::l10n::Text::new(&format!("event.ending.{}", map.id)),
+        None,
+        None,
+        None,
+    );
+    if state.org.records.insert(end.record.clone()) {
+        state.event(
+            EventKind::Unlock,
+            txt!(
+                "event.record",
+                did = crate::l10n::Text::new(&format!("record.{}.did", end.record)),
+                got = crate::l10n::Text::new(&format!("record.{}.got", end.record))
+            ),
+            None,
+            None,
+            None,
+        );
+    }
+}
+
+/// When this cycle's fixed map reached its ending (none: not yet, or no such map).
+pub fn ended(state: &GameState) -> Option<i64> {
+    state.cycle.script.as_ref()?.ended
 }
 
 fn fire(state: &mut GameState, map: &MapDef, e: &ScriptEntry) {
