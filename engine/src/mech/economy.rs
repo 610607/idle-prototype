@@ -329,13 +329,15 @@ pub fn hourly(state: &mut GameState) {
     let b = balance();
     let calc = calc(state);
 
-    // Resources (with fractional carry).
+    // Resources (with fractional carry), capped by storage.
+    let mut income = crate::data::Resources::default();
     for k in 0..4 {
         let total = state.cycle.carry[k] + calc.income[k];
         let whole = total / 10_000;
         state.cycle.carry[k] = total % 10_000;
-        state.cycle.resources.add_key(RES_KEYS[k], whole);
+        income.add_key(RES_KEYS[k], whole);
     }
+    state.gain(&income);
 
     // Trust drifts toward its target.
     for dc in &calc.districts {

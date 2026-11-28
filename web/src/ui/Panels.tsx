@@ -254,28 +254,29 @@ export function TideTable({ limit }: { limit?: number }) {
 export function SquadsPanel() {
   const { view } = useCtx();
   return (
-    <Section title={t('panels.squads.title')} icon="squad" tone="elec" hint={t('panels.squads.attention', { n: view.attention[0], ring: view.attention[1] })}>
+    <Section title={t('panels.squads.title')} icon="squad" tone="elec" hint={t('panels.squads.threat', { n: view.threat.value, level: (view.threat.level_bp / 10000).toFixed(1) })}>
       <div className="stack">
         {view.squads.map((s, i) => (
           <SquadCard key={s.id} s={s} color={SQUAD_HEX[i % SQUAD_HEX.length]!} />
         ))}
       </div>
-      {view.attention[0] > 0 ? (
-        <div className="small warn" style={{ marginTop: 6 }}>
-          {t('panels.squads.attention_note', { x: (view.attention[2] / 10000).toFixed(1) })}
-        </div>
-      ) : null}
+      <div className="small muted" style={{ marginTop: 6 }}>
+        {t('panels.squads.threat_note', { x: (view.threat.strength_bp / 10000).toFixed(1), next: view.threat.next })}
+      </div>
     </Section>
   );
 }
 
 function SquadCard({ s, color }: { s: SquadView; color: string }) {
-  const { view, now, open, setRouteEdit } = useCtx();
+  const { game, view, now, open, run, setRouteEdit } = useCtx();
+  const stop = s.last?.stopped ?? null;
   const members = s.members.map((id) => view.operatives.find((o) => o.id === id)).filter(Boolean) as OpView[];
   const trip = s.running;
   const status = !members.length
     ? t('panels.squad.no_members')
-    : trip
+    : s.force
+      ? t('panels.squad.force_next')
+      : trip
       ? t('panels.squad.on_route', { left: fmtIn(trip.end - now) })
       : s.rest_until > now
         ? t('panels.squad.resting', { left: fmtIn(s.rest_until - now) })
@@ -313,6 +314,22 @@ function SquadCard({ s, color }: { s: SquadView; color: string }) {
           {s.last.results.length
             ? t('panels.squad.last_results', { outcome: OUTCOME_NAMES[s.last.outcome], results: s.last.results.map((r) => r.label).join(t('panels.sep.list')) })
             : t('panels.squad.last_patrol', { outcome: OUTCOME_NAMES[s.last.outcome] })}
+          {s.last.forced ? t('panels.squad.forced') : null}
+        </div>
+      ) : null}
+      {stop ? (
+        <div className="row wrap small warn" style={{ gap: 6, marginTop: 2 }}>
+          <span className="grow">{t('panels.squad.stopped', { tile: stop.label, outcome: stop.outcome ? OUTCOME_NAMES[stop.outcome] : '' })}</span>
+          {stop.report !== null ? (
+            <button className="btn small ghost" onClick={() => open({ kind: 'report', title: `${s.name} · ${stop.label}`, load: () => game.report(stop.report!) })}>
+              {t('panels.squad.why')}
+            </button>
+          ) : null}
+          {!s.force ? (
+            <button className="btn small" onClick={() => run({ cmd: 'assault', squad: s.id }, t('panels.squad.assault_done', { squad: s.name, tile: stop.label }))}>
+              {t('panels.squad.assault')}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

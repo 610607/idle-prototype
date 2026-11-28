@@ -8,7 +8,7 @@ use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SAVE_VERSION: u32 = 5;
+pub const SAVE_VERSION: u32 = 6;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -262,6 +262,24 @@ pub struct Trip {
     /// full cause-chain log (combat is pure, so re-simulating gives the identical result).
     #[serde(skip)]
     pub inputs: Vec<(u16, crate::mech::combat::BattleInput)>,
+    /// The tile the squad stopped in front of: the fight there is not a sure win, so it was not
+    /// fought (design v2: routes stop at walls). `None` when the route was walked to the end or
+    /// the trip was a hard fight.
+    #[serde(default)]
+    pub stopped_at: Option<u16>,
+    /// Report of the fight the squad turned down at `stopped_at` (why it stopped). Stored again
+    /// only when the stop moves, so walls do not fill the report buffer.
+    #[serde(default)]
+    pub stop_report: Option<u32>,
+    /// How the turned-down fight would have ended.
+    #[serde(default)]
+    pub stop_outcome: Option<Outcome>,
+    /// A hard fight (`Command::Assault`): every tile fought, a loss always sends the squad to rest.
+    #[serde(default)]
+    pub forced: bool,
+    /// No hostile tile fought: the trip only walked owned ground (yields `patrol_scrap`).
+    #[serde(default)]
+    pub patrol: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -279,6 +297,9 @@ pub struct Squad {
     /// Waiting after a defeat before the next trip.
     #[serde(default)]
     pub rest_until: i64,
+    /// The next trip is a hard fight (`Command::Assault`); cleared when that trip is planned.
+    #[serde(default)]
+    pub force: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -509,6 +530,16 @@ pub struct TideEntry {
 }
 
 impl GameState {
+    /// 进账：加上 `r`，超出仓库上限（`storage_cap`）的部分丢掉。所有进账都走这里（设计 v2：
+    /// 仓库满了，库存不再涨，分数和威胁也跟着停）。已经在上限以上的不会被扣掉。
+    pub fn gain(&mut self, r: &Resources) {
+        let before = self.cycle.resources.clone();
+        self.cycle.resources.add(r);
+        self.cycle
+            .resources
+            .cap_to(&before, &crate::data::balance().storage_cap);
+    }
+
     pub fn alloc_id(&mut self) -> u32 {
         let id = self.next_id;
         self.next_id += 1;

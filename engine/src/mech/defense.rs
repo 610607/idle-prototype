@@ -189,7 +189,9 @@ pub fn surge_setup(
         .and_then(|d| d.policy.as_deref())
         .and_then(|p| c.policy(p));
 
-    let mut mult: i64 = pressure::surge_base_bp(cy);
+    // 敌人的种类看来潮从哪一格来；强弱看威胁（统计分数），不看那一格在哪。
+    let (r, level_mult) = pressure::surge(state);
+    let mut mult: i64 = level_mult * b.surge_strength_bp as i64 / 10_000;
     if let Some(r) = &src.rift {
         if src.owned {
             mult = mult * b.rift_surge_bp[r.dial.idx()] as i64 / 10_000;
@@ -198,8 +200,6 @@ pub fn surge_setup(
     if let Some(p) = policy {
         mult = mult * (10_000 + p.surge_bp) as i64 / 10_000;
     }
-    let r = pressure::surge_level(cy, source);
-    mult = pressure::surge_level_adjust(mult, r);
     let waves: Vec<Vec<UnitSpec>> = src
         .waves
         .iter()
@@ -380,7 +380,7 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
                 ..Default::default()
             }
         };
-        state.cycle.resources.add(&residue);
+        state.gain(&residue);
         if let Some(d) = district {
             let dd = &mut state.cycle.districts[d as usize];
             dd.trust = (dd.trust + 1).min(100);

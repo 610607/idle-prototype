@@ -61,6 +61,7 @@ pub enum Reach {
 pub fn reach(cmd: &Command) -> Reach {
     match cmd {
         Command::SetRoute { .. }
+        | Command::Assault { .. }
         | Command::Garrison { .. }
         | Command::Claim { .. }
         | Command::Build { .. }
@@ -101,6 +102,7 @@ pub fn samples() -> Vec<Command> {
             squad: 4,
             members: vec![1, 2, 3],
         },
+        Command::Assault { squad: 4 },
         Command::Garrison {
             op: 2,
             tile: Some(97),
@@ -864,10 +866,17 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             "cli.board.power",
             supply = v.power.0,
             demand = v.power.1,
-            eff = v.power.2 / 100,
-            att = v.attention.0,
-            deep = v.attention.1,
-            mult = v.attention.2 / 100
+            eff = v.power.2 / 100
+        ),
+    );
+    line(
+        &mut o,
+        t!(
+            "cli.board.threat",
+            threat = v.threat.value,
+            level = format!("{:.1}", v.threat.level_bp as f64 / 10_000.0),
+            mult = v.threat.strength_bp / 100,
+            next = v.threat.next
         ),
     );
     let alerts: Vec<String> = v
@@ -979,7 +988,9 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
                     .iter()
                     .map(|x| format!("{}{}", x.label, outcome(Some(x.outcome))))
                     .collect();
-                if r.is_empty() {
+                let mut text = if trip.patrol {
+                    t!("cli.board.trip_patrol", scrap = trip.loot.scrap)
+                } else if r.is_empty() {
                     t!("cli.board.trip_none", outcome = outcome(Some(trip.outcome)))
                 } else {
                     t!(
@@ -987,10 +998,23 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
                         outcome = outcome(Some(trip.outcome)),
                         results = r.join(" ")
                     )
+                };
+                if trip.forced {
+                    text += &t!("cli.board.trip_forced");
                 }
+                if let Some(st) = &trip.stopped {
+                    text += &t!(
+                        "cli.board.stopped",
+                        tile = st.label,
+                        outcome = outcome(st.outcome)
+                    );
+                }
+                text
             })
             .unwrap_or_else(|| t!("cli.board.never"));
-        let state = if s.running.is_some() {
+        let state = if s.force {
+            t!("cli.board.force_next")
+        } else if s.running.is_some() {
             t!("cli.board.on_road")
         } else if s.rest_until > v.time {
             t!("cli.board.resting", m = (s.rest_until - v.time) / 60)
@@ -1404,9 +1428,7 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
                         list(&foes)
                     },
                     outcome = outcome(p.outcome),
-                    minutes = p.minutes,
-                    before = p.attention_before,
-                    after = p.attention_after
+                    minutes = p.minutes
                 ),
             ));
         }
@@ -1666,6 +1688,19 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
     for s in &v.squads {
         if s.members.is_empty() {
             continue;
+        }
+        if let Some(st) = s.last.as_ref().and_then(|l| l.stopped.as_ref()) {
+            if !s.force {
+                m.push(Item {
+                    label: t!(
+                        "cli.menu.assault",
+                        squad = s.name,
+                        tile = st.label,
+                        outcome = outcome(st.outcome)
+                    ),
+                    cmd: Command::Assault { squad: s.id },
+                });
+            }
         }
         for (route, label) in route_options(e, s.id) {
             if route == s.route {

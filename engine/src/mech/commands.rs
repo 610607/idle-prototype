@@ -22,6 +22,11 @@ pub enum Command {
         squad: u32,
         members: Vec<u32>,
     },
+    /// Hard fight: the squad's next trip fights every tile on its route, even ones it would not
+    /// surely win (normally it stops in front of those). A loss sends the whole squad to rest.
+    Assault {
+        squad: u32,
+    },
     Garrison {
         op: u32,
         tile: Option<u16>,
@@ -139,6 +144,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         Command::ChooseMap { index } => sim::choose_map(state, *index),
         Command::SetRoute { squad, route } => actions::set_route(state, *squad, route),
         Command::SetSquad { squad, members } => actions::set_squad(state, *squad, members),
+        Command::Assault { squad } => actions::assault(state, *squad),
         Command::Garrison { op, tile } => actions::garrison(state, *op, *tile),
         Command::Claim { tile } => actions::claim(state, *tile),
         Command::Build { tile, facility } => actions::build(state, *tile, facility.as_deref()),

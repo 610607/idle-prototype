@@ -36,6 +36,9 @@ pub struct Policy {
     /// tactics tuned on previews of the frontier, the candidate queue kept moving, made-to-order
     /// recruits.
     pub tactics: bool,
+    /// Order a hard fight (`assault`) once at each new wall a squad stops in front of, when the
+    /// preview says the squad would only fall back as planned (the explorer's scouting).
+    pub assault: bool,
 }
 
 /// What a persona puts first. Each focus other than `Expand` uses commands the reference play
@@ -65,6 +68,7 @@ impl Policy {
         research: true,
         focus: Focus::Expand,
         tactics: false,
+        assault: false,
     };
 
     /// `GREEDY`, with research off when the environment sets `BOT_NORESEARCH` (the switch the
@@ -87,6 +91,8 @@ pub struct Bot {
     rerolled: Option<u32>,
     /// Turns in a row the cautious play has held its claims.
     waited: u32,
+    /// Walls already fought through once (`Policy::assault`).
+    assaulted: std::collections::BTreeSet<u16>,
 }
 
 /// One turn by `Policy::from_env`, for scripts that keep no count of commands.
@@ -160,6 +166,7 @@ impl Bot {
             turn: 0,
             rerolled: None,
             waited: 0,
+            assaulted: Default::default(),
         }
     }
 
@@ -294,15 +301,28 @@ impl Bot {
                     .route
                     .iter()
                     .all(|t| v2.tiles[*t as usize].owned || v2.tiles[*t as usize].claimable);
-            if !sq.members.is_empty() && stale {
+            // Stopped at a wall: look for a route it wins (keep patrolling if there is none).
+            let wall = sq.last.as_ref().and_then(|l| l.stopped.as_ref());
+            if !sq.members.is_empty() && (stale || wall.is_some()) {
                 if let Some(r) = route_for(self.policy.deep_first, e, s.id) {
-                    let _ = self.act(
-                        e,
-                        &Command::SetRoute {
-                            squad: s.id,
-                            route: r,
-                        },
-                    );
+                    if r != sq.route {
+                        let _ = self.act(
+                            e,
+                            &Command::SetRoute {
+                                squad: s.id,
+                                route: r,
+                            },
+                        );
+                    }
+                }
+            }
+            if let (true, Some(w)) = (self.policy.assault, wall) {
+                let mild = w.outcome == Some(idle_engine::mech::combat::Outcome::Planned);
+                if mild && !sq.force && !self.assaulted.contains(&w.tile) {
+                    let tile = w.tile;
+                    if self.act(e, &Command::Assault { squad: s.id }).is_ok() {
+                        self.assaulted.insert(tile);
+                    }
                 }
             }
         }

@@ -272,6 +272,10 @@ export interface TripView {
   results: TileResultView[];
   loot: Resources;
   drops: string[];
+  /** Where the squad turned back: the next fight is not a sure win. */
+  stopped: { tile: number; label: string; outcome: Outcome | null; report: number | null } | null;
+  forced: boolean;
+  patrol: boolean;
 }
 
 export interface SquadView {
@@ -284,6 +288,7 @@ export interface SquadView {
   rest_until: number;
   trips: number;
   deepest: number;
+  force: boolean;
 }
 
 export interface FacilityOption {
@@ -396,7 +401,7 @@ export interface View {
   resources: Resources;
   income: [number, number, number, number];
   power: [number, number, number];
-  attention: [number, number, number];
+  threat: { value: number; level_bp: number; strength_bp: number; next: number };
   self_sufficient: boolean;
   border_count: number;
   tiles: TileView[];
@@ -547,8 +552,6 @@ export interface RoutePreview {
   minutes: number;
   loot: Resources;
   drops: string[];
-  attention_before: number;
-  attention_after: number;
 }
 
 // ---- combat.rs ----
@@ -654,6 +657,7 @@ export interface ContentView {
 export type Command =
   | { cmd: 'choose_map'; index: number }
   | { cmd: 'set_route'; squad: number; route: number[] }
+  | { cmd: 'assault'; squad: number }
   | { cmd: 'set_squad'; squad: number; members: number[] }
   | { cmd: 'garrison'; op: number; tile: number | null }
   | { cmd: 'claim'; tile: number }
