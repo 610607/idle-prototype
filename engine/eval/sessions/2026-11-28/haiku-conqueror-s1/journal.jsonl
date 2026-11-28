@@ -35,3 +35,14 @@
 {"t":129600,"cmd":{"cmd":"garrison","op":1,"tile":126}}
 {"t":144000,"cmd":{"cmd":"upgrade","track":"arms"}}
 {"t":158400,"cmd":{"cmd":"claim_task","task":"hire"}}
+{"t":158400,"cmd":{"cmd":"set_route","squad":4,"route":[128]}}
+{"t":158400,"cmd":{"cmd":"set_squad","squad":4,"members":[2,66]}}
+{"t":172800,"cmd":{"cmd":"claim_task","task":"reaction"}}
+{"t":172800,"cmd":{"cmd":"claim","tile":128}}
+{"t":172800,"cmd":{"cmd":"set_route","squad":4,"route":[83]}}
+{"t":187200,"cmd":{"cmd":"claim","tile":83}}
+{"t":187200,"cmd":{"cmd":"set_route","squad":4,"route":[82]}}
+{"t":187200,"cmd":{"cmd":"garrison","op":3,"tile":128}}
+{"t":201600,"cmd":{"cmd":"garrison","op":3,"tile":83}}
+{"t":201600,"cmd":{"cmd":"set_route","squad":4,"route":[84]}}
+{"t":201600,"cmd":{"cmd":"upgrade","track":"arms"}}

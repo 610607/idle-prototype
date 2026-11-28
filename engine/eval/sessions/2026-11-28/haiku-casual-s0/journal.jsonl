@@ -26,3 +26,8 @@
 {"t":187200,"cmd":{"cmd":"upgrade","track":"drills"}}
 {"t":201600,"cmd":{"cmd":"claim_task","task":"hire"}}
 {"t":201600,"cmd":{"cmd":"upgrade","track":"arms"}}
+{"t":216000,"cmd":{"cmd":"upgrade","track":"armor"}}
+{"t":230400,"cmd":{"cmd":"build","tile":96,"facility":"workshop"}}
+{"t":244800,"cmd":{"cmd":"upgrade","track":"drills"}}
+{"t":259200,"cmd":{"cmd":"upgrade","track":"arms"}}
+{"t":288000,"cmd":{"cmd":"upgrade","track":"arms"}}

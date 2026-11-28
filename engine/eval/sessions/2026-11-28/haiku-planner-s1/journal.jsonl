@@ -30,3 +30,13 @@
 {"t":115200,"cmd":{"cmd":"research"}}
 {"t":115200,"cmd":{"cmd":"upgrade","track":"arms"}}
 {"t":115200,"cmd":{"cmd":"upgrade","track":"armor"}}
+{"t":129600,"cmd":{"cmd":"build","tile":98,"facility":"scrapyard"}}
+{"t":129600,"cmd":{"cmd":"pick_doctrine","doctrine":"burst"}}
+{"t":129600,"cmd":{"cmd":"garrison","op":3,"tile":98}}
+{"t":144000,"cmd":{"cmd":"upgrade","track":"drills"}}
+{"t":158400,"cmd":{"cmd":"set_route","squad":4,"route":[127]}}
+{"t":172800,"cmd":{"cmd":"claim_task","task":"hire"}}
+{"t":172800,"cmd":{"cmd":"claim","tile":127}}
+{"t":172800,"cmd":{"cmd":"upgrade","track":"arms"}}
+{"t":172800,"cmd":{"cmd":"upgrade","track":"armor"}}
+{"t":172800,"cmd":{"cmd":"upgrade","track":"drills"}}
