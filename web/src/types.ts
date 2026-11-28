@@ -293,6 +293,24 @@ export interface SquadView {
   trips: number;
   deepest: number;
   force: boolean;
+  /** A manual dispatch: the squad goes once and stands by when it is back. */
+  once?: boolean;
+}
+
+/** A department (engine/content/departments.json): founded or how far along its condition is. */
+export interface DepartmentView {
+  id: string;
+  name: string;
+  desc: string;
+  founded: boolean;
+  ready: boolean;
+  can_found: boolean;
+  cond: string;
+  have: number;
+  need: number;
+  cost: Resources;
+  /** False while what it stands for is not built yet (it grants nothing). */
+  wired: boolean;
 }
 
 export interface FacilityOption {
@@ -433,6 +451,8 @@ export interface View {
   locked?: UnlockSystem[];
   /** The next one or two unlocks and how far along they are (absent when everything is open). */
   next?: NextUnlock[];
+  /** Departments the player can see. */
+  departments: DepartmentView[];
   /** The part of the board a fixed map uses (absent: the whole board). */
   bounds?: Bounds;
   /** A fixed map's pace (absent on random maps). */
@@ -736,4 +756,6 @@ export type Command =
   | { cmd: 'pick_doctrine'; doctrine: string }
   | { cmd: 'archive'; doctrine: string; on: boolean }
   | { cmd: 'upgrade'; track: string }
-  | { cmd: 'collapse' };
+  | { cmd: 'collapse' }
+  | { cmd: 'dispatch'; squad: number; tile: number }
+  | { cmd: 'found_department'; department: string };

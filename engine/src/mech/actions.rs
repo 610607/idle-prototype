@@ -598,6 +598,28 @@ pub fn set_route(state: &mut GameState, squad: u32, route: &[u16]) -> ActResult 
     let s = state.squad_mut(squad).unwrap();
     s.route = route.to_vec();
     s.trip = None;
+    s.once = false;
+    let now = state.time;
+    crate::mech::routes::try_start(state, squad, now);
+    Ok(())
+}
+
+/// Manual dispatch: fight `tile` once. Validated and planned exactly like a one-tile route (the
+/// squad turns back in front of a fight it would not win); when the trip comes back the route is
+/// cleared and the squad stands by.
+pub fn dispatch(state: &mut GameState, squad: u32, tile: u16) -> ActResult {
+    let s = state.cycle.squad(squad).ok_or_else(|| t!("err.no_squad"))?;
+    if s.trip.is_some() {
+        return Err(t!("err.squad_out", squad = s.name.clone()));
+    }
+    let members: Vec<u32> = state.cycle.members(squad).collect();
+    if members.is_empty() {
+        return Err(t!("err.squad_empty"));
+    }
+    crate::mech::routes::validate(state, &members, &[tile])?;
+    let s = state.squad_mut(squad).unwrap();
+    s.route = vec![tile];
+    s.once = true;
     let now = state.time;
     crate::mech::routes::try_start(state, squad, now);
     Ok(())

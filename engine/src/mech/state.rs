@@ -9,7 +9,7 @@ use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SAVE_VERSION: u32 = 7;
+pub const SAVE_VERSION: u32 = 8;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -400,6 +400,10 @@ pub struct Squad {
     /// The next trip is a hard fight (`Command::Assault`); cleared when that trip is planned.
     #[serde(default)]
     pub force: bool,
+    /// The route is a manual dispatch (`Command::Dispatch`): it is cleared when the trip comes
+    /// back, so the squad goes once and is idle afterwards.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub once: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -531,6 +535,10 @@ pub struct Cycle {
     /// The fixed map in play (`maps.json`); none on a random map.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub map: Option<String>,
+    /// Player actions this cycle, for `Condition::Done` (unlocks and departments). Kept whether or
+    /// not the game has unlock state, so departments can be founded in every game.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub done: BTreeMap<crate::data::unlocks::Action, u32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -569,6 +577,9 @@ pub struct Org {
     /// 见习任务 whose reward has been claimed.
     #[serde(default)]
     pub tasks_done: Vec<String>,
+    /// Departments founded (`departments.json`): they stay, and every cycle starts with them.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub departments: std::collections::BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -703,6 +714,16 @@ impl GameState {
         if self.events.len() > 200 {
             let drop = self.events.len() - 200;
             self.events.drain(0..drop);
+        }
+    }
+
+    /// Put a report back under the number it had (see `routes::plan_trip`): no new number.
+    pub fn restore_report(&mut self, id: u32, report: BattleReport) {
+        if self.tide_log.is_none() {
+            self.reports.push((id, report));
+            if self.reports.len() > 40 {
+                self.reports.remove(0);
+            }
         }
     }
 

@@ -271,5 +271,18 @@
   "cli.session.err.replay": "命令日志第 {n} 行重放时被拒：{err}",
   "cli.session.err.io": "读写 {path} 失败：{err}",
   "cli.session.err.arg": "参数不对：{arg}",
-  "cli.session.err.score_arg": "--score 要写成 维度=分数:'依据'，收到的是「{s}」"
+  "cli.session.err.score_arg": "--score 要写成 维度=分数:'依据'，收到的是「{s}」",
+  "cli.cmd.dispatch": "派小队去打一格，打一次就回来，回来后不再出门（格子要挨着领地）",
+  "cli.cmd.found_department": "成立一个部门（条件和花费见局面里的[部门]）；成立过的部门以后每一轮开局都在，不用再花钱",
+  "cli.dispatch.option": "{tile}（第{ring}圈，巢穴强度{danger}%，镇守度{warden}，{terrain}；敌人：{foes}；预演：{outcome}，{minutes}分钟）",
+  "cli.dispatch.option_secs": "{tile}（第{ring}档，巢穴强度{danger}%，镇守度{warden}，{terrain}；敌人：{foes}；预演：{outcome}，{seconds}秒）",
+  "cli.menu.dispatch": "{squad} 派去打{target}",
+  "cli.board.departments": "[部门]",
+  "cli.board.dept_founded": "  {name}：已成立。{desc}",
+  "cli.board.dispatch_once": "（派遣，回来就停）",
+  "cli.menu.found": "成立{name}（花费：{cost}）：{desc}",
+  "cli.board.dept_ready": "  {name}：可以成立（花费：{cost}）。{desc}",
+  "cli.board.dept_ready_short": "  {name}：条件够了，材料还不够（花费：{cost}）。{desc}",
+  "cli.board.dept_progress": "  {name}：{cond}（{have}/{need}），成立花费：{cost}。{desc}",
+  "cli.board.dept_free": "无"
 }

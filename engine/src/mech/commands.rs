@@ -123,6 +123,16 @@ pub enum Command {
         track: String,
     },
     Collapse,
+    /// Send a squad to fight one tile once (validated like a one-tile route, previewed the same
+    /// way); it comes back and is idle, with no route.
+    Dispatch {
+        squad: u32,
+        tile: u16,
+    },
+    /// Found a department (`departments.json`): it stays with the organisation.
+    FoundDepartment {
+        department: String,
+    },
 }
 
 impl Command {
@@ -199,6 +209,8 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         Command::ClaimTask { task } => crate::mech::tasks::claim(state, task),
         Command::Upgrade { track } => crate::mech::armory::upgrade(state, track),
         Command::Collapse => sim::collapse(state),
+        Command::Dispatch { squad, tile } => actions::dispatch(state, *squad, *tile),
+        Command::FoundDepartment { department } => crate::mech::unlocks::found(state, department),
     };
     if r.is_ok() {
         state.revision += 1;
@@ -213,8 +225,9 @@ impl Command {
     pub fn system(&self) -> Option<System> {
         match self {
             Command::ChooseMap { .. } => None,
-            // Until S5's manual dispatch: a route of one tile stands in for it.
-            Command::SetRoute { route, .. } if route.len() <= 1 => Some(System::Dispatch),
+            Command::Dispatch { .. } => Some(System::Dispatch),
+            // Founding is always possible; each department's own `shown_after` gates it.
+            Command::FoundDepartment { .. } => None,
             Command::SetRoute { .. } | Command::Assault { .. } => Some(System::Routes),
             Command::SetSquad { .. } => Some(System::Squad),
             Command::Garrison { .. } => Some(System::Garrison),

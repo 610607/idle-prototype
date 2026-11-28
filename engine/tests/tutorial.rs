@@ -117,9 +117,9 @@ fn the_first_fight_takes_seconds_and_the_tile_can_be_claimed() {
     let mut e = tutorial(0);
     let north = hq(&e.state) - geom::SIZE as u16;
     let sq = e.state.cycle.squads().next().unwrap().id;
-    e.command(&Command::SetRoute {
+    e.command(&Command::Dispatch {
         squad: sq,
-        route: vec![north],
+        tile: north,
     })
     .unwrap();
     let trip = e.state.cycle.squad(sq).unwrap().trip.clone().unwrap();
@@ -237,14 +237,10 @@ fn the_gate_needs_a_second_operative() {
     }
 }
 
-/// Win the fight on `tile` with the first squad (a one-tile route), then claim it.
+/// Win the fight on `tile` with the first squad (a manual dispatch), then claim it.
 fn win_and_claim(e: &mut Engine, tile: u16) {
     let sq = e.state.cycle.squads().next().unwrap().id;
-    e.command(&Command::SetRoute {
-        squad: sq,
-        route: vec![tile],
-    })
-    .unwrap();
+    e.command(&Command::Dispatch { squad: sq, tile }).unwrap();
     let t = e.state.time;
     e.advance(t + 6);
     assert!(e.state.cycle.is_claimable(tile), "{}", geom::label(tile));
@@ -265,11 +261,12 @@ fn the_tutorial_opens_systems_as_chapter_one_goes() {
     let v = e.view();
     let open: Vec<System> = System::ALL.into_iter().filter(|s| v.shows(*s)).collect();
     assert_eq!(open, vec![System::Dispatch, System::Claim]);
-    assert_eq!(v.next.len(), 1);
+    assert_eq!(v.next.len(), 2);
     assert_eq!(
         (v.next[0].id.as_str(), v.next[0].have, v.next[0].need),
         ("build", 0, 3)
     );
+    assert_eq!(v.next[1].id, "routes", "founding the dispatch office");
     let h = hq(&e.state);
     let (x, y) = geom::xy(h);
     let at = |dx: i32, dy: i32| geom::idx(x + dx, y + dy).unwrap();
@@ -306,6 +303,74 @@ fn the_tutorial_opens_systems_as_chapter_one_goes() {
     let v = e.view();
     assert!(v.shows(System::Hire) && v.shows(System::Squad));
     assert!(e.allows(&Command::Hire { candidate: 1 }));
-    assert!(v.next.is_empty(), "the rest waits for chapter two (never)");
+    let next: Vec<&str> = v.next.iter().map(|n| n.id.as_str()).collect();
+    assert_eq!(next, ["routes"], "the rest waits for chapter two (never)");
     assert!(!v.shows(System::Research) && !v.shows(System::Routes));
+}
+
+/// Chapter one's opening by hand: five dispatches next to the HQ (each fights once and the
+/// squad stands by), claims, then the dispatch office is founded and the first route is set.
+#[test]
+fn chapter_one_opening_dispatches_founds_the_dispatch_office_and_sets_a_route() {
+    use idle_engine::data::unlocks::System;
+    let mut e = tutorial(0);
+    let sq = e.state.cycle.squads().next().unwrap().id;
+    let h = hq(&e.state);
+    let (x, y) = geom::xy(h);
+    let at = |dx: i32, dy: i32| geom::idx(x + dx, y + dy).unwrap();
+    let route = Command::SetRoute {
+        squad: sq,
+        route: vec![at(0, -1)],
+    };
+    assert!(!e.allows(&route), "routes wait for the dispatch office");
+    let found = Command::FoundDepartment {
+        department: "dispatch_office".into(),
+    };
+    let dept = |e: &mut Engine| {
+        e.view()
+            .departments
+            .into_iter()
+            .find(|d| d.id == "dispatch_office")
+            .unwrap()
+    };
+    assert_eq!(
+        e.view().departments.len(),
+        1,
+        "only the dispatch office in chapter one"
+    );
+    for (k, tile) in [at(0, -1), at(-1, -1), at(-2, -1), at(1, -1), at(-2, -2)]
+        .into_iter()
+        .enumerate()
+    {
+        let d = dept(&mut e);
+        assert_eq!((d.have, d.need, d.ready), (k as i32, 5, false));
+        assert!(e.command(&found).is_err());
+        win_and_claim(&mut e, tile);
+        let s = e.state.cycle.squad(sq).unwrap();
+        assert!(
+            s.trip.is_none() && s.route.is_empty(),
+            "back and standing by"
+        );
+        assert_eq!(s.trips, k as u32 + 1);
+    }
+    let d = dept(&mut e);
+    assert!(d.ready && d.can_found, "{:?}", e.state.cycle.resources);
+    let scrap = e.state.cycle.resources.scrap;
+    e.command(&found).unwrap();
+    assert_eq!(scrap - e.state.cycle.resources.scrap, d.cost.scrap);
+    let v = e.view();
+    assert!(v.shows(System::Routes));
+    assert!(dept(&mut e).founded);
+    assert!(v.next.iter().all(|n| n.id != "routes"));
+    let north = at(0, -2);
+    e.command(&Command::SetRoute {
+        squad: sq,
+        route: vec![at(0, -1), north],
+    })
+    .unwrap();
+    let t = e.state.time;
+    e.advance(t + 30);
+    let s = e.state.cycle.squad(sq).unwrap();
+    assert!(s.trips >= 7, "the route runs by itself: {} trips", s.trips);
+    assert_eq!(s.route, vec![at(0, -1), north]);
 }

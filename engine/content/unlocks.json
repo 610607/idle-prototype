@@ -15,7 +15,7 @@
       "when": { "own_former": { "former": "housing", "n": 1 } },
       "after": "build"
     },
-    { "id": "routes", "gates": ["routes"], "when": "never" },
+    { "id": "routes", "gates": ["routes"], "when": { "department": { "id": "dispatch_office" } } },
     {
       "id": "rules",
       "gates": ["rules"],

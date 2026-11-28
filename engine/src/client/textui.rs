@@ -62,6 +62,8 @@ pub enum Reach {
 pub fn reach(cmd: &Command) -> Reach {
     match cmd {
         Command::SetRoute { .. }
+        | Command::Dispatch { .. }
+        | Command::FoundDepartment { .. }
         | Command::Assault { .. }
         | Command::Garrison { .. }
         | Command::Claim { .. }
@@ -184,6 +186,10 @@ pub fn samples() -> Vec<Command> {
             track: "arms".into(),
         },
         Command::Collapse,
+        Command::Dispatch { squad: 4, tile: 97 },
+        Command::FoundDepartment {
+            department: "dispatch_office".into(),
+        },
     ]
 }
 
@@ -1107,7 +1113,9 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
                 } else {
                     route.join("→")
                 },
-                stale = if stale {
+                stale = if s.once {
+                    t!("cli.board.dispatch_once")
+                } else if stale {
                     t!("cli.board.stale")
                 } else {
                     String::new()
@@ -1142,6 +1150,7 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         })
         .collect();
     line(&mut o, t!("cli.board.front", tiles = front.join(" ")));
+    departments(&mut o, &v);
     line(
         &mut o,
         t!(
@@ -1329,6 +1338,51 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     }
     next_lines(&mut o, &v);
     o
+}
+
+/// The departments: founded, ready, or how far along (with what founding costs).
+fn departments(o: &mut String, v: &View) {
+    if v.departments.is_empty() {
+        return;
+    }
+    line(o, t!("cli.board.departments"));
+    for d in &v.departments {
+        let cost = if cost_text(&d.cost).is_empty() {
+            t!("cli.board.dept_free")
+        } else {
+            cost_text(&d.cost)
+        };
+        line(
+            o,
+            if d.founded {
+                t!("cli.board.dept_founded", name = d.name, desc = d.desc)
+            } else if d.can_found {
+                t!(
+                    "cli.board.dept_ready",
+                    name = d.name,
+                    cost = cost,
+                    desc = d.desc
+                )
+            } else if d.ready {
+                t!(
+                    "cli.board.dept_ready_short",
+                    name = d.name,
+                    cost = cost,
+                    desc = d.desc
+                )
+            } else {
+                t!(
+                    "cli.board.dept_progress",
+                    name = d.name,
+                    cond = d.cond,
+                    have = d.have,
+                    need = d.need,
+                    cost = cost,
+                    desc = d.desc
+                )
+            },
+        );
+    }
 }
 
 /// The unlocks the player is working toward (none when everything is open).
@@ -1550,6 +1604,57 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
     }
     out
 }
+
+/// One-tile targets a squad standing by can be dispatched to, nearest first, with the preview.
+fn dispatch_options(e: &mut Engine, squad: u32) -> Vec<(u16, String)> {
+    let v = e.view();
+    let mut targets: Vec<_> = v
+        .tiles
+        .iter()
+        .filter(|x| {
+            x.revealed
+                && !x.owned
+                && !x.claimable
+                && x.terrain != "barrier"
+                && !x.enemies.is_empty()
+                && geom::neighbors(x.i).any(|n| v.tiles[n as usize].owned)
+        })
+        .map(|x| (x.ring, x.i))
+        .collect();
+    targets.sort();
+    let mut out = vec![];
+    for (ring, tile) in targets.into_iter().take(DISPATCH_SHOWN) {
+        let p = e.preview_route(squad, &[tile]);
+        if !p.ok {
+            continue;
+        }
+        let tv = &v.tiles[tile as usize];
+        let key = if p.seconds.is_some() {
+            "cli.dispatch.option_secs"
+        } else {
+            "cli.dispatch.option"
+        };
+        out.push((
+            tile,
+            t!(
+                key,
+                tile = tv.label,
+                ring = ring,
+                danger = tv.danger_pct,
+                warden = tv.warden,
+                terrain = terrain(tv.terrain),
+                foes = foes_of(tv),
+                outcome = outcome(p.outcome),
+                minutes = p.minutes,
+                seconds = p.seconds.unwrap_or(0)
+            ),
+        ));
+    }
+    out
+}
+
+/// Most dispatch targets listed per squad.
+const DISPATCH_SHOWN: usize = 6;
 
 pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
     let v = e.view();
@@ -1818,9 +1923,34 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
             });
         }
     }
+    for d in v.departments.iter().filter(|d| d.can_found) {
+        m.push(Item {
+            label: t!(
+                "cli.menu.found",
+                name = d.name,
+                cost = if cost_text(&d.cost).is_empty() {
+                    t!("cli.board.dept_free")
+                } else {
+                    cost_text(&d.cost)
+                },
+                desc = d.desc
+            ),
+            cmd: Command::FoundDepartment {
+                department: d.id.clone(),
+            },
+        });
+    }
     for s in &v.squads {
         if s.members.is_empty() {
             continue;
+        }
+        if s.running.is_none() && v.shows(System::Dispatch) {
+            for (tile, label) in dispatch_options(e, s.id) {
+                m.push(Item {
+                    label: t!("cli.menu.dispatch", squad = s.name, target = label),
+                    cmd: Command::Dispatch { squad: s.id, tile },
+                });
+            }
         }
         if let Some(st) = s.last.as_ref().and_then(|l| l.stopped.as_ref()) {
             if !s.force {
@@ -1834,6 +1964,9 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
                     cmd: Command::Assault { squad: s.id },
                 });
             }
+        }
+        if !v.shows(System::Routes) {
+            continue;
         }
         for (route, label) in route_options(e, s.id) {
             if route == s.route {
@@ -2198,7 +2331,13 @@ mod tests {
         let reg = &content().unlocks;
         for c in samples() {
             match c.system() {
-                None => assert!(matches!(c, Command::ChooseMap { .. }), "{c:?} is ungated"),
+                None => assert!(
+                    matches!(
+                        c,
+                        Command::ChooseMap { .. } | Command::FoundDepartment { .. }
+                    ),
+                    "{c:?} is ungated"
+                ),
                 Some(s) => assert!(reg.of_system(s).is_some(), "{c:?}: {s:?} has no unlock"),
             }
         }
@@ -2233,8 +2372,19 @@ mod tests {
         assert!(items.iter().all(|i| e.allows(&i.cmd)));
         assert!(items
             .iter()
-            .all(|i| matches!(&i.cmd, Command::Claim { .. } | Command::SetRoute { .. })));
+            .all(|i| matches!(&i.cmd, Command::Claim { .. } | Command::Dispatch { .. })));
+        assert!(items
+            .iter()
+            .any(|i| matches!(&i.cmd, Command::Dispatch { .. })));
         let text = board(&mut e, 0, &opts);
+        assert!(text.contains(&t!("cli.board.departments")));
+        let dept = content().departments.get("dispatch_office").unwrap();
+        assert!(text.contains(&dept.name));
+        let hidden = content().departments.get("research_office").unwrap();
+        assert!(
+            !text.contains(&hidden.name),
+            "later departments stay hidden"
+        );
         assert!(text.contains(&t!("cli.board.next")));
         let build = &content().unlocks.get("build").unwrap();
         assert!(text.contains(&build.hint));

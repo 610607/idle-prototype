@@ -207,5 +207,10 @@
   "unlock.cond.done.surge_held": "守住 {n} 次来潮",
   "unlock.cond.done.route_win": "打赢 {n} 场",
   "unlock.cond.won_tile": "打赢 {tile}",
-  "unlock.cond.department": "成立{name}"
+  "unlock.cond.department": "成立{name}",
+  "err.squad_out": "{squad}正在外面，等它回来",
+  "err.squad_empty": "小队里没有人",
+  "err.no_department": "没有这个部门",
+  "err.department_founded": "{name}已经成立了",
+  "err.department_not_ready": "还没到成立的条件（{have}/{need}）"
 }

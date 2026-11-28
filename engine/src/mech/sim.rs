@@ -126,6 +126,7 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         armory: Default::default(),
         unlocks: None,
         map: None,
+        done: Default::default(),
     }
 }
 
@@ -155,6 +156,7 @@ pub fn new_game(seed: u64, now: i64, device: &str) -> GameState {
             known_doctrines: vec![],
             codex: Default::default(),
             tasks_done: vec![],
+            departments: Default::default(),
         },
         cycle: empty_cycle(1, pv),
         events: vec![],
@@ -251,6 +253,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
             trips: 0,
             rest_until: 0,
             force: false,
+            once: false,
         });
     }
     for op in ops.iter_mut() {
@@ -266,6 +269,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
     // Sealed equipment comes back out; filed doctrines start held.
     state.cycle.inventory = state.org.sealed.clone();
     state.cycle.doctrines = state.org.archive.clone();
+    crate::mech::unlocks::seat_departments(state);
     let n = state.cycle.number;
     state.event(
         EventKind::Info,
@@ -305,6 +309,8 @@ pub fn start_map(state: &mut GameState, map: &str) -> Result<(), String> {
     cy.modifier = String::new();
     cy.map = Some(m.id.clone());
     cy.unlocks = crate::mech::unlocks::start(&m.unlocks);
+    crate::mech::unlocks::seat_departments(state);
+    let cy = &mut state.cycle;
     cy.started_at = state.time;
     cy.tiles = g.tiles;
     cy.districts = g.districts;
@@ -349,6 +355,7 @@ pub fn start_map(state: &mut GameState, map: &str) -> Result<(), String> {
         trips: 0,
         rest_until: 0,
         force: false,
+        once: false,
     }];
     state.cycle.roster = ops.iter().map(|o| o.id).collect();
     for op in ops {

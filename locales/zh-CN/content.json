@@ -580,5 +580,17 @@
     "甲",
     "乙",
     "丙"
-  ]
+  ],
+  "department.dispatch_office.name": "调度部门",
+  "department.dispatch_office.desc": "有人专门排班以后，小队可以照一条路线自己一趟趟跑。",
+  "department.medical_office.name": "医务部门",
+  "department.medical_office.desc": "以后按一条线自动给队员用药。现在还没接上。",
+  "department.research_office.name": "研究部门",
+  "department.research_office.desc": "以后排研究的队列。现在还没接上。",
+  "department.planning_office.name": "规划部门",
+  "department.planning_office.desc": "以后管挪建筑、自动摆放和岗位。现在还没接上。",
+  "department.personnel_office.name": "人事部门",
+  "department.personnel_office.desc": "以后按条件自动招人。现在还没接上。",
+  "department.defense_office.name": "守备部门",
+  "department.defense_office.desc": "以后自动反击、存守备的阵型。现在还没接上。"
 }

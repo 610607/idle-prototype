@@ -179,6 +179,38 @@ export function PendingList() {
   );
 }
 
+/** Departments: founded, ready to found (a button), or how far along their condition is. */
+export function Departments() {
+  const { view, run } = useCtx();
+  if (!view.departments?.length) return null;
+  return (
+    <Section title={t('panels.dept.title')} icon="org" tone="hazard">
+      <div className="stack" style={{ gap: 6 }}>
+        {view.departments.map((d) => (
+          <div key={d.id} className="small">
+            <b>{d.name}</b>{' '}
+            {d.founded ? (
+              <span className="faint">{t('panels.dept.founded')}</span>
+            ) : (
+              <>
+                {t('panels.next.cond', { cond: d.cond, have: d.have, need: d.need })} <Cost cost={d.cost} have={view.resources} />
+              </>
+            )}
+            <div className="tiny faint">{d.desc}</div>
+            {d.founded ? null : d.can_found ? (
+              <button className="btn small primary" onClick={() => run({ cmd: 'found_department', department: d.id }, t('panels.dept.done', { name: d.name }))}>
+                {t('panels.dept.found')}
+              </button>
+            ) : (
+              <Bar value={d.have} max={d.need} />
+            )}
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 /** The next one or two unlocks and how far along they are; absent in games with everything open. */
 export function NextUnlocks() {
   const { view } = useCtx();

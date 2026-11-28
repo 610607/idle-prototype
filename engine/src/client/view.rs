@@ -428,6 +428,61 @@ pub struct SquadView {
     pub deepest: i32,
     /// A hard fight is ordered for the next trip.
     pub force: bool,
+    /// The route is a manual dispatch: the squad goes once and stands by when it is back.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub once: bool,
+}
+
+/// A department (`departments.json`): founded or not, and how far along its condition is.
+#[derive(Serialize, Clone, Debug)]
+pub struct DepartmentView {
+    pub id: String,
+    pub name: String,
+    pub desc: String,
+    pub founded: bool,
+    /// The condition is met (founding may still wait for materials).
+    pub ready: bool,
+    /// Founding it now would be accepted.
+    pub can_found: bool,
+    pub cond: String,
+    pub have: i32,
+    pub need: i32,
+    pub cost: Resources,
+    /// False while what it stands for is not built yet (it grants nothing).
+    pub wired: bool,
+}
+
+/// The departments the player can see (each one's `shown_after` is open), in file order.
+pub fn departments_view(state: &GameState) -> Vec<DepartmentView> {
+    use crate::mech::unlocks;
+    content()
+        .departments
+        .departments
+        .iter()
+        .filter(|d| unlocks::department_shown(state, d))
+        .map(|d| {
+            let founded = state.org.departments.contains(&d.id);
+            let (have, need) = if founded {
+                (1, 1)
+            } else {
+                unlocks::department_progress(state, d)
+            };
+            DepartmentView {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                desc: d.desc.clone(),
+                founded,
+                ready: founded || have >= need,
+                can_found: state.cycle.phase == Phase::Active
+                    && unlocks::department_check(state, &d.id).is_ok(),
+                cond: cond_text(&d.when),
+                have,
+                need,
+                cost: d.cost.clone(),
+                wired: d.wired,
+            }
+        })
+        .collect()
 }
 
 #[derive(Serialize)]
@@ -830,6 +885,8 @@ pub struct View {
     /// The next one or two unlocks and how far along they are; absent when everything is open.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub next: Vec<NextView>,
+    /// Departments the player can see (`departments_view`).
+    pub departments: Vec<DepartmentView>,
     /// The part of the board a fixed map uses; absent on random maps (the whole board).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Bounds>,
@@ -925,7 +982,7 @@ fn pending_system(kind: &str) -> Option<crate::data::unlocks::System> {
         "candidate" => Some(System::Hire),
         "policy" => Some(System::Policy),
         "defend" | "defend_more" => Some(System::Garrison),
-        "route" => Some(System::Dispatch),
+        "route" => Some(System::Routes),
         "research" => Some(System::Research),
         _ => None,
     }
@@ -1408,6 +1465,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             tasks: Gated::new(open(System::Tasks), || tasks_view(state)),
             locked: unlocks::locked_systems(state),
             next: next_view(state),
+            departments: departments_view(state),
             bounds: None,
             pace: None,
         };
@@ -1581,6 +1639,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             trips: s.trips,
             deepest: crate::mech::pressure::deepest_of(cy, &s.route),
             force: s.force,
+            once: s.once,
         })
         .collect();
 
@@ -1850,6 +1909,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         tasks: Gated::new(open(System::Tasks), || tasks_view(state)),
         locked: unlocks::locked_systems(state),
         next: next_view(state),
+        departments: departments_view(state),
         bounds: fixed.map(|f| f.0),
         pace: fixed.map(|f| f.1),
     }

@@ -486,5 +486,11 @@
   "report.stats.down": "（倒下）",
   "report.stats.tags": "标签施加/消耗：",
   "report.reactions": "反应",
-  "app.title": "裂隙城 · 原型"
+  "app.title": "裂隙城 · 原型",
+  "tile.enemy.dispatch": "派{name}去打一次",
+  "tile.enemy.dispatched": "{name}出发了",
+  "panels.dept.title": "部门",
+  "panels.dept.founded": "已成立",
+  "panels.dept.found": "成立",
+  "panels.dept.done": "成立了{name}"
 }

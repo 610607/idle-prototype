@@ -1,0 +1,52 @@
+{
+  "_doc": "Departments, see docs/unlocks.md. when: founding condition (an unlock condition); cost: what founding costs; grants: unlock ids it opens, every cycle once founded (founded departments live on the organisation and carry over, free); shown_after: an unlock that must be open before the department is listed at all (absent: always listed); wired: false while its automation is not built yet (it can be founded but grants nothing).",
+  "departments": [
+    {
+      "id": "dispatch_office",
+      "when": { "done": { "action": "dispatch", "n": 5 } },
+      "cost": { "scrap": 15 },
+      "grants": ["routes"],
+      "wired": true
+    },
+    {
+      "id": "medical_office",
+      "when": { "built": { "facility": "clinic", "n": 1 } },
+      "cost": {},
+      "grants": [],
+      "shown_after": "rules",
+      "wired": false
+    },
+    {
+      "id": "research_office",
+      "when": { "done": { "action": "research", "n": 1 } },
+      "cost": { "scrap": 30 },
+      "grants": [],
+      "shown_after": "research",
+      "wired": false
+    },
+    {
+      "id": "planning_office",
+      "when": { "done": { "action": "build", "n": 6 } },
+      "cost": { "scrap": 40 },
+      "grants": [],
+      "shown_after": "industry",
+      "wired": false
+    },
+    {
+      "id": "personnel_office",
+      "when": { "done": { "action": "hire", "n": 4 } },
+      "cost": { "scrap": 40 },
+      "grants": [],
+      "shown_after": "rules",
+      "wired": false
+    },
+    {
+      "id": "defense_office",
+      "when": { "done": { "action": "surge_held", "n": 3 } },
+      "cost": { "scrap": 40 },
+      "grants": [],
+      "shown_after": "garrison",
+      "wired": false
+    }
+  ]
+}

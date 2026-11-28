@@ -6,7 +6,7 @@ import type { Bounds, Command, View } from '../types';
 import { ReportSheet } from './BattleReport';
 import { Board, WASH } from './Board';
 import { ConfirmDialog, fmtClock, fmtRate, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, SQUAD_HEX, useCtx, type ConfirmAsk, type Ctx, type RouteEdit, type Sheet } from './common';
-import { CommandPanel, DistrictsPanel, HQPanel, NextUnlocks, PendingList, RosterPanel, TideStrip } from './Panels';
+import { CommandPanel, Departments, DistrictsPanel, HQPanel, NextUnlocks, PendingList, RosterPanel, TideStrip } from './Panels';
 import { Archive, ResearchPanel } from './Research';
 import { CandidateSheet, DistrictSheet, OpSheet, SquadSheet, TideSheet } from './Sheets';
 import { TileSheet } from './TileSheet';
@@ -218,6 +218,7 @@ export function App({ game }: { game: Game }) {
               {routeEdit ? <RouteEditor /> : null}
               <TideStrip />
               <NextUnlocks />
+              <Departments />
               <PendingList />
             </div>
             <div className="work">
