@@ -117,7 +117,7 @@ L1 指标（`calibrate` 输出）：
 | `calib.win_at_rho_ge_1.5`、`calib.win_at_rho_le_0.7` | 旧报告提出的检查：前者应 ≥ 90%，后者应 ≤ 10% |
 | `calib.residual.<职业>` | 带这个职业的队伍“实际胜 − 预测胜”的平均值；为正说明指数低估了它 |
 
-战力指数的定义沿用 `docs/balance-curves-research.md` §三：一方 S = √(ΣEHP × Σatk)，EHP = hp × (1 + def / k)，k 取 `combat` 里的减伤常数（伤害 × 1000 / (1000 + def × 22)，k ≈ 45.5）；遭遇 D = √(Σ 各波 S²)，ρ = (S / D)²。技能、标签、治疗、特质都故意不算，L1 的任务就是量出它们值多少。
+战力指数的定义沿用 `docs/balance-curves-research.md` §三：一方 S = √(ΣEHP × Σatk)，EHP = hp × (1 + def / k)，k 取 `combat` 里的减伤常数（伤害 × 1000 / (1000 + def × 22)，两个数是 `balance.json` 的 `battle_def_base`、`battle_def_k`，k = 1000 / 22 ≈ 45.5）；遭遇 D = √(Σ 各波 S²)，ρ = (S / D)²。技能、标签、治疗、特质都故意不算，L1 的任务就是量出它们值多少。
 
 所有指标 id 登记在 `engine/eval/metrics.json`（模式、类别、缺值读法、一句说明）。`eval run` 产出的 id 和 `goals.json` 里引用的 id 都必须在注册表里，`cargo test` 会拦；`eval metrics [RUN.json]` 打印注册表，带上结果文件时还会列出没登记的 id。
 

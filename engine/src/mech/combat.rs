@@ -13,8 +13,22 @@ use crate::data::{
 use crate::t;
 use serde::{Deserialize, Serialize};
 
-pub const MAX_ROUNDS: u8 = 15;
-const MAX_CHAIN_DEPTH: u8 = 4;
+/// Rounds per wave before a battle times out (`battle_max_rounds` in balance.json).
+pub fn max_rounds() -> u8 {
+    balance().battle_max_rounds
+}
+
+/// How deep a chain of passives and tag overflow may go (`battle_chain_depth`).
+fn chain_depth() -> u8 {
+    balance().battle_chain_depth
+}
+
+/// The stat bonus of a scaled skill, x10000: +`battle_stat_step_bp` per point above
+/// `battle_stat_pivot`.
+fn stat_bp(stat: i32) -> i64 {
+    let b = balance();
+    10_000 + (stat - b.battle_stat_pivot).max(0) as i64 * b.battle_stat_step_bp
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -635,7 +649,7 @@ impl<'a> Battle<'a> {
             }
 
             let mut cleared = false;
-            for r in 1..=MAX_ROUNDS {
+            for r in 1..=max_rounds() {
                 self.round = r;
                 rounds += 1;
                 for u in self.units.iter_mut().filter(|u| u.alive) {
@@ -667,7 +681,10 @@ impl<'a> Battle<'a> {
                 }
                 for actor in self.turn_order() {
                     let mut safety = 0;
-                    while self.units[actor].alive && self.units[actor].ap > 0 && safety < 6 {
+                    while self.units[actor].alive
+                        && self.units[actor].ap > 0
+                        && safety < balance().battle_max_actions
+                    {
                         safety += 1;
                         if !self.side_alive(Side::Enemy) || !self.side_alive(Side::Ally) {
                             break;
@@ -718,7 +735,11 @@ impl<'a> Battle<'a> {
                 outcome = Outcome::Wipe;
                 lost_wave = Some(self.wave);
                 let text = if self.side_alive(Side::Ally) {
-                    t!("battle.log.timeout", wave = self.wave, rounds = MAX_ROUNDS)
+                    t!(
+                        "battle.log.timeout",
+                        wave = self.wave,
+                        rounds = max_rounds()
+                    )
                 } else {
                     t!("battle.log.wipe", wave = self.wave)
                 };
@@ -1447,7 +1468,7 @@ impl<'a> Battle<'a> {
         self.applied[tag.idx()] += landed;
         // Rule change: what does not fit spills onto the enemy carrying the fewest stacks.
         let excess = before + stacks - tag.max();
-        if excess > 0 && depth <= MAX_CHAIN_DEPTH {
+        if excess > 0 && depth <= chain_depth() {
             let side = self.units[u].side;
             if let Some((src, _)) =
                 self.side_effect(side.other(), |e| matches!(e, TraitEffect::Overflow))
@@ -1704,7 +1725,7 @@ impl<'a> Battle<'a> {
         let rec = self.rec();
         let mut notes: Vec<String> = Vec::new();
         let stat = scale.map(|s| self.units[a].stats[s.idx()]).unwrap_or(50);
-        let stat_bp = 10_000 + (stat - 40).max(0) as i64 * 50;
+        let stat_bp = stat_bp(stat);
         let mut f: i64 = power as i64 * stat_bp / 10_000;
         if rec {
             notes.push(t!("battle.note.power", pct = pct(power as i64)));
@@ -1804,7 +1825,8 @@ impl<'a> Battle<'a> {
         let atk = self.units[a].atk as i64;
         let raw = atk * f / 10_000;
         let def = self.units[d].def as i64;
-        let mitigated = raw * 1000 / (1000 + def * 22);
+        let (base, k) = (balance().battle_def_base, balance().battle_def_k);
+        let mitigated = raw * base / (base + def * k);
         let shock = self.units[d].tags[Tag::Shock.idx()] as i64;
         let dover = self.units[d].tags[Tag::Overload.idx()] as i64;
         let mut mult: i64 =
@@ -1917,8 +1939,7 @@ impl<'a> Battle<'a> {
                 match e {
                     Effect::Heal { ratio, scale } => {
                         let st = scale.map(|s| self.units[a].stats[s.idx()]).unwrap_or(50);
-                        let amt = (self.units[a].atk as i64 * *ratio as i64 / 10_000
-                            * (10_000 + (st - 40).max(0) as i64 * 50)
+                        let amt = (self.units[a].atk as i64 * *ratio as i64 / 10_000 * stat_bp(st)
                             / 10_000) as i32;
                         let h = self.heal(a, t, amt);
                         parts.push(t!("battle.support.heal", hp = h));
@@ -2224,7 +2245,7 @@ impl<'a> Battle<'a> {
         cause: u32,
         depth: u8,
     ) {
-        if depth > MAX_CHAIN_DEPTH {
+        if depth > chain_depth() {
             return;
         }
         let side = self.units[a].side;
@@ -2269,7 +2290,7 @@ impl<'a> Battle<'a> {
                 depth,
             );
         }
-        if self.units[target].alive && self.units[target].hp_pct_lt(45) {
+        if self.units[target].alive && self.units[target].hp_pct_lt(balance().battle_low_hp_pct) {
             self.react(
                 Trigger::AllyLowHp,
                 self.units[target].side,
@@ -2294,7 +2315,7 @@ impl<'a> Battle<'a> {
         cause: u32,
         depth: u8,
     ) -> Option<usize> {
-        if depth > MAX_CHAIN_DEPTH {
+        if depth > chain_depth() {
             return None;
         }
         let c = content();
@@ -2352,7 +2373,7 @@ impl<'a> Battle<'a> {
                     Trigger::AllyLowHp => {
                         self.units[t].alive
                             && self.units[t].side == side
-                            && self.units[t].hp_pct_lt(45)
+                            && self.units[t].hp_pct_lt(balance().battle_low_hp_pct)
                     }
                 };
                 if !ok {
@@ -2453,8 +2474,7 @@ impl<'a> Battle<'a> {
                 }
                 Effect::Heal { ratio, scale } => {
                     let st = scale.map(|s| self.units[u].stats[s.idx()]).unwrap_or(50);
-                    let amt = (self.units[u].atk as i64 * *ratio as i64 / 10_000
-                        * (10_000 + (st - 40).max(0) as i64 * 50)
+                    let amt = (self.units[u].atk as i64 * *ratio as i64 / 10_000 * stat_bp(st)
                         / 10_000) as i32;
                     let h = self.heal(u, t, amt);
                     parts.push(t!("battle.react.heal", name = self.units[t].name, hp = h));

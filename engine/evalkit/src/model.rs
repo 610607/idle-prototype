@@ -14,13 +14,14 @@
 //! fitted on.
 use crate::power::{self, Sample};
 use crate::synergy;
-use idle_engine::mech::combat::{self, BattleInput, BattleKind, Side, UnitSpec, MAX_ROUNDS};
+use idle_engine::mech::combat::{self, BattleInput, BattleKind, Side, UnitSpec};
 use idle_engine::mech::operative;
 use std::collections::BTreeMap;
 
-/// Damage multiplier after defence (`combat`: × 1000 / (1000 + def × 22)).
+/// Damage multiplier after defence (`combat`: × base / (base + def × k), balance.json
+/// `battle_def_base`, `battle_def_k`).
 pub fn mitig(def: f64) -> f64 {
-    1.0 / (1.0 + def / power::DEF_K)
+    1.0 / (1.0 + def / power::def_k())
 }
 
 #[derive(Default, Debug, Clone)]
@@ -288,7 +289,7 @@ pub fn margins(
     input: &BattleInput,
     classes: &dyn Fn(&UnitSpec) -> Option<String>,
 ) -> Margins {
-    let cap = MAX_ROUNDS as f64;
+    let cap = combat::max_rounds() as f64;
     let sq = squad(p, input, classes);
     let mut output = f64::INFINITY;
     let mut loss = 0.0;
@@ -535,7 +536,9 @@ pub fn pace(
                 let input = idle_engine::mech::routes::route_battle(&e.state, &reference, i, false);
                 let w = terms(p, &input, &cls);
                 rounds.push(Some(
-                    w.iter().map(|x| x.kill.min(MAX_ROUNDS as f64)).sum::<f64>(),
+                    w.iter()
+                        .map(|x| x.kill.min(combat::max_rounds() as f64))
+                        .sum::<f64>(),
                 ));
                 margin.push(Some(margins(p, &input, &cls).strength()));
             }
