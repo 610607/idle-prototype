@@ -2,3 +2,12 @@
 {"t":0,"cmd":{"cmd":"set_rule","rule":"auto_claim","on":true}}
 {"t":0,"cmd":{"cmd":"set_rule","rule":"auto_recruit","on":true}}
 {"t":0,"cmd":{"cmd":"set_rule","rule":"auto_counter","on":true}}
+{"t":0,"cmd":{"cmd":"set_route","squad":4,"route":[97,96]}}
+{"t":10800,"cmd":{"cmd":"claim_task","task":"route"}}
+{"t":10800,"cmd":{"cmd":"claim","tile":96}}
+{"t":10800,"cmd":{"cmd":"claim","tile":97}}
+{"t":21600,"cmd":{"cmd":"claim_task","task":"win"}}
+{"t":21600,"cmd":{"cmd":"build","tile":96,"facility":"outpost"}}
+{"t":21600,"cmd":{"cmd":"build","tile":96,"facility":"watchtower"}}
+{"t":21600,"cmd":{"cmd":"build","tile":96,"facility":"archive"}}
+{"t":32400,"cmd":{"cmd":"claim_task","task":"claim"}}
