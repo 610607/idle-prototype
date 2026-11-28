@@ -948,7 +948,7 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         &mut o,
         t!(
             "cli.board.tide",
-            h = crate::data::balance().tide_horizon / 3600,
+            h = e.state.cycle.pace().tide_horizon / 3600,
             n = v.tide.len(),
             lost = lost.len(),
             list = if lost.is_empty() {

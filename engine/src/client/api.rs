@@ -201,7 +201,7 @@ impl Engine {
                 entries: vec![],
             });
         } else if self.tide.as_ref().map(|c| c.key) != Some(key) {
-            let entries = sim::forecast(&self.state, balance().tide_horizon);
+            let entries = sim::forecast(&self.state, self.state.cycle.pace().tide_horizon);
             self.tide = Some(TideCache { key, entries });
         }
         &self.tide.as_ref().unwrap().entries
@@ -459,7 +459,7 @@ impl Engine {
             },
             Ok(()) => {
                 let after_tide = if copy.cycle.phase == Phase::Active {
-                    sim::forecast(&copy, balance().tide_horizon)
+                    sim::forecast(&copy, copy.cycle.pace().tide_horizon)
                 } else {
                     vec![]
                 };

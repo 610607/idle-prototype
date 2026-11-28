@@ -135,6 +135,7 @@ fn tile_loot(state: &mut GameState, tile: u16, drops: &mut Vec<String>) -> Resou
 /// map; results are applied when the squad returns at `trip.end`.
 pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Trip> {
     let b = balance();
+    let pace = crate::mech::pace::of(&state.cycle);
     let squad = state
         .cycle
         .squads
@@ -179,9 +180,9 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
     for &tile in &squad.route {
         let t = state.cycle.tiles[tile as usize].clone();
         let step = if t.owned {
-            b.travel_owned
+            pace.travel_owned
         } else {
-            b.travel_unowned
+            pace.travel_unowned
         };
         if t.owned || !t.passable() || (t.special == Some(SpecialKind::Core) && t.special_done) {
             walked.push(tile);
@@ -275,10 +276,10 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
     if patrol {
         loot.scrap += b.patrol_scrap * patrolled;
     }
-    let duration = travel * 2 + rounds as i64 * b.battle_round_secs;
+    let duration = pace.trip_secs(travel, results.len() as i64, rounds as i64);
     Some(Trip {
         start,
-        end: start + duration.max(60),
+        end: start + duration,
         results,
         walked,
         outcome,
@@ -438,7 +439,8 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             rid,
         );
         if trip.outcome != Outcome::Planned || trip.forced {
-            state.cycle.squads[si].rest_until = trip.end + b.rest_after_loss;
+            state.cycle.squads[si].rest_until =
+                trip.end + crate::mech::pace::of(&state.cycle).rest_after_loss;
         }
     }
     // A new wall: say where the squad stopped and why (once, not every patrol).

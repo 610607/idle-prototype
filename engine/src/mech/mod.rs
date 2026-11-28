@@ -10,6 +10,7 @@ pub mod doctrine;
 pub mod economy;
 pub mod mapgen;
 pub mod operative;
+pub mod pace;
 pub mod pressure;
 pub mod query;
 pub mod routes;

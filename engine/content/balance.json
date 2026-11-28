@@ -15,6 +15,8 @@
   "travel_unowned": 300,
   "battle_round_secs": 10,
   "rest_after_loss": 1800,
+  "min_trip_secs": 60,
+  "econ_interval": 3600,
   "route_max_len": 6,
   "squad_size": 3,
   "enemy_ring_bp": [10000, 10000, 18000, 40000, 44000, 64000, 72000, 84000],

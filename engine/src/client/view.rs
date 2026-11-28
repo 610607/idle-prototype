@@ -1196,6 +1196,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
 
     let calc: EconCalc = economy::calc(state);
     let border: Vec<u16> = world::border_tiles(cy);
+    let pace = cy.pace();
     let mut squads_on: BTreeMap<u16, Vec<u32>> = BTreeMap::new();
     for s in cy.squads() {
         for t in &s.route {
@@ -1253,7 +1254,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 natives: if t.revealed { t.natives } else { 0 },
                 danger_pct: if t.revealed { t.danger() / 100 } else { 100 },
                 next_surge: is_border
-                    .then(|| crate::mech::defense::next_surge_after(i, state.time)),
+                    .then(|| crate::mech::defense::next_surge_after(&pace, i, state.time)),
                 surge_source: if is_border {
                     world::surge_source(cy, i)
                 } else {
@@ -1500,7 +1501,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             text: t!(
                 "view.pending.defend_more",
                 n = losing.len(),
-                h = balance().tide_horizon / 3600
+                h = cy.pace().tide_horizon / 3600
             ),
             tile: None,
             op: None,

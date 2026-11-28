@@ -3,6 +3,7 @@
 
 pub mod defs;
 pub mod hooks;
+pub mod maps;
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -975,6 +976,10 @@ pub struct Balance {
     pub travel_unowned: i64,
     pub battle_round_secs: i64,
     pub rest_after_loss: i64,
+    /// Shortest trip, seconds (random maps; fixed maps carry their own pace).
+    pub min_trip_secs: i64,
+    /// Economy settlement interval, seconds (random maps).
+    pub econ_interval: i64,
     pub route_max_len: usize,
     pub squad_size: usize,
     /// Enemy HP and attack by the ring they stand on (basis points; index = ring, the last entry
@@ -1090,6 +1095,25 @@ pub struct Balance {
     /// Battles: a skill scaled by a stat gets +step_bp per point above the pivot, x10000.
     pub battle_stat_pivot: i32,
     pub battle_stat_step_bp: i64,
+}
+
+impl Balance {
+    /// The pace of a random map: the travel, battle, rest, settlement and surge times above.
+    pub fn pace(&self) -> maps::Pace {
+        maps::Pace {
+            travel_owned: self.travel_owned,
+            travel_unowned: self.travel_unowned,
+            battle_round_secs: self.battle_round_secs,
+            battle_secs: 0,
+            min_trip_secs: self.min_trip_secs,
+            econ_interval: self.econ_interval,
+            output_mult: 1,
+            rest_after_loss: self.rest_after_loss,
+            surge_interval: self.surge_interval,
+            surge_slots: self.surge_slots,
+            tide_horizon: self.tide_horizon,
+        }
+    }
 }
 
 /// What each organisation level unlocks. A list gives +1 for every entry at or below the level
@@ -1607,6 +1631,7 @@ pub fn balance() -> &'static Balance {
 pub fn validate() -> Vec<String> {
     let c = content();
     let mut errs = hooks::check(c);
+    errs.extend(c.balance.pace().check("balance.json pace"));
     let skill = |id: &str, ctx: &str, errs: &mut Vec<String>| {
         if !c.skills.contains_key(id) {
             errs.push(format!("{ctx}: unknown skill {id}"));
