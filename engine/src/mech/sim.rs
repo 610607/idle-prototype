@@ -123,6 +123,7 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         rerolls: 0,
         reactions: Default::default(),
         armory: Default::default(),
+        unlocks: None,
     }
 }
 
@@ -159,6 +160,19 @@ pub fn new_game(seed: u64, now: i64, device: &str) -> GameState {
         tide_log: None,
         trace: None,
     }
+}
+
+/// A new game with a start configuration (`unlocks::Start`: which unlocks are open). `new_game`
+/// is `Start::default()`: everything open.
+pub fn new_game_with(
+    seed: u64,
+    now: i64,
+    device: &str,
+    start: &crate::mech::unlocks::Start,
+) -> GameState {
+    let mut state = new_game(seed, now, device);
+    state.cycle.unlocks = crate::mech::unlocks::start(&start.profile);
+    state
 }
 
 pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
@@ -449,6 +463,7 @@ fn process_instant(state: &mut GameState, border: &[u16], t: i64) {
     for id in &ids {
         routes::try_start(state, *id, t);
     }
+    crate::mech::unlocks::refresh(state);
 }
 
 /// Patrol gain per surge interval on each owned border tile, from current routes.

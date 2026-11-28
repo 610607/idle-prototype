@@ -1,0 +1,54 @@
+{
+  "_doc": "Unlock registry, see docs/unlocks.md. gates: command groups / view blocks (data::unlocks::System); facilities (housing included) and rules it opens; when: the condition; after: an earlier unlock that must be open first. Conditions follow the tutorial order; past chapter one they are not arranged yet (never). profiles: which unlocks a game starts with (default: all open, random maps; tutorial: chapter one opening).",
+  "unlocks": [
+    { "id": "dispatch", "gates": ["dispatch"], "when": "always" },
+    { "id": "claim", "gates": ["claim"], "when": "always" },
+    {
+      "id": "build",
+      "gates": ["build"],
+      "facilities": ["scrapyard", "clinic", "housing"],
+      "when": { "own_tiles": { "n": 3 } }
+    },
+    {
+      "id": "hire",
+      "gates": ["hire", "squad"],
+      "when": { "built": { "facility": "housing", "n": 1 } },
+      "after": "build"
+    },
+    { "id": "routes", "gates": ["routes"], "when": "never" },
+    {
+      "id": "rules",
+      "gates": ["rules"],
+      "rules": ["auto_claim", "auto_recruit", "auto_counter"],
+      "when": "never"
+    },
+    { "id": "research", "gates": ["research"], "facilities": ["archive"], "when": "never" },
+    { "id": "equipment", "gates": ["equipment"], "when": "never" },
+    { "id": "gambits", "gates": ["gambits"], "when": "never" },
+    {
+      "id": "industry",
+      "facilities": ["workshop", "generator", "market", "training_ground"],
+      "when": "never"
+    },
+    { "id": "policy", "gates": ["policy"], "when": "never" },
+    { "id": "customize", "gates": ["customize"], "when": "never" },
+    { "id": "priority", "gates": ["priority"], "when": "never" },
+    {
+      "id": "garrison",
+      "gates": ["garrison"],
+      "facilities": ["outpost", "barricade", "watchtower", "streetlamp", "grounding_grid"],
+      "when": "never"
+    },
+    { "id": "counter", "gates": ["counter"], "when": "never" },
+    { "id": "dial", "gates": ["dial"], "when": "never" },
+    { "id": "arsenal", "gates": ["armory"], "when": "never" },
+    { "id": "tasks", "gates": ["tasks"], "when": "never" },
+    { "id": "retire", "gates": ["retire"], "when": "never" },
+    { "id": "collapse", "gates": ["collapse"], "when": "never" }
+  ],
+  "ungated_facilities": [],
+  "profiles": {
+    "default": { "all": true },
+    "tutorial": { "open": ["dispatch", "claim"] }
+  }
+}

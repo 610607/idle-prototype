@@ -28,6 +28,10 @@ pub const MILITIA_UNIT: &str = "militia";
 pub const RULE_AUTO_CLAIM: &str = "auto_claim";
 pub const RULE_AUTO_RECRUIT: &str = "auto_recruit";
 pub const RULE_AUTO_COUNTER: &str = "auto_counter";
+/// Unlock profiles (`unlocks.json`, `profiles`) the start configurations name: random-map games
+/// start with everything open; the tutorial with chapter one's opening only.
+pub const PROFILE_DEFAULT: &str = "default";
+pub const PROFILE_TUTORIAL: &str = "tutorial";
 
 /// Hooks missing from the content: each one is code that would silently stop working.
 pub fn check(c: &Content) -> Vec<String> {
@@ -60,6 +64,14 @@ pub fn check(c: &Content) -> Vec<String> {
     for id in [RULE_AUTO_CLAIM, RULE_AUTO_RECRUIT, RULE_AUTO_COUNTER] {
         need(c.rule(id).is_some(), "rule", id);
     }
+    for id in [PROFILE_DEFAULT, PROFILE_TUTORIAL] {
+        need(c.unlocks.profile(id).is_some(), "unlock profile", id);
+    }
+    need(
+        c.unlocks.profile(PROFILE_DEFAULT).is_some_and(|p| p.all),
+        "unlock profile (all open)",
+        PROFILE_DEFAULT,
+    );
     errs
 }
 

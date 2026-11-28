@@ -7,6 +7,7 @@
   "event.trait_grown": "{op} 长出了新词条「{name}」",
   "event.cycle_started": "第 {n} 轮开始：{modifier}",
   "event.collapsed": "收束防线：本轮成果折合组织经验 {exp}",
+  "event.unlocked": "解锁了「{name}」",
   "event.rule.claimed": "规章「{rule}」：自动占领 {tile}（边界 {before} → {after}）",
   "event.rule.hired": "规章「{rule}」：招募了 {name}",
   "event.rule.countered": "规章「{rule}」：{tile} 反击成功",

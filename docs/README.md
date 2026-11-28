@@ -25,6 +25,7 @@
 ## 工程规范与测试
 
 - [architecture.md](architecture.md)：引擎分层——本地化 → 引擎 → 数据 → 机制 → 客户端五层，每层放什么、什么时候改、新词条和新机制各改哪里；`tests/layers.rs` 拦往上引用。图标的格式和画法见 [../icons/README.md](../icons/README.md)。本仓库直接写成。
+- [unlocks.md](unlocks.md)：解锁登记表——`content/unlocks.json` 的格式（每个解锁管哪些命令组、建筑、规章，封闭的条件清单，`after` 排序，开局档案），状态、检查时机、命令被拒和局面数据里少掉的块、“下一样”，随机地图的局为什么完全不变，新命令和新建筑怎么登记。本仓库直接写成。
 - [i18n.md](i18n.md)：文字与图像资源规范——玩家看得到的文字只放在 `locales/`，内容数据只放 id，图标按 id 引用，存档不存成品句子；棘轮测试和迁移进度。本仓库直接写成。
 - [llm-playtest.md](llm-playtest.md)：LLM 试玩——文字版 `agent_cli` 让 Haiku 和脚本玩家并排玩 72 小时，研究组对照组、结果和新玩家看不懂的地方。本仓库直接写成。
 

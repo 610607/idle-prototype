@@ -413,6 +413,8 @@ pub enum EventKind {
     Rule,
     Drop,
     Info,
+    /// A system opened (`mech::unlocks`).
+    Unlock,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -517,6 +519,9 @@ pub struct Cycle {
     /// 军械 levels this cycle, by track id.
     #[serde(default)]
     pub armory: BTreeMap<String, crate::mech::armory::Track>,
+    /// What is unlocked (`mech::unlocks`); `None` is everything open, as in random-map games.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unlocks: Option<crate::mech::unlocks::Unlocks>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

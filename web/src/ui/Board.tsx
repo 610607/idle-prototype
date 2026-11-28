@@ -54,7 +54,7 @@ function tileIcon(t: TileView, view: View): string | null {
       if (t.owned) {
         if (t.usage === 'housing') return 'housing';
         if (t.usage === 'none') return null;
-        return view.facilities.find((f) => f.id === t.usage)?.icon ?? 'unknown';
+        return view.facilities?.find((f) => f.id === t.usage)?.icon ?? 'unknown';
       }
       return t.enemies[0]?.[0]?.icon ?? null;
     default:

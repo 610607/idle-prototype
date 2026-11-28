@@ -273,7 +273,7 @@ function Summary({ report }: { report: Report }) {
 
 function ReactionLine({ reactions }: { reactions: [string, number][] }) {
   const { view } = useCtx();
-  const name = (id: string) => view.research.codex.find((e) => e.id === id)?.name ?? id;
+  const name = (id: string) => view.research?.codex.find((e) => e.id === id)?.name ?? id;
   return (
     <div className="row wrap small" style={{ gap: 6 }}>
       <Icon id="trait-resonance" size={14} />

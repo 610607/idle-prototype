@@ -6,7 +6,7 @@ import type { Command, View } from '../types';
 import { ReportSheet } from './BattleReport';
 import { Board, WASH } from './Board';
 import { ConfirmDialog, fmtClock, fmtRate, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, SQUAD_HEX, useCtx, type ConfirmAsk, type Ctx, type RouteEdit, type Sheet } from './common';
-import { CommandPanel, DistrictsPanel, HQPanel, PendingList, RosterPanel, TideStrip } from './Panels';
+import { CommandPanel, DistrictsPanel, HQPanel, NextUnlocks, PendingList, RosterPanel, TideStrip } from './Panels';
 import { Archive, ResearchPanel } from './Research';
 import { CandidateSheet, DistrictSheet, OpSheet, SquadSheet, TideSheet } from './Sheets';
 import { TileSheet } from './TileSheet';
@@ -182,18 +182,20 @@ export function App({ game }: { game: Game }) {
   const alerts = view.pending.filter((p) => p.kind === 'alert' || p.kind === 'defend').length;
   const badge = (t: Tab) => {
     if (t === 'map' && view.pending.length) return <span className={'badge' + (alerts ? '' : ' ink')}>{view.pending.length}</span>;
-    if (t === 'command' && view.tasks.open.some((x) => x.done)) return <span className="badge ink">!</span>;
-    if (t === 'roster' && view.candidates.length) return <span className="badge ink">{view.candidates.length}</span>;
+    if (t === 'command' && view.tasks?.open.some((x) => x.done)) return <span className="badge ink">!</span>;
+    if (t === 'roster' && view.candidates?.length) return <span className="badge ink">{view.candidates.length}</span>;
     if (t === 'districts') {
       const n = view.districts.filter((d) => d.policy_unlocked && !d.policy).length;
       return n ? <span className="badge ink">{n}</span> : null;
     }
     if (t === 'research') {
-      if (view.research.offers.length) return <span className="badge ink">{view.research.offers.length}</span>;
-      return view.research.affordable && view.research.left ? <span className="badge ink">!</span> : null;
+      const r = view.research;
+      if (!r) return null;
+      if (r.offers.length) return <span className="badge ink">{r.offers.length}</span>;
+      return r.affordable && r.left ? <span className="badge ink">!</span> : null;
     }
     // A breakthrough the player can pay for is a big moment: flag it on the HQ tab.
-    if (t === 'hq' && view.phase === 'active' && view.armory.some((a) => a.next === 'breakthrough' && a.affordable)) return <span className="badge hazard">!</span>;
+    if (t === 'hq' && view.phase === 'active' && view.armory?.some((a) => a.next === 'breakthrough' && a.affordable)) return <span className="badge hazard">!</span>;
     return null;
   };
   const pick = (t: Tab) => {
@@ -215,11 +217,12 @@ export function App({ game }: { game: Game }) {
               <Board />
               {routeEdit ? <RouteEditor /> : null}
               <TideStrip />
+              <NextUnlocks />
               <PendingList />
             </div>
             <div className="work">
               <div className="work-tabs" role="tablist">
-                {TABS.map((t) => (
+                {TABS.filter((t) => t.id !== 'research' || view.research).map((t) => (
                   <button key={t.id} className="tab" role="tab" aria-selected={!pages.length && workTab === t.id} onClick={() => pick(t.id)}>
                     <Icon id={t.icon} /> {t.name}
                     {badge(t.id)}
@@ -241,7 +244,7 @@ export function App({ game }: { game: Game }) {
               </div>
             </div>
             <nav className="bottom-nav">
-              {([{ id: 'map', name: t('app.tab.map'), icon: 'map' }, ...TABS] as const).map((t) => (
+              {([{ id: 'map', name: t('app.tab.map'), icon: 'map' }, ...TABS.filter((t) => t.id !== 'research' || view.research)] as const).map((t) => (
                 <button key={t.id} aria-selected={mobileView === 'map' ? t.id === 'map' : !pages.length ? tab === t.id : false} onClick={() => pick(t.id)}>
                   <Icon id={t.icon} />
                   {t.name}
@@ -413,7 +416,7 @@ function MapChoice() {
             </div>
           ))}
         </div>
-        {view.research.library.length ? <Archive /> : null}
+        {view.research?.library.length ? <Archive /> : null}
         <HQPanel />
       </div>
     </div>

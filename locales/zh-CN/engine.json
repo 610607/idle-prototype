@@ -189,5 +189,21 @@
   "delta.population": "居民",
   "delta.candidates": "候选",
   "err.bad_command": "命令格式不对：{err}",
-  "err.route_empty": "小队没人或路线为空"
+  "err.route_empty": "小队没人或路线为空",
+  "err.locked": "「{name}」还没解锁",
+  "unlock.cond.always": "随时",
+  "unlock.cond.own_tile": "占下 {tile}",
+  "unlock.cond.own_tiles": "占下 {n} 格",
+  "unlock.cond.built": "建 {n} 座{name}",
+  "unlock.cond.housing": "住房",
+  "unlock.cond.done.dispatch": "亲手派遣 {n} 次",
+  "unlock.cond.done.route": "设 {n} 条路线",
+  "unlock.cond.done.claim": "占领 {n} 次",
+  "unlock.cond.done.build": "建造 {n} 次",
+  "unlock.cond.done.hire": "招募 {n} 次",
+  "unlock.cond.done.research": "研究 {n} 次",
+  "unlock.cond.done.surge_held": "守住 {n} 次来潮",
+  "unlock.cond.done.route_win": "打赢 {n} 场",
+  "unlock.cond.won_tile": "打赢 {tile}",
+  "unlock.cond.department": "成立{name}"
 }

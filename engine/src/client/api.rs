@@ -130,6 +130,25 @@ impl Engine {
         }
     }
 
+    /// A new game with a start configuration (`mech::unlocks::Start`; `new` is the default one,
+    /// everything open). `Start::tutorial()` opens only chapter one's opening.
+    pub fn new_with(
+        seed: u64,
+        now: i64,
+        device: &str,
+        start: &crate::mech::unlocks::Start,
+    ) -> Engine {
+        Engine {
+            state: sim::new_game_with(seed, now, device, start),
+            tide: None,
+        }
+    }
+
+    /// Whether the command's system (and the building or rule it names) is unlocked.
+    pub fn allows(&self, cmd: &Command) -> bool {
+        crate::mech::unlocks::check(&self.state, cmd).is_ok()
+    }
+
     pub fn from_state(state: GameState) -> Engine {
         Engine { state, tide: None }
     }

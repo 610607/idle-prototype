@@ -235,7 +235,7 @@ function EquipBlock({ o }: { o: OpView }) {
       ) : (
         <div className="empty">{t('sheets.equip.none')}</div>
       )}
-      {view.inventory.length ? (
+      {view.inventory?.length ? (
         <div className="row wrap" style={{ marginTop: 6 }}>
           {view.inventory.map((it, k) => (
             <button key={k} className="btn small" onClick={() => run({ cmd: 'equip', op: o.id, item: it.id }, t('sheets.equip.equipped', { item: it.name }))} title={it.desc}>
@@ -340,7 +340,7 @@ function OpDanger({ o, onClose }: { o: OpView; onClose: () => void }) {
 
 export function CandidateSheet({ candidate, onClose }: { candidate: number; onClose: () => void }) {
   const { view, run, game } = useCtx();
-  const c = view.candidates.find((x) => x.id === candidate);
+  const c = view.candidates?.find((x) => x.id === candidate);
   const dry = useMemo(() => (c ? game.dryRun({ cmd: 'hire', candidate }) : null), [c, game, candidate]);
   if (!c)
     return (
@@ -393,8 +393,8 @@ export function DistrictSheet({ district, onClose }: { district: number; onClose
       aside={
         <>
           <DistrictPriority d={d} />
-          <DistrictPolicy d={d} />
-          <DistrictCustomize d={d} />
+          {d.policy_options ? <DistrictPolicy d={d} /> : null}
+          {d.customize ? <DistrictCustomize d={d} /> : null}
           <Section title={t('sheets.district.tiles')} icon="map" hint={`${d.owned}/${d.total}`}>
             <div className="row wrap" style={{ gap: 4 }}>
               {d.tiles.map((i) => (
@@ -508,7 +508,7 @@ function DistrictPolicy({ d }: { d: DistrictView }) {
   return (
     <Section title={t('sheets.policy.title')} icon="policy" tone="hazard" hint={d.policy_unlocked ? (d.policy ? t('sheets.policy.set') : t('sheets.policy.open')) : t('sheets.policy.locked', { n: game.balance.trust_policy })}>
       <div className="stack" style={{ gap: 6 }}>
-        {d.policy_options.map((p) => (
+        {(d.policy_options ?? []).map((p) => (
           <button
             key={p.id}
             disabled={!p.available && d.policy !== p.id}
@@ -545,7 +545,8 @@ const RARITY_FLOORS: [number | null, string][] = [
 /** 定制招募: spend this district's residents on a candidate of your choosing. */
 function DistrictCustomize({ d }: { d: DistrictView }) {
   const { game, run, view } = useCtx();
-  const cz = d.customize;
+  // Only rendered while custom recruiting is unlocked (the block is there).
+  const cz = d.customize!;
   const [prof, setProf] = useState<string | null>(null);
   const [cls, setCls] = useState<string | null>(null);
   const [lock, setLock] = useState<string | null>(null);

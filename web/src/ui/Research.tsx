@@ -40,6 +40,7 @@ export function ResearchPanel() {
 function Draw() {
   const { view, run } = useCtx();
   const r = view.research;
+  if (!r) return null;
   return (
     <Section title={t('research.draw.title')} icon="trait-book" tone="elec" hint={t('research.draw.intel', { n: view.resources.intel })}>
       {r.offers.length ? (
@@ -101,6 +102,7 @@ function Draw() {
 function Held() {
   const { view, run } = useCtx();
   const r = view.research;
+  if (!r) return null;
   const full = r.archive.length >= r.archive_slots;
   return (
     <Section title={t('research.held.title')} icon="rules" tone="good" hint={t('research.held.hint', { n: r.held.length, known: r.known, total: r.total })}>
@@ -126,6 +128,7 @@ function Held() {
 export function Archive() {
   const { game, view, run } = useCtx();
   const r = view.research;
+  if (!r) return null;
   const full = r.archive.length >= r.archive_slots;
   return (
     <Section title={t('research.archive.title')} icon="seal" tone="rift" hint={t('research.archive.hint', { n: r.archive.length, slots: r.archive_slots, have: r.library.length, total: r.total })}>
@@ -184,6 +187,7 @@ function DoctrineCard({ d, compact, children }: { d: DoctrineView; compact?: boo
 function Codex() {
   const { view } = useCtx();
   const r = view.research;
+  if (!r) return null;
   const seen = r.codex.filter((e) => e.seen).length;
   return (
     <Section title={t('research.codex.title')} icon="trait-resonance" tone="rift" hint={`${seen}/${r.codex.length}`}>
