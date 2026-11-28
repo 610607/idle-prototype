@@ -163,7 +163,7 @@ fn main() {
     }
     println!(
         "  败局里拖满 {} 回合判负的占 {:.0}%",
-        idle_engine::mech::combat::MAX_ROUNDS,
+        idle_engine::mech::combat::max_rounds(),
         100.0 * agg.timeouts / agg.losses.max(1.0)
     );
 

@@ -114,11 +114,9 @@ impl Squad {
 
 fn squads(st: &GameState) -> Vec<Squad> {
     st.cycle
-        .squads
-        .iter()
-        .filter(|s| !s.members.is_empty())
+        .manned_squads()
         .map(|s| {
-            let ops: Vec<_> = s.members.iter().filter_map(|id| st.op(*id)).collect();
+            let ops: Vec<_> = st.cycle.member_ops(s.id).collect();
             let specs: Vec<UnitSpec> = ops.iter().map(|op| operative::spec(op)).collect();
             let classes = specs
                 .iter()
@@ -200,7 +198,7 @@ fn ladder_best(sqs: &[Squad], doctrines: &[String]) -> Option<i32> {
 /// per encounter and squad.
 #[allow(dead_code)]
 pub fn ladder_won(st: &GameState) -> Option<i32> {
-    ladder_best(&squads(st), &st.cycle.doctrines)
+    ladder_best(&squads(st), &st.cycle.held_doctrines())
 }
 
 /// Encounters on the full ladder: the most L can read.
@@ -212,15 +210,19 @@ pub fn ladder_size() -> usize {
 /// a squad with members). For other parts of the tool; `Series` keeps the squad it picks.
 #[allow(dead_code)]
 pub fn strength(st: &GameState) -> Option<f64> {
-    best(&squads(st), &st.cycle.doctrines).map(|(_, s)| s)
+    best(&squads(st), &st.cycle.held_doctrines()).map(|(_, s)| s)
+}
+
+/// State write: gives a scratch copy these doctrines (what-if readings; changes with B3).
+fn set_doctrines(scratch: &mut GameState, held: &[String]) {
+    scratch.cycle.doctrines = held.to_vec(); // state-write: scratch copy for a what-if reading
 }
 
 /// The frontier: fightable tiles of ring M + 1 next to an owned tile (M = deepest owned ring).
 fn frontier(st: &GameState) -> Vec<u16> {
     let m = deepest_owned(st);
-    let cy = &st.cycle;
     fightable(st)
-        .filter(|&i| ring(i) == m + 1 && neighbors(i).any(|n| cy.tiles[n as usize].owned))
+        .filter(|&i| ring(i) == m + 1 && neighbors(i).any(|n| st.cycle.is_owned(n)))
         .collect()
 }
 
@@ -292,7 +294,7 @@ impl Series {
             })
             .collect();
         let st = &e.state;
-        let held = &st.cycle.doctrines;
+        let held = &st.cycle.held_doctrines();
         if picks.is_empty() || picks.len() > held.len() {
             return;
         }
@@ -312,13 +314,13 @@ impl Series {
             };
             // Flips: the squad that is best after the pick, before and after it.
             let sq = &sqs[i];
-            scratch.cycle.doctrines = before.to_vec();
+            set_doctrines(&mut scratch, before);
             let lost: Vec<u16> = tiles
                 .iter()
                 .copied()
                 .filter(|&x| !wins(&scratch, sq, x))
                 .collect();
-            scratch.cycle.doctrines = after.to_vec();
+            set_doctrines(&mut scratch, after);
             let flips = lost.iter().filter(|&&x| wins(&scratch, sq, x)).count() as u32;
             self.mags.push(Mag {
                 t_h: (t - T0) as f64 / 3600.0,
@@ -338,7 +340,8 @@ impl Series {
     pub fn on_hour(&mut self, e: &Engine, h: i64, manual: u32) {
         let st = &e.state;
         let sqs = squads(st);
-        let top = best(&sqs, &st.cycle.doctrines);
+        let held = st.cycle.held_doctrines();
+        let top = best(&sqs, &held);
         let tiles = frontier(st);
         let mut open = None;
         let mut margin = None;
@@ -372,8 +375,7 @@ impl Series {
             self.margin.push((h, margin));
         }
         if h == 1 || CHECKPOINTS.contains(&h) {
-            self.ladder
-                .push((h, ladder_best(&sqs, &st.cycle.doctrines)));
+            self.ladder.push((h, ladder_best(&sqs, &held)));
         }
         self.hours.push(Hour {
             h,
@@ -381,7 +383,7 @@ impl Series {
             open,
             manual,
         });
-        self.last = Some((h, sqs, st.cycle.doctrines.clone()));
+        self.last = Some((h, sqs, held));
     }
 
     fn walls(&self) -> Vec<Wall> {

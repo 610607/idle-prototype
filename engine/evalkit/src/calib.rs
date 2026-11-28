@@ -249,8 +249,8 @@ pub fn numbers() {
         for seed in 0..40u64 {
             for modifier in ["static_turbulence", "dense_fog"] {
                 let m = idle_engine::mech::mapgen::generate(seed, modifier);
-                for (i, t) in m.tiles.iter().enumerate() {
-                    if ring(i as u16) != r || t.waves.is_empty() {
+                for (i, t) in m.tiles() {
+                    if ring(i) != r || t.waves.is_empty() {
                         continue;
                     }
                     let specs: Vec<Vec<UnitSpec>> = t
@@ -352,7 +352,7 @@ pub fn field_model(
 /// once per variant.
 fn field_samples(e: &Engine) -> Vec<(&'static str, Sample)> {
     let mut plain = e.state.clone();
-    plain.cycle.doctrines.clear();
+    plain.cycle.doctrines.clear(); // state-write: scratch copy without doctrines
     let mut unarmed = e.state.clone();
     unarmed.cycle.armory.clear();
     let mut out = Vec::new();

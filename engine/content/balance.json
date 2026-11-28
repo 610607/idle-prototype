@@ -90,5 +90,13 @@
   "cache_parts": 12,
   "clue_intel": 25,
   "yield_emergency_bp": 6000,
-  "yield_wipe_bp": 3000
+  "yield_wipe_bp": 3000,
+  "battle_max_rounds": 15,
+  "battle_max_actions": 6,
+  "battle_chain_depth": 4,
+  "battle_low_hp_pct": 45,
+  "battle_def_base": 1000,
+  "battle_def_k": 22,
+  "battle_stat_pivot": 40,
+  "battle_stat_step_bp": 50
 }

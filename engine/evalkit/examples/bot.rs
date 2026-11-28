@@ -88,7 +88,7 @@ fn main() {
                     v.income[2] as f64 / 100.0,
                     v.income[3] as f64 / 100.0,
                     v.results.total,
-                    e.state.cycle.doctrines.len(),
+                    e.state.cycle.doctrine_count(),
                     e.state.cycle.reactions.values().sum::<u32>(),
                 );
             }

@@ -6,6 +6,7 @@ use crate::kernel::geom::{self, TILES};
 use crate::mech::actions;
 use crate::mech::economy::{self, EconCalc};
 use crate::mech::operative::{self, Derived, RARITY_NAMES};
+use crate::mech::query::{Built, Post};
 use crate::mech::sim::{self, CycleResults};
 use crate::mech::state::*;
 use crate::mech::world;
@@ -75,7 +76,7 @@ pub struct OpView {
     pub growing: Vec<GrowingView>,
     pub skills: Vec<SkillView>,
     pub gambits: Vec<Gambit>,
-    pub assignment: Assignment,
+    pub assignment: Post,
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub equipment: Option<ItemView>,
@@ -571,13 +572,13 @@ pub fn research_view(state: &GameState) -> ResearchView {
             icon: d.icon.clone(),
             rarity: d.rarity,
             desc: d.desc.clone(),
-            held: cy.doctrines.contains(&d.id),
+            held: cy.holds_doctrine(&d.id),
             archived: state.org.archive.contains(&d.id),
             new: !state.org.known_doctrines.contains(&d.id),
             links_held: d
                 .links
                 .iter()
-                .filter(|l| cy.doctrines.contains(l))
+                .filter(|l| cy.holds_doctrine(l))
                 .filter_map(|l| c.doctrine(l).map(|x| x.name.clone()))
                 .collect(),
         })
@@ -602,11 +603,11 @@ pub fn research_view(state: &GameState) -> ResearchView {
             .map(|x| x.1)
             .unwrap_or(0),
         offers: cy.research_offers.iter().filter_map(dv).collect(),
-        held: cy.doctrines.iter().filter_map(dv).collect(),
+        held: cy.doctrines().filter_map(|d| dv(&d.to_string())).collect(),
         archive: state.org.archive.iter().filter_map(dv).collect(),
         archive_slots: crate::mech::doctrine::archive_slots(state),
         library: state.org.known_doctrines.iter().filter_map(dv).collect(),
-        reactions_on: cy.doctrines.iter().any(|d| d == crate::mech::doctrine::HUB),
+        reactions_on: cy.holds_doctrine(crate::mech::doctrine::HUB),
         codex: c
             .reactions
             .iter()
@@ -875,7 +876,7 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
         })
         .filter(|g| g.have > 0)
         .collect();
-    let equipment = op.equipment.as_deref().map(item_view);
+    let equipment = state.cycle.equipment(op).map(item_view);
     let mut reads: Vec<Tag> = Vec::new();
     let mut writes: Vec<Tag> = Vec::new();
     for t in &traits {
@@ -894,10 +895,11 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
     reads.dedup();
     writes.sort();
     writes.dedup();
-    let status = match op.assignment {
-        Assignment::Idle => t!("view.status.idle"),
-        Assignment::Squad { squad } => {
-            let s = state.cycle.squads.iter().find(|s| s.id == squad);
+    let post = state.cycle.post(op);
+    let status = match post {
+        Post::Idle => t!("view.status.idle"),
+        Post::Squad { squad } => {
+            let s = state.cycle.squad(squad);
             match s {
                 Some(s) if s.trip.is_some() => t!("view.status.on_route", squad = s.name),
                 Some(s) if s.rest_until > state.time => t!("view.status.resting", squad = s.name),
@@ -905,7 +907,7 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
                 None => t!("view.status.idle"),
             }
         }
-        Assignment::Garrison { tile } => t!("view.status.garrison", tile = geom::label(tile)),
+        Post::Garrison { tile } => t!("view.status.garrison", tile = geom::label(tile)),
     };
     OpView {
         id: op.id,
@@ -924,7 +926,7 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
         growing,
         skills,
         gambits: op.gambits.clone(),
-        assignment: op.assignment.clone(),
+        assignment: post,
         status,
         equipment,
         special: op.special.clone(),
@@ -1186,14 +1188,14 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     let calc: EconCalc = economy::calc(state);
     let border: Vec<u16> = world::border_tiles(cy);
     let mut squads_on: BTreeMap<u16, Vec<u32>> = BTreeMap::new();
-    for s in &cy.squads {
+    for s in cy.squads() {
         for t in &s.route {
             squads_on.entry(*t).or_default().push(s.id);
         }
     }
     let tiles: Vec<TileView> = (0..TILES as u16)
         .map(|i| {
-            let t = &cy.tiles[i as usize];
+            let t = cy.tile(i);
             let is_border = border.contains(&i);
             let rift = t.rift.as_ref().filter(|_| t.revealed).map(|r| {
                 let k = c.rift_kind(&r.kind);
@@ -1206,15 +1208,15 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                     talent_pct: r.talent * 100 / (b.otherworld_talent_per_candidate * 100).max(1),
                 }
             });
-            let usage = match &t.usage {
-                TileUse::None => "none".to_string(),
-                TileUse::Housing => "housing".to_string(),
-                TileUse::Facility { id } => id.clone(),
+            let usage = match cy.building(i) {
+                Built::Empty => "none".to_string(),
+                Built::Housing => "housing".to_string(),
+                Built::Facility(id) => id.to_string(),
             };
-            let frozen = t.frozen.as_ref().map(|u| match u {
-                TileUse::Housing => "housing".to_string(),
-                TileUse::Facility { id } => id.clone(),
-                TileUse::None => "none".to_string(),
+            let frozen = cy.frozen(i).map(|u| match u {
+                Built::Housing => "housing".to_string(),
+                Built::Facility(id) => id.to_string(),
+                Built::Empty => "none".to_string(),
             });
             let workers = calc
                 .facilities
@@ -1227,15 +1229,15 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 terrain: terrain_name(t),
                 ring: crate::mech::pressure::depth(cy, i),
                 revealed: t.revealed,
-                owned: t.owned,
+                owned: cy.is_owned(i),
                 warden: if t.revealed { t.warden } else { 0 },
-                alert: t.alert(),
-                claimable: t.claimable(),
+                alert: cy.is_alert(i),
+                claimable: cy.is_claimable(i),
                 border: is_border,
-                district: if t.revealed { t.district } else { None },
+                district: if t.revealed { cy.district_of(i) } else { None },
                 usage,
                 frozen,
-                garrison: world::garrison_on(cy, i),
+                garrison: cy.garrison_on(i),
                 rift,
                 special: if t.revealed { t.special } else { None },
                 special_done: t.special_done,
@@ -1248,7 +1250,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 } else {
                     None
                 },
-                enemies: if t.revealed && !t.owned {
+                enemies: if t.revealed && !cy.is_owned(i) {
                     t.waves
                         .iter()
                         .map(|w| w.iter().map(|e| enemy_brief(e)).collect())
@@ -1263,8 +1265,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         .collect();
 
     let districts: Vec<DistrictView> = cy
-        .districts
-        .iter()
+        .districts()
         .map(|d| {
             let dc = calc
                 .districts
@@ -1310,9 +1311,9 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             DistrictView {
                 id: d.id,
                 name: d.name.render(),
-                tiles: d.tiles.clone(),
+                tiles: cy.district_tiles(d.id).collect(),
                 owned: dc.owned,
-                total: d.tiles.len(),
+                total: cy.district_tiles(d.id).count(),
                 contiguous: d.contiguous,
                 trust: d.trust,
                 trust_target: dc.trust_target,
@@ -1337,12 +1338,11 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         .collect();
 
     let squads = cy
-        .squads
-        .iter()
+        .squads()
         .map(|s| SquadView {
             id: s.id,
             name: s.name.render(),
-            members: s.members.clone(),
+            members: cy.members(s.id).collect(),
             route: s.route.clone(),
             running: s.trip.as_ref().map(trip_view),
             last: s.last.as_ref().map(trip_view),
@@ -1353,11 +1353,10 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         })
         .collect();
 
-    let operatives: Vec<OpView> = cy.operatives.iter().map(|o| op_view(state, o)).collect();
+    let operatives: Vec<OpView> = cy.operatives().map(|o| op_view(state, o)).collect();
     let cap = actions::pool_cap(state);
     let candidates = cy
-        .candidates
-        .iter()
+        .candidates()
         .take(cap)
         .map(|cd| CandidateView {
             id: cd.id,
@@ -1416,7 +1415,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         });
     }
     for i in actions::claimable_tiles(state) {
-        let t = &cy.tiles[i as usize];
+        let t = cy.tile(i);
         let (before, after) = actions::border_after_claim(state, i);
         let key = if t.terrain == Terrain::Rift {
             "view.pending.suppress"
@@ -1450,7 +1449,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             district: None,
         });
     }
-    for cd in cy.candidates.iter().take(cap) {
+    for cd in cy.candidates().take(cap) {
         pending.push(PendingView {
             kind: "candidate",
             text: t!(
@@ -1465,12 +1464,12 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             district: None,
         });
     }
-    for d in &cy.districts {
+    for d in cy.districts() {
         if d.policy.is_none() && d.trust >= b.trust_policy && world::district_owned(cy, d.id) > 0 {
             pending.push(PendingView {
                 kind: "policy",
                 text: t!("view.pending.policy", district = d.name, trust = d.trust),
-                tile: d.tiles.first().copied(),
+                tile: cy.district_tiles(d.id).next(),
                 op: None,
                 candidate: None,
                 district: Some(d.id),
@@ -1525,13 +1524,10 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             district: None,
         });
     }
-    for s in &cy.squads {
-        if s.members.is_empty() {
-            continue;
-        }
+    for s in cy.manned_squads() {
         let text = if s.route.is_empty() {
             t!("view.pending.no_route", squad = s.name)
-        } else if s.route.iter().all(|t| cy.tiles[*t as usize].owned) {
+        } else if s.route.iter().all(|t| cy.is_owned(*t)) {
             t!("view.pending.patrol_only", squad = s.name)
         } else {
             continue;
@@ -1590,9 +1586,9 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         squads,
         operatives,
         candidates,
-        queue: cy.candidates.len().saturating_sub(cap),
+        queue: cy.candidate_count().saturating_sub(cap),
         roster_cap: b.roster_cap,
-        inventory: cy.inventory.iter().map(|s| item_view(s)).collect(),
+        inventory: cy.inventory().map(item_view).collect(),
         sealed: state.org.sealed.iter().map(|s| item_view(s)).collect(),
         facilities,
         tide: tide_view(tide),

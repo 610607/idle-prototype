@@ -676,15 +676,15 @@ pub fn timeline(seed: u64, persona: Persona, hours: i64) {
         let deepest = deepest_owned(&e.state);
         let warden: Vec<i32> = fightable(&e.state)
             .filter(|&t| ring(t) == deepest + 1)
-            .map(|t| cy.tiles[t as usize].warden)
+            .map(|t| cy.tile(t).warden)
             .filter(|w| *w > 0)
             .collect();
         println!(
             "{h} {} {deepest} {} {} {} {:?}",
-            cy.tiles.iter().filter(|t| t.owned).count(),
-            cy.squads.iter().filter(|s| !s.members.is_empty()).count(),
-            cy.operatives.len(),
-            cy.tiles.iter().filter(|t| t.claimable()).count(),
+            cy.owned_tiles().count(),
+            cy.manned_squads().count(),
+            cy.roster_size(),
+            cy.tiles().filter(|&(i, _)| cy.is_claimable(i)).count(),
             warden
         );
     }
@@ -774,10 +774,13 @@ mod tests {
         let (g, _) = play_bot(0, Persona::REFERENCE, Stop::hours(6));
         let mut e = Engine::from_state(g.e.state.clone());
         e.state.trace = Some(Vec::new());
-        let owned = |e: &Engine| e.state.cycle.tiles.iter().filter(|t| t.owned).count();
+        let owned = |e: &Engine| e.state.cycle.owned_tiles().count();
         let (t0, owned0) = (e.state.time, owned(&e));
         let mut scores = vec![score::total(&e.state) as f64];
-        let alerts = |e: &Engine| e.state.cycle.tiles.iter().filter(|t| t.alert()).count();
+        let alerts = |e: &Engine| {
+            let cy = &e.state.cycle;
+            cy.tiles().filter(|&(i, _)| cy.is_alert(i)).count()
+        };
         let mut late_alerts = Vec::new();
         for h in 1..=240 {
             e.advance(t0 + h * 3600);

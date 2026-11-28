@@ -2,16 +2,20 @@
 //!
 //! A side's strength S = √(ΣEHP × ΣDPR); an encounter's D = √(Σ waves S²) because HP carries over
 //! between waves (Lanchester square law); ρ = (S / D)². EHP = hp × (1 + def / k), with k from the
-//! mitigation in `combat` (damage × 1000 / (1000 + def × 22)); DPR is atk (spd only orders turns).
+//! mitigation in `combat` (damage × base / (base + def × k)); DPR is atk (spd only orders turns).
 //! Skills, tags, traits and reactions are left out on purpose: `calibrate` measures how much of the
 //! outcome this simple index explains and what it misses.
 use idle_engine::mech::combat::{BattleInput, UnitSpec};
 
-/// `combat`: mitigated = raw × 1000 / (1000 + def × 22).
-pub const DEF_K: f64 = 1000.0 / 22.0;
+/// `combat`: mitigated = raw × base / (base + def × k) (balance.json `battle_def_base`,
+/// `battle_def_k`), so defence `base / k` halves the damage.
+pub fn def_k() -> f64 {
+    let b = idle_engine::data::balance();
+    b.battle_def_base as f64 / b.battle_def_k as f64
+}
 
 pub fn ehp(u: &UnitSpec) -> f64 {
-    u.max_hp as f64 * (1.0 + u.def as f64 / DEF_K)
+    u.max_hp as f64 * (1.0 + u.def as f64 / def_k())
 }
 
 /// S of one side (fixtures neither take hits nor count toward a side being alive: left out).

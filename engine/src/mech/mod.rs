@@ -11,6 +11,7 @@ pub mod economy;
 pub mod mapgen;
 pub mod operative;
 pub mod pressure;
+pub mod query;
 pub mod routes;
 pub mod score;
 pub mod sim;

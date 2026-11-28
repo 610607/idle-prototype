@@ -388,7 +388,7 @@ impl Timeline for GameState {
             match &s.trip {
                 Some(trip) => next = next.min(trip.end.max(t + 1)),
                 None => {
-                    if !s.route.is_empty() && !s.members.is_empty() && s.rest_until > t {
+                    if !s.route.is_empty() && self.cycle.squad_size(s.id) > 0 && s.rest_until > t {
                         next = next.min(s.rest_until);
                     }
                 }
@@ -461,7 +461,7 @@ pub fn patrol_rates(state: &GameState) -> BTreeMap<u16, i32> {
     let b = balance();
     let mut out = BTreeMap::new();
     for s in &state.cycle.squads {
-        if s.members.is_empty() || s.route.is_empty() {
+        if state.cycle.squad_size(s.id) == 0 || s.route.is_empty() {
             continue;
         }
         let dur = s

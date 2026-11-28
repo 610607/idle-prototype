@@ -100,7 +100,11 @@ fn check_contiguity(state: &mut GameState) {
         if d.contiguous {
             continue;
         }
-        if d.tiles.iter().all(|t| state.cycle.tiles[*t as usize].owned) {
+        if state
+            .cycle
+            .district_tiles(d.id)
+            .all(|t| state.cycle.tiles[t as usize].owned)
+        {
             let name = d.name.clone();
             let first = !d.ever_contiguous;
             state.cycle.districts[di].contiguous = true;
@@ -108,6 +112,7 @@ fn check_contiguity(state: &mut GameState) {
             if first {
                 state.cycle.stats.contiguous_districts += 1;
             }
+            let at = state.cycle.district_tiles(di as u16).next();
             state.event(
                 EventKind::Contiguous,
                 txt!(
@@ -116,7 +121,7 @@ fn check_contiguity(state: &mut GameState) {
                     output = b.contiguity_output_bp / 100,
                     trust = b.contiguity_trust
                 ),
-                state.cycle.districts[di].tiles.first().copied(),
+                at,
                 None,
                 None,
             );
@@ -222,8 +227,8 @@ pub fn counter(state: &mut GameState, tile: u16) -> ActResult {
     let rid = state.store_report(combat::simulate(&rec));
     if report.won() {
         let clinic = district.is_some_and(|d| {
-            state.cycle.districts[d as usize].tiles.iter().any(|x| {
-                let tt = &state.cycle.tiles[*x as usize];
+            state.cycle.district_tiles(d).any(|x| {
+                let tt = &state.cycle.tiles[x as usize];
                 tt.owned && tt.usage.facility() == Some(hooks::CLINIC)
             })
         });
@@ -535,14 +540,7 @@ pub fn set_squad(state: &mut GameState, squad: u32, members: &[u32]) -> ActResul
     if !state.cycle.squads.iter().any(|s| s.id == squad) {
         return Err(t!("err.no_squad"));
     }
-    let old: Vec<u32> = state
-        .cycle
-        .squads
-        .iter()
-        .find(|s| s.id == squad)
-        .unwrap()
-        .members
-        .clone();
+    let old: Vec<u32> = state.cycle.members(squad).collect();
     for m in old {
         if let Some(op) = state.op_mut(m) {
             op.assignment = Assignment::Idle;
@@ -568,14 +566,10 @@ pub fn set_squad(state: &mut GameState, squad: u32, members: &[u32]) -> ActResul
 }
 
 pub fn set_route(state: &mut GameState, squad: u32, route: &[u16]) -> ActResult {
-    let members = state
-        .cycle
-        .squads
-        .iter()
-        .find(|s| s.id == squad)
-        .ok_or_else(|| t!("err.no_squad"))?
-        .members
-        .clone();
+    if state.cycle.squad(squad).is_none() {
+        return Err(t!("err.no_squad"));
+    }
+    let members: Vec<u32> = state.cycle.members(squad).collect();
     crate::mech::routes::validate(state, &members, route)?;
     let s = state.squad_mut(squad).unwrap();
     s.route = route.to_vec();
@@ -587,13 +581,8 @@ pub fn set_route(state: &mut GameState, squad: u32, route: &[u16]) -> ActResult 
 
 /// Order a hard fight: the next trip fights through the wall the squad keeps stopping at.
 pub fn assault(state: &mut GameState, squad: u32) -> ActResult {
-    let s = state
-        .cycle
-        .squads
-        .iter()
-        .find(|s| s.id == squad)
-        .ok_or_else(|| t!("err.no_squad"))?;
-    if s.members.is_empty() || s.route.is_empty() {
+    let s = state.cycle.squad(squad).ok_or_else(|| t!("err.no_squad"))?;
+    if state.cycle.squad_size(squad) == 0 || s.route.is_empty() {
         return Err(t!("err.assault_no_route"));
     }
     let s = state.squad_mut(squad).unwrap();
@@ -606,13 +595,7 @@ pub fn assault(state: &mut GameState, squad: u32) -> ActResult {
 
 pub fn receive_item(state: &mut GameState, id: &str) {
     let b = balance();
-    let owned = state.cycle.inventory.iter().any(|x| x == id)
-        || state
-            .cycle
-            .operatives
-            .iter()
-            .any(|o| o.equipment.as_deref() == Some(id))
-        || state.org.sealed.iter().any(|x| x == id);
+    let owned = state.cycle.has_item(id) || state.org.sealed.iter().any(|x| x == id);
     let name = l10n::name("equip", id);
     if owned {
         // Duplicates turn into materials on arrival.
@@ -676,12 +659,7 @@ pub fn seal(state: &mut GameState, item: &str, on: bool) -> ActResult {
         if state.org.sealed.len() >= slots {
             return Err(t!("err.seal_slots", n = slots));
         }
-        let have = state.cycle.inventory.iter().any(|x| x == item)
-            || state
-                .cycle
-                .operatives
-                .iter()
-                .any(|o| o.equipment.as_deref() == Some(item));
+        let have = state.cycle.has_item(item);
         if !have {
             return Err(t!("err.no_item"));
         }
@@ -708,8 +686,8 @@ pub fn policy_check(state: &GameState, district: u16, policy: Option<&str>) -> A
         }
         let def = c.policy(p).ok_or_else(|| t!("err.no_policy"))?;
         if def.cohabit {
-            let near_rift = d.tiles.iter().any(|t| {
-                geom::neighbors(*t).any(|n| {
+            let near_rift = state.cycle.district_tiles(d.id).any(|t| {
+                geom::neighbors(t).any(|n| {
                     let nt = &state.cycle.tiles[n as usize];
                     nt.owned && nt.terrain == Terrain::Rift
                 })

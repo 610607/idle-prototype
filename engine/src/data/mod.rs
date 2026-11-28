@@ -1075,6 +1075,20 @@ pub struct Balance {
     /// Share of a trip's loot brought back after an emergency retreat / a wipe, x10000.
     pub yield_emergency_bp: i32,
     pub yield_wipe_bp: i32,
+    /// Battles: rounds per wave before it times out.
+    pub battle_max_rounds: u8,
+    /// Battles: actions one unit takes at most in a round, however many action points it has.
+    pub battle_max_actions: i32,
+    /// Battles: how deep a chain of passives and tag overflow may go.
+    pub battle_chain_depth: u8,
+    /// Battles: the "ally HP low" trigger fires below this share of max HP, in percent.
+    pub battle_low_hp_pct: i32,
+    /// Battles: damage after defence = raw x base / (base + def x k).
+    pub battle_def_base: i64,
+    pub battle_def_k: i64,
+    /// Battles: a skill scaled by a stat gets +step_bp per point above the pivot, x10000.
+    pub battle_stat_pivot: i32,
+    pub battle_stat_step_bp: i64,
 }
 
 /// What each organisation level unlocks. A list gives +1 for every entry at or below the level

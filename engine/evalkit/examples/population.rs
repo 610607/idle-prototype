@@ -48,7 +48,7 @@ fn main() {
         for h in 1..=hours {
             bot.step(&mut e);
             e.advance(T0 + h * 3600);
-            for cand in &e.state.cycle.candidates {
+            for cand in e.state.cycle.candidates() {
                 if seen.insert(cand.id) {
                     *by_class.entry(cand.op.class.clone()).or_insert(0) += 1;
                     by_rarity[cand.op.rarity as usize] += 1;
@@ -63,7 +63,7 @@ fn main() {
             if marks.contains(&h) {
                 let calc = economy::calc(&e.state);
                 let cy = &e.state.cycle;
-                let pop: i32 = cy.districts.iter().map(|d| d.population).sum();
+                let pop: i32 = cy.districts().map(|d| d.population).sum();
                 let housing: i32 = calc.districts.iter().map(|d| d.housing).sum();
                 let employed: i32 = calc.districts.iter().map(|d| d.employed).sum();
                 let jobs: i32 = calc.districts.iter().flat_map(|d| d.jobs.values()).sum();
@@ -78,16 +78,16 @@ fn main() {
                     let owned: Vec<_> = calc.districts.iter().filter(|d| d.owned > 0).collect();
                     owned
                         .iter()
-                        .map(|d| cy.districts[d.id as usize].trust as f64)
+                        .map(|d| cy.district(d.id).trust as f64)
                         .sum::<f64>()
                         / owned.len().max(1) as f64
                 };
-                let owned: Vec<_> = cy.tiles.iter().filter(|t| t.owned).collect();
+                let owned: Vec<u16> = cy.owned_tiles().collect();
                 let facilities = owned
                     .iter()
-                    .filter(|t| t.usage.facility().is_some())
+                    .filter(|&&i| cy.facility_on(i).is_some())
                     .count();
-                let alerts = owned.iter().filter(|t| t.alert()).count();
+                let alerts = owned.iter().filter(|&&i| cy.is_alert(i)).count();
                 let militia: i32 = calc.districts.iter().map(|d| d.militia).sum();
                 let r = rows.entry(h).or_insert([0.0; 16]);
                 r[9] += owned.len() as f64;
@@ -105,7 +105,7 @@ fn main() {
                 r[5] += volunteers as f64;
                 r[6] += talent_h as f64 / 100.0;
                 r[7] += trust;
-                r[8] += cy.operatives.len() as f64;
+                r[8] += cy.roster_size() as f64;
                 let pw = prof_workers.entry(h).or_default();
                 for d in &calc.districts {
                     for (p, w) in &d.workers {

@@ -183,3 +183,153 @@ fn mechanics_name_content_only_through_hooks() {
         bad.join("\n")
     );
 }
+
+/// The line without its `//` comment and with string literals emptied.
+fn code(line: &str) -> String {
+    let mut out = String::new();
+    let mut in_str = false;
+    let mut escaped = false;
+    let mut it = line.chars().peekable();
+    while let Some(c) = it.next() {
+        if in_str {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_str = false;
+                out.push('"');
+            }
+            continue;
+        }
+        if c == '/' && it.peek() == Some(&'/') {
+            break;
+        }
+        if c == '"' {
+            in_str = true;
+        }
+        out.push(c);
+    }
+    out
+}
+
+fn ident(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// The text before every `.name` in `text` that is a field access (a whole word, not a call).
+fn accesses<'a>(text: &'a str, name: &str) -> Vec<&'a str> {
+    let pat = format!(".{name}");
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(k) = text[from..].find(&pat) {
+        let at = from + k;
+        let rest = &text[at + pat.len()..];
+        // `0..members` is a range, not a field.
+        let whole = !rest.starts_with(ident) && !text[..at].ends_with('.');
+        let call = rest.trim_start().starts_with('(') || rest.starts_with("::");
+        if whole && !call {
+            out.push(&text[..at]);
+        }
+        from = at + pat.len();
+    }
+    out
+}
+
+/// Code outside the mechanics layer reads the state through `mech::query`
+/// (docs/design-v2-refactor.md, A2): the relations stored twice today and the cycle's lists are
+/// about to move into an entity store and containers, and only the query bodies should have to
+/// follow. Scans the clients (`src/client`), the evaluation kit and the example programs, outside
+/// test modules, comments and string literals. A line marked `// state-write:` is a deliberate
+/// direct write (a scratch copy or test setup) and is skipped.
+#[test]
+fn clients_read_state_through_queries() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // Types that only exist in the saved state's current shape.
+    const TYPES: [&str; 3] = ["Assignment", "TileUse", "Cycle"];
+    // The cycle's lists, read as `<cycle>.<list>` rather than through a query call.
+    const LISTS: [&str; 7] = [
+        "tiles",
+        "districts",
+        "operatives",
+        "squads",
+        "candidates",
+        "inventory",
+        "doctrines",
+    ];
+    const CYCLE: [&str; 3] = [".cycle", "cy", "cycle"];
+    // Relation fields of the state's structs. The view models have fields of the same names, which
+    // some files read: those files are listed with the field and what it belongs to there.
+    const FIELDS: [&str; 5] = ["members", "assignment", "equipment", "usage", "frozen"];
+    const ELSEWHERE: [(&str, &str, &str); 9] = [
+        ("src/client/textui.rs", "members", "SquadView"),
+        ("src/client/textui.rs", "equipment", "OpView"),
+        ("src/client/textui.rs", "usage", "TileView"),
+        ("evalkit/src/bot/mod.rs", "members", "SquadView"),
+        ("evalkit/src/bot/mod.rs", "assignment", "OpView"),
+        ("evalkit/src/bot/mod.rs", "usage", "TileView"),
+        ("evalkit/examples/bot.rs", "members", "SquadView"),
+        (
+            "evalkit/src/price.rs",
+            "equipment",
+            "content().equipment, the item list",
+        ),
+        (
+            "evalkit/examples/synergy.rs",
+            "equipment",
+            "content().equipment",
+        ),
+    ];
+
+    let mut fs = Vec::new();
+    for dir in ["src/client", "evalkit/src", "evalkit/examples", "examples"] {
+        files(&root.join(dir), &mut fs);
+    }
+    fs.sort();
+    let mut bad = Vec::new();
+    for f in fs {
+        let rel = f.strip_prefix(root).unwrap().display().to_string();
+        let text = std::fs::read_to_string(&f).unwrap();
+        // The code joined into one line, so that a chain split over lines reads as one.
+        let mut joined = String::new();
+        for (n, line) in body(&text).lines().enumerate() {
+            if line.contains("// state-write:") {
+                continue;
+            }
+            let c = code(line);
+            for ty in TYPES {
+                let word = c.match_indices(ty).any(|(k, _)| {
+                    !c[..k].ends_with(ident) && !c[k + ty.len()..].starts_with(ident)
+                });
+                if word {
+                    bad.push(format!("{rel}:{}: type {ty}", n + 1));
+                }
+            }
+            for field in FIELDS {
+                let listed = ELSEWHERE.iter().any(|(p, x, _)| *p == rel && *x == field);
+                if !listed && !accesses(&c, field).is_empty() {
+                    bad.push(format!("{rel}:{}: .{field}", n + 1));
+                }
+            }
+            joined.push_str(c.trim());
+        }
+        for list in LISTS {
+            for before in accesses(&joined, list) {
+                let recv = CYCLE.iter().find(|r| {
+                    before.ends_with(**r)
+                        && (r.starts_with('.')
+                            || !before[..before.len() - r.len()].ends_with(ident))
+                });
+                if let Some(r) = recv {
+                    bad.push(format!("{rel}: {r}.{list}"));
+                }
+            }
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "state read past mech::query (docs/design-v2-refactor.md A2: add a query, or mark a \
+         deliberate scratch write with `// state-write:`):\n{}",
+        bad.join("\n")
+    );
+}

@@ -17,7 +17,7 @@ use idle_engine::client::view::{OpView, TideView, View};
 use idle_engine::data::ArmoryTarget;
 use idle_engine::kernel::geom;
 use idle_engine::mech::commands::Command;
-use idle_engine::mech::state::Assignment;
+use idle_engine::mech::query::Post;
 use std::collections::BTreeMap;
 
 /// The knobs a persona or a script turns; everything else is the same greedy play.
@@ -109,8 +109,8 @@ pub fn step(e: &mut Engine) {
 /// Idle the way the view says it: unassigned, or in a squad that no longer exists.
 fn idle(v: &View, o: &OpView) -> bool {
     match o.assignment {
-        Assignment::Idle => true,
-        Assignment::Squad { squad } => !v.squads.iter().any(|s| s.id == squad),
+        Post::Idle => true,
+        Post::Squad { squad } => !v.squads.iter().any(|s| s.id == squad),
         _ => false,
     }
 }
@@ -560,7 +560,7 @@ impl Bot {
                         .operatives
                         .iter()
                         .find(|x| x.id == id)
-                        .is_some_and(|x| !matches!(x.assignment, Assignment::Squad { .. }));
+                        .is_some_and(|x| !matches!(x.assignment, Post::Squad { .. }));
                     if free {
                         moves.push((id, tile));
                     }

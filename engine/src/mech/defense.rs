@@ -115,7 +115,7 @@ pub fn base_defenders(state: &GameState, calc: &EconCalc, tile: u16) -> Vec<Unit
             &hooks::HQ_GUARD_SKILLS,
         )];
     }
-    militia_units(economy::militia_of(calc, t.district))
+    militia_units(economy::militia_of(calc, state.cycle.district_of(tile)))
 }
 
 /// District militia: one squad unit per `militia_per_unit` workers (at least one, at most three),
@@ -183,8 +183,7 @@ pub fn surge_setup(
     let cy = &state.cycle;
     let source = world::surge_source(cy, tile)?;
     let src = &cy.tiles[source as usize];
-    let t = &cy.tiles[tile as usize];
-    let district = t.district.map(|d| &cy.districts[d as usize]);
+    let district = cy.district_of(tile).map(|d| cy.district(d));
     let policy = district
         .and_then(|d| d.policy.as_deref())
         .and_then(|p| c.policy(p));
@@ -317,7 +316,7 @@ pub enum ClaimForecast {
 }
 
 pub fn claim_forecast(state: &GameState, tile: u16) -> ClaimForecast {
-    use crate::mech::state::Assignment;
+    use crate::mech::query::Post;
     let mut s = state.clone();
     s.reports.clear();
     s.trace = None;
@@ -332,14 +331,16 @@ pub fn claim_forecast(state: &GameState, tile: u16) -> ClaimForecast {
     if holds(None) {
         return ClaimForecast::Holds;
     }
-    let ops = &s.cycle.operatives;
-    let idle = ops.iter().filter(|o| o.assignment == Assignment::Idle);
-    let squad = ops
-        .iter()
-        .filter(|o| matches!(o.assignment, Assignment::Squad { .. }));
-    idle.chain(squad)
+    let cy = &s.cycle;
+    let idle = cy.idle_operatives();
+    let squad = cy
+        .operatives()
+        .filter(|o| matches!(cy.post(o), Post::Squad { .. }));
+    let guard = idle
+        .chain(squad)
         .map(|o| o.id)
-        .find(|id| holds(Some(Some(*id))))
+        .find(|id| holds(Some(Some(*id))));
+    guard
         .map(ClaimForecast::Guard)
         .unwrap_or(ClaimForecast::Falls)
 }
@@ -407,7 +408,7 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
     if let Some(id) = setup.defender {
         crate::mech::sim::apply_battle_counters(state, id, &report, held, "surges_held");
     }
-    let district = state.cycle.tiles[tile as usize].district;
+    let district = state.cycle.district_of(tile);
     if held {
         state.cycle.stats.surges_held += 1;
         let residue = if state.cycle.tiles[tile as usize].terrain == Terrain::Rift {

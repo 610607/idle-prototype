@@ -33,10 +33,7 @@ pub fn done(state: &GameState, check: &str) -> bool {
         }
         "research" => cy.research_count > 0,
         "hire" => st.hired > 0,
-        "garrison" => cy
-            .operatives
-            .iter()
-            .any(|o| matches!(o.assignment, Assignment::Garrison { .. })),
+        "garrison" => cy.garrisons().next().is_some(),
         "reaction" => !state.org.codex.is_empty(),
         "counter" => st.counters_won > 0,
         "policy" => cy.districts.iter().any(|d| d.policy.is_some()),

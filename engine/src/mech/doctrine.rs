@@ -33,7 +33,7 @@ pub fn pool(state: &GameState) -> Vec<&'static DoctrineDef> {
         .doctrines
         .iter()
         .filter(|d| d.level <= level && d.ring <= ring)
-        .filter(|d| !cy.doctrines.contains(&d.id) && !cy.research_offers.contains(&d.id))
+        .filter(|d| !cy.holds_doctrine(&d.id) && !cy.research_offers.contains(&d.id))
         .collect()
 }
 

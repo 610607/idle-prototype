@@ -18,6 +18,13 @@ pub struct GeneratedMap {
     pub districts: Vec<District>,
 }
 
+impl GeneratedMap {
+    /// Every generated tile with its board index, in board order (see `mech::query`).
+    pub fn tiles(&self) -> impl Iterator<Item = (u16, &Tile)> + '_ {
+        self.tiles.iter().enumerate().map(|(i, t)| (i as u16, t))
+    }
+}
+
 fn blank_tile(terrain: Terrain) -> Tile {
     Tile {
         terrain,
