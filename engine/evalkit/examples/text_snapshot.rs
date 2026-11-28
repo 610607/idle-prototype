@@ -28,7 +28,10 @@ fn refusals() -> Vec<Command> {
             op: 999,
             tile: Some(0),
         },
-        Command::Claim { tile: 0 },
+        Command::Claim {
+            tile: 0,
+            garrison: None,
+        },
         Command::Build {
             tile: 0,
             facility: None,

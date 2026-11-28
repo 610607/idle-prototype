@@ -111,33 +111,36 @@ fn hands_off(e: &Engine, h: i64, m: &mut Metrics) {
     let mut c = Engine::from_state(e.state.clone());
     c.state.trace = Some(Vec::new());
     let owned = |c: &Engine| c.state.cycle.tiles.iter().filter(|t| t.owned).count() as f64;
-    let (t0, owned0) = (c.state.time, owned(&c));
+    let alerts = |c: &Engine| c.state.cycle.tiles.iter().filter(|t| t.alert()).count() as f64;
+    let (t0, owned0, alerts0) = (c.state.time, owned(&c), alerts(&c));
     c.advance(t0 + 24 * 3600);
     let day1 = score::total(&c.state) as f64;
     c.advance(t0 + 48 * 3600);
     let day2 = score::total(&c.state) as f64;
-    let (mut surges_lost, mut trips_lost) = (0.0, 0.0);
+    let (mut lost, mut lost_day2, mut trips_lost) = (0.0, 0.0, 0.0);
     for tr in c.state.trace.take().unwrap_or_default() {
         match tr {
-            Trace::Surge { held: false, .. } => surges_lost += 1.0,
+            Trace::Surge { held: false, t, .. } => {
+                lost += 1.0;
+                if t >= t0 + 24 * 3600 {
+                    lost_day2 += 1.0;
+                }
+            }
             Trace::Route { won: false, .. } => trips_lost += 1.0,
             _ => {}
         }
     }
-    let alerts = c
-        .state
-        .cycle
-        .tiles
-        .iter()
-        .filter(|t| t.owned && t.alert())
-        .count();
-    m.insert(format!("handsoff.surge_lost.h{h}"), Some(surges_lost / 2.0));
+    m.insert(format!("handsoff.surge_lost.h{h}"), Some(lost / 2.0));
+    m.insert(format!("handsoff.day2_lost.h{h}"), Some(lost_day2));
     m.insert(format!("handsoff.trip_lost.h{h}"), Some(trips_lost));
     m.insert(
         format!("handsoff.owned_lost.h{h}"),
         Some((owned0 - owned(&c)).max(0.0)),
     );
-    m.insert(format!("handsoff.alerts.h{h}"), Some(alerts as f64));
+    m.insert(
+        format!("handsoff.alerted.h{h}"),
+        Some((alerts(&c) - alerts0).max(0.0) / owned0.max(1.0)),
+    );
     m.insert(
         format!("handsoff.growth.h{h}"),
         Some((day2 - day1) / day1.max(1.0)),

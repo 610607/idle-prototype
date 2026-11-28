@@ -676,7 +676,8 @@ mod tests {
     fn hands_off_play_converges() {
         // Six hours of the reference play, then nobody touches the game for ten days: the score
         // settles (stores fill up, nothing new is claimed, built or hired), routes lose nothing
-        // (they stop at walls) and no ground is lost (design v2 阶段 1).
+        // (they stop at walls), no ground is lost and nothing new falls to alert by the end
+        // (design v2 阶段 1).
         use idle_engine::mech::score;
         let (g, _) = play_bot(0, Persona::REFERENCE, Stop::hours(6));
         let mut e = Engine::from_state(g.e.state.clone());
@@ -684,10 +685,20 @@ mod tests {
         let owned = |e: &Engine| e.state.cycle.tiles.iter().filter(|t| t.owned).count();
         let (t0, owned0) = (e.state.time, owned(&e));
         let mut scores = vec![score::total(&e.state) as f64];
+        let alerts = |e: &Engine| e.state.cycle.tiles.iter().filter(|t| t.alert()).count();
+        let mut late_alerts = Vec::new();
         for h in 1..=240 {
             e.advance(t0 + h * 3600);
             scores.push(score::total(&e.state) as f64);
+            if h >= 216 {
+                late_alerts.push(alerts(&e));
+            }
         }
+        // Whatever could not hold has fallen to alert by the last day; nothing new falls then.
+        assert!(
+            late_alerts.windows(2).all(|w| w[0] == w[1]),
+            "still falling on day ten: {late_alerts:?}"
+        );
         let flat = plateau_start(&scores, PLATEAU_WINDOW_H, PLATEAU_TOL);
         assert!(flat.is_some_and(|h| h < 192), "never settles: {scores:?}");
         let lost = e

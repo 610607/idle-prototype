@@ -107,7 +107,10 @@ pub fn samples() -> Vec<Command> {
             op: 2,
             tile: Some(97),
         },
-        Command::Claim { tile: 97 },
+        Command::Claim {
+            tile: 97,
+            garrison: None,
+        },
         Command::Build {
             tile: 97,
             facility: Some("scrapyard".into()),
@@ -860,6 +863,28 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             ic = rate(v.income[3])
         ),
     );
+    let cap = &crate::data::balance().storage_cap;
+    let full = |have: i64, cap: i64| {
+        if have >= cap {
+            t!("cli.board.cap_full")
+        } else {
+            String::new()
+        }
+    };
+    line(
+        &mut o,
+        t!(
+            "cli.board.cap",
+            scrap = cap.scrap,
+            parts = cap.parts,
+            intel = cap.intel,
+            crystal = cap.crystal,
+            fs = full(res.scrap, cap.scrap),
+            fp = full(res.parts, cap.parts),
+            fi = full(res.intel, cap.intel),
+            fc = full(res.crystal, cap.crystal)
+        ),
+    );
     line(
         &mut o,
         t!(
@@ -1514,11 +1539,28 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
         });
     }
     // Claims the auto rule leaves to the player.
+    // When nobody stationed would hold the tile, the claim line names who would: offer that first.
     for p in v.pending.iter().filter(|p| p.kind == "claim") {
         if let Some(tile) = p.tile {
+            if let Some(op) = p.op.and_then(|id| e.state.op(id)) {
+                m.push(Item {
+                    label: t!(
+                        "cli.menu.claim_guard",
+                        name = op.name.render(),
+                        text = p.text
+                    ),
+                    cmd: Command::Claim {
+                        tile,
+                        garrison: Some(op.id),
+                    },
+                });
+            }
             m.push(Item {
                 label: t!("cli.menu.claim", text = p.text),
-                cmd: Command::Claim { tile },
+                cmd: Command::Claim {
+                    tile,
+                    garrison: None,
+                },
             });
         }
     }

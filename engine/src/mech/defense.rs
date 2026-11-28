@@ -303,6 +303,47 @@ pub fn preview(
     Some((combat::simulate(&setup.input), setup.source))
 }
 
+/// What the surges on a claimable tile would do once it is claimed. The claim line shows it, so the
+/// cost of a claim is seen before leaving, not after (docs/design-v2-outline.md 原则 5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClaimForecast {
+    /// Holds with nobody stationed there (or takes no surges).
+    Holds,
+    /// Holds only with someone stationed: this operative does (an idle one if any does, else a
+    /// squad member).
+    Guard(u32),
+    /// Nobody at hand holds it: it would drift to alert.
+    Falls,
+}
+
+pub fn claim_forecast(state: &GameState, tile: u16) -> ClaimForecast {
+    use crate::mech::state::Assignment;
+    let mut s = state.clone();
+    s.reports.clear();
+    s.trace = None;
+    if crate::mech::actions::claim(&mut s, tile).is_err() {
+        return ClaimForecast::Holds;
+    }
+    let holds = |op: Option<Option<u32>>| {
+        preview(&s, tile, op, false)
+            .map(|(r, _)| r.won())
+            .unwrap_or(true)
+    };
+    if holds(None) {
+        return ClaimForecast::Holds;
+    }
+    let ops = &s.cycle.operatives;
+    let idle = ops.iter().filter(|o| o.assignment == Assignment::Idle);
+    let squad = ops
+        .iter()
+        .filter(|o| matches!(o.assignment, Assignment::Squad { .. }));
+    idle.chain(squad)
+        .map(|o| o.id)
+        .find(|id| holds(Some(Some(*id))))
+        .map(ClaimForecast::Guard)
+        .unwrap_or(ClaimForecast::Falls)
+}
+
 /// Resolve the surge on `tile` at the current time.
 pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
     let b = balance();
@@ -430,6 +471,29 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_claim_forecast_names_who_holds_and_they_do() {
+        use crate::mech::{actions, sim};
+        for seed in 0..4u64 {
+            let mut s = sim::new_game(seed, 1_000_000_000 - 1_000_000_000 % 3600, "test");
+            sim::choose_map(&mut s, 0).unwrap();
+            for tile in actions::claimable_tiles(&s) {
+                let f = claim_forecast(&s, tile);
+                let mut c = s.clone();
+                let guard = match f {
+                    ClaimForecast::Guard(op) => Some(op),
+                    _ => None,
+                };
+                actions::claim_with(&mut c, tile, guard).unwrap();
+                let held = preview(&c, tile, None, false).map(|(r, _)| r.won());
+                match f {
+                    ClaimForecast::Falls => assert_eq!(held, Some(false), "{seed}/{tile}"),
+                    _ => assert_ne!(held, Some(false), "{seed}/{tile}: {f:?}"),
+                }
+            }
+        }
+    }
+
     use super::*;
     use crate::mech::state::TileUse;
 

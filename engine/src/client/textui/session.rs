@@ -1013,7 +1013,10 @@ mod tests {
     fn menu_ids_are_stable_and_unique() {
         let item = |tile| Item {
             label: String::new(),
-            cmd: Command::Claim { tile },
+            cmd: Command::Claim {
+                tile,
+                garrison: None,
+            },
         };
         let a = menu_ids(&[item(3), item(4), item(3)]);
         let b = menu_ids(&[item(4), item(3)]);

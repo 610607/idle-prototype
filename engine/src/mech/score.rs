@@ -31,6 +31,7 @@ pub struct Item {
 
 /// 各项明细，按显示顺序。全部是“现在手里有的”：建好的、练好的按高权重，库存按低权重
 /// （docs/design-v2-outline.md 已定）。不含随时间累加的项，所以放手不管时分数会停住。
+/// 告急的格子（连同上面的设施）不算。
 pub fn breakdown(state: &GameState) -> Vec<Item> {
     let cy = &state.cycle;
     let b = balance();
@@ -43,7 +44,9 @@ pub fn breakdown(state: &GameState) -> Vec<Item> {
     let trust: i64 = owned_d.iter().map(|d| d.trust as i64 / 10).sum();
     let pop: i64 =
         owned_d.iter().map(|d| d.population as i64).sum::<i64>() / b.score_pop_div.max(1) as i64;
-    let owned = |t: &&crate::mech::state::Tile| t.owned && t.terrain != Terrain::Hq;
+    // 告急的格子停产，也不算“手里有的”：丢了地，分数和威胁一起掉（docs/design-v2-outline.md
+    // “威胁”），放手不管时守不住的格子掉进告急，威胁随之回落，其余的格子就守得住了。
+    let owned = |t: &&crate::mech::state::Tile| t.owned && t.terrain != Terrain::Hq && !t.alert();
     let tiles = cy.tiles.iter().filter(owned).count() as i64;
     let facilities = cy
         .tiles
@@ -183,5 +186,23 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(s.cycle.resources.parts, cap.parts + 40);
+    }
+
+    #[test]
+    fn a_tile_on_alert_drops_out_of_the_score_and_the_threat() {
+        let mut s = new_game(7, 1_000_000_000 - 1_000_000_000 % 3600, "test");
+        choose_map(&mut s, 0).unwrap();
+        let tile = crate::kernel::geom::neighbors(crate::kernel::geom::HQ)
+            .find(|n| s.cycle.tiles[*n as usize].claimable_kind())
+            .expect("a claimable neighbour of HQ");
+        s.cycle.tiles[tile as usize].warden = balance().warden_max;
+        crate::mech::actions::claim(&mut s, tile).unwrap();
+        let tile = tile as usize;
+        let (score, threat) = (total(&s), crate::mech::pressure::threat(&s));
+        s.cycle.tiles[tile].warden = 0;
+        assert!(s.cycle.tiles[tile].alert());
+        let w = balance().score.tile;
+        assert!(total(&s) <= score - w, "{} vs {score}", total(&s));
+        assert!(crate::mech::pressure::threat(&s) <= threat - w);
     }
 }

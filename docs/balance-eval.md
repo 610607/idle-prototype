@@ -42,7 +42,7 @@ cargo run --release --example eval -- run greedy --seeds 8 --until plateau --out
 
 **按平台跑**（设计 v2 阶段 0，docs/design-v2-plan.md）：一局由玩家决定什么时候收束，所以评估要看成果停在哪、多久停住。`--until plateau[:W[:tol]]` 让每局跑到成果第一次在 W 小时里涨不到 tol（默认 48 小时、2%），最多 `--hours` 小时。每局都会记下 `stop.h`（跑了几小时）、`score.final`、`score.peak`、`score.drop`（最后比最高掉了多少）、`plateau.h`（平稳的那段从第几小时开始，没平稳过就缺）、`plateau.score`（平稳那段结束时的成果）；按小时跑的局也有这几项，只是不会提前停。运行文件里 `until` 记下停法，按小时跑的局没有这一项。
 
-**放手不管探针**（设计 v2 阶段 1）：在第 24、72 小时各复制一份局面，之后两天不下任何命令，记下 `handsoff.surge_lost.h{N}`（平均每天失守几次来潮）、`handsoff.trip_lost.h{N}`（路线打输几仗，路线墙前会停，应当是 0）、`handsoff.owned_lost.h{N}`（少了几格地）、`handsoff.alerts.h{N}`（两天后告急几格）、`handsoff.growth.h{N}`（第二天成果涨了多少，收敛时接近 0）。复制出来的那份只用来量，不影响这一局。目标 `hands_off` 读这些。`cargo test` 里另有一条小规模收敛检验（`run::tests::hands_off_play_converges`）：参考玩法 6 小时后放手十天，成果要停住、路线不输、不丢地。
+**放手不管探针**（设计 v2 阶段 1）：在第 24、72 小时各复制一份局面，之后两天不下任何命令，记下 `handsoff.surge_lost.h{N}`（平均每天失守几次来潮）、`handsoff.trip_lost.h{N}`（路线打输几仗，路线墙前会停，应当是 0）、`handsoff.owned_lost.h{N}`（少了几格地）、`handsoff.alerted.h{N}`（两天里新掉进告急的格数，占当时领地的比例）、`handsoff.day2_lost.h{N}`（第二天失守几次来潮：收敛时比第一天少）、`handsoff.growth.h{N}`（第二天成果涨了多少，收敛时接近 0）。复制出来的那份只用来量，不影响这一局。目标 `hands_off` 读这些。`cargo test` 里另有一条小规模收敛检验（`run::tests::hands_off_play_converges`）：参考玩法 6 小时后放手十天，成果要停住、路线不输、不丢地，最后一天不再有格子新掉进告急。
 
 在 4 核上：20 个种子 × 24 小时约 9 秒，× 72 小时约 55 秒（越往后机器人每小时要预演的路线越多）；`calibrate` 全套约 10 秒。每个人格都和文字版、试玩会话用同一个开局：第 1 张地图（`ChooseMap 0`），开三条规章（`textui::setup`）。
 

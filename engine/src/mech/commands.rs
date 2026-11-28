@@ -31,8 +31,12 @@ pub enum Command {
         op: u32,
         tile: Option<u16>,
     },
+    /// Claim a tile; `garrison` also stations that operative there right away (the claim line
+    /// names who holds it when nobody stationed would).
     Claim {
         tile: u16,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        garrison: Option<u32>,
     },
     Build {
         tile: u16,
@@ -146,7 +150,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         Command::SetSquad { squad, members } => actions::set_squad(state, *squad, members),
         Command::Assault { squad } => actions::assault(state, *squad),
         Command::Garrison { op, tile } => actions::garrison(state, *op, *tile),
-        Command::Claim { tile } => actions::claim(state, *tile),
+        Command::Claim { tile, garrison } => actions::claim_with(state, *tile, *garrison),
         Command::Build { tile, facility } => actions::build(state, *tile, facility.as_deref()),
         Command::Counter { tile } => actions::counter(state, *tile),
         Command::Abandon { tile } => actions::abandon(state, *tile),
