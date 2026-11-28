@@ -1031,7 +1031,8 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
                     text += &t!(
                         "cli.board.stopped",
                         tile = st.label,
-                        outcome = outcome(st.outcome)
+                        outcome = outcome(st.outcome),
+                        foes = foes_of(&v.tiles[st.tile as usize])
                     );
                 }
                 text
@@ -1380,6 +1381,33 @@ pub fn info(e: &mut Engine) -> String {
 // ---------------------------------------------------------------------------
 // Menu
 
+/// The enemies on a tile, each once, with the tags they write (“未知” when none are known).
+fn foes_of(tv: &crate::client::view::TileView) -> String {
+    let foes: Vec<String> = tv
+        .enemies
+        .iter()
+        .flatten()
+        .map(|en| {
+            if en.writes.is_empty() {
+                en.name.clone()
+            } else {
+                t!(
+                    "cli.route.foe_tags",
+                    name = en.name,
+                    tags = tags(&en.writes)
+                )
+            }
+        })
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    if foes.is_empty() {
+        t!("cli.unknown")
+    } else {
+        list(&foes)
+    }
+}
+
 fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
     let v = e.view();
     let mut targets: Vec<_> = v
@@ -1398,24 +1426,7 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
     let mut out = vec![];
     for (ring, tile) in targets.iter().take(10) {
         let tv = &v.tiles[*tile as usize];
-        let foes: Vec<String> = tv
-            .enemies
-            .iter()
-            .flatten()
-            .map(|en| {
-                if en.writes.is_empty() {
-                    en.name.clone()
-                } else {
-                    t!(
-                        "cli.route.foe_tags",
-                        name = en.name,
-                        tags = tags(&en.writes)
-                    )
-                }
-            })
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .collect();
+        let foes = foes_of(tv);
         let mut best: Option<(Vec<u16>, RoutePreview)> = None;
         let mut tries = vec![vec![*tile]];
         tries.extend(geom::neighbors(*tile).map(|n| vec![n, *tile]));
@@ -1447,11 +1458,7 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
                     danger = tv.danger_pct,
                     warden = tv.warden,
                     terrain = terrain(tv.terrain),
-                    foes = if foes.is_empty() {
-                        t!("cli.unknown")
-                    } else {
-                        list(&foes)
-                    },
+                    foes = foes,
                     outcome = outcome(p.outcome),
                     minutes = p.minutes
                 ),
