@@ -2,7 +2,7 @@
 //! cleanly and reads the same for people and LLMs.
 //!
 //! ```text
-//! cargo run --release --example eval -- run [persona] [--seeds N] [--hours H] [--patch JSON] [--out FILE] [--sessions OUTDIR]
+//! cargo run --release --example eval -- run [persona] [--seeds N] [--hours H] [--until hours|plateau[:W[:tol]]] [--patch JSON] [--out FILE] [--sessions OUTDIR]
 //! cargo run --release --example eval -- session DIR… [--out FILE]   # replay play sessions (docs/eval-interface.md)
 //! cargo run --release --example eval -- check FILE [GOALS]       # goal checks (eval/goals.json)
 //! cargo run --release --example eval -- review RUN… [--base FILE] [--out REPORT.md] [--bless]   # the evaluator
@@ -131,7 +131,16 @@ fn main() {
                 .map(|p| Persona::parse(p).unwrap_or_else(|| panic!("unknown persona {p}")))
                 .unwrap_or(Persona::REFERENCE);
             let n: u64 = arg(&args, "--seeds").map_or(20, |s| s.parse().unwrap());
-            let hours: i64 = arg(&args, "--hours").map_or(72, |s| s.parse().unwrap());
+            let until = arg(&args, "--until").unwrap_or_else(|| "hours".into());
+            // A plateau run plays until the score is flat, at most `--hours` (default two weeks).
+            let default_h = if until.starts_with("plateau") {
+                336
+            } else {
+                72
+            };
+            let hours: i64 = arg(&args, "--hours").map_or(default_h, |s| s.parse().unwrap());
+            let stop = run::Stop::parse(&until, hours)
+                .unwrap_or_else(|| panic!("--until: hours or plateau[:W[:tol]], not {until}"));
             let patch = arg(&args, "--patch");
             if let Some(p) = &patch {
                 idle_engine::data::patch_balance(p).unwrap();
@@ -139,7 +148,7 @@ fn main() {
             let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
             let seeds: Vec<u64> = (0..n).collect();
             let sessions = arg(&args, "--sessions").map(std::path::PathBuf::from);
-            let mut f = run::run(persona, &seeds, hours, threads, sessions.as_deref());
+            let mut f = run::run(persona, &seeds, stop, threads, sessions.as_deref());
             f.patch = patch;
             f.build = Some(idle_engine::mech::fingerprint());
             print_summary(&f);

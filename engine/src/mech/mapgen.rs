@@ -6,6 +6,7 @@ use crate::data::{balance, content, Tag};
 use crate::kernel::geom::{self, ring, TILES};
 use crate::kernel::rng::Rng;
 use crate::l10n::{self, Text};
+use crate::mech::pressure;
 use crate::mech::state::{
     Dial, District, MapPreview, RiftState, SpecialKind, Terrain, Tile, TileUse,
 };
@@ -306,9 +307,9 @@ pub fn generate(seed: u64, modifier: &str) -> GeneratedMap {
     let [danger_lo, danger_hi] = b.tile_danger_bp;
 
     for i in 0..TILES as u16 {
-        let r = ring(i);
+        let r = pressure::level_at(i);
         let t = &mut tiles[i as usize];
-        t.revealed = r <= 1;
+        t.revealed = ring(i) <= 1;
         match t.terrain {
             Terrain::Hq => {
                 t.owned = true;
@@ -329,23 +330,18 @@ pub fn generate(seed: u64, modifier: &str) -> GeneratedMap {
                 } else {
                     "city"
                 };
-                let waves = if r <= 2 {
-                    1
-                } else if r <= 5 {
-                    2
-                } else {
-                    3
-                };
-                let count = if r <= 3 { 2 } else { 3 };
+                let by_level = |t: &Vec<i32>| *t.get(r as usize).or(t.last()).unwrap_or(&1);
+                let waves = by_level(&b.waves_by_level).max(1);
+                let count = by_level(&b.wave_size_by_level).max(1) as usize;
                 if t.special == Some(SpecialKind::Core) {
                     t.warden = 0;
+                    let (lv, [a, c, g]) = (b.core_level, b.core_wave_sizes);
+                    let mut guards = roll_wave(&mut rng, "rift", lv, m.favored_tag, g as usize);
+                    guards.push(m.core_enemy.clone());
                     t.waves = vec![
-                        roll_wave(&mut rng, "rift", 7, m.favored_tag, 2),
-                        roll_wave(&mut rng, "city", 7, m.favored_tag, 2),
-                        vec![
-                            roll_wave(&mut rng, "rift", 7, m.favored_tag, 1).remove(0),
-                            m.core_enemy.clone(),
-                        ],
+                        roll_wave(&mut rng, "rift", lv, m.favored_tag, a as usize),
+                        roll_wave(&mut rng, "city", lv, m.favored_tag, c as usize),
+                        guards,
                     ];
                 } else {
                     t.waves = (0..waves)

@@ -23,7 +23,7 @@ pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
     let natives = t.natives;
     let district = t.district;
     let first = !t.ever_owned;
-    let deepest_before = world::deepest_owned(&state.cycle);
+    let deepest_before = crate::mech::pressure::research_level(&state.cycle);
     let frozen = t.frozen.clone();
     {
         let t = &mut state.cycle.tiles[i];
@@ -58,7 +58,7 @@ pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
     world::reveal_frontier(&mut state.cycle);
     check_contiguity(state);
     // A new ring brings its doctrines into the research pool.
-    let deepest = world::deepest_owned(&state.cycle);
+    let deepest = crate::mech::pressure::research_level(&state.cycle);
     if deepest > deepest_before {
         let level = crate::mech::sim::org_level(state);
         let n = content()

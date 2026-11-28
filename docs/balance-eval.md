@@ -37,7 +37,10 @@ cargo run --release --example eval -- price
 cargo run --release --example eval -- timeline 0 --hours 48
 cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --sessions /tmp/sess   # 每局也写成会话目录 /tmp/sess/greedy-s<种子>/
 cargo run --release --example eval -- session /tmp/llm/s0 /tmp/llm/s1 --out /tmp/llm.json     # 重放会话：同名指标 + llm.*
+cargo run --release --example eval -- run greedy --seeds 8 --until plateau --out /tmp/p.json   # 跑到成果不再上涨为止（最多 --hours，默认 336）
 ```
+
+**按平台跑**（设计 v2 阶段 0，docs/design-v2-plan.md）：一局由玩家决定什么时候收束，所以评估要看成果停在哪、多久停住。`--until plateau[:W[:tol]]` 让每局跑到成果第一次在 W 小时里涨不到 tol（默认 48 小时、2%），最多 `--hours` 小时。每局都会记下 `stop.h`（跑了几小时）、`score.final`、`score.peak`、`score.drop`（最后比最高掉了多少）、`plateau.h`（平稳的那段从第几小时开始，没平稳过就缺）、`plateau.score`（平稳那段结束时的成果）；按小时跑的局也有这几项，只是不会提前停。运行文件里 `until` 记下停法，按小时跑的局没有这一项。
 
 在 4 核上：20 个种子 × 24 小时约 9 秒，× 72 小时约 55 秒（越往后机器人每小时要预演的路线越多）；`calibrate` 全套约 10 秒。每个人格都和文字版、试玩会话用同一个开局：第 1 张地图（`ChooseMap 0`），开三条规章（`textui::setup`）。
 
@@ -205,6 +208,7 @@ cargo run --release --example eval -- payoff 0 greedy@4 --patch '{…}'
 - `stat` 取 `p10`、`p50`、`p90`（跨种子）。
 - `personas` 为空表示对所有人格都适用；以 `*` 结尾表示前缀，如 `llm:*` 是所有 LLM 试玩。
 - 文件顶层的 `gate_personas`（现在是 `["greedy"]`）：门槛只由这些人格判。其他人格（机器人人格、LLM 试玩）照样检查、照样列进报告，但超出区间只记“未达（观察）”，是打法读数，不让 `review` 失败。为空表示所有人格都判。
+- `run`：这条目标读哪种运行。`hours`（默认）只读按小时跑的局，`plateau` 只读 `--until plateau` 的局，`any` 都读。两种写法并存：按小时写的旧目标留着，按平台写的目标另起，互不干扰。
 - `missing_fails`：缺值当 +∞ 算并判失败，适合到达时间这类指标。不设时，统计量落在缺值上就显示 `n/a`，不判失败（比如地图边缘外没有“下一环”）。
 - 目标里的指标 id 必须在注册表里，`cargo test` 会拦。指标改名或退役时，目标显示“无法判断”，不会悄悄通过。
 - **读法**：同一条区间，所有人格都不过，问题在数值；只有部分人格不过，问题在策略，或者区间设在了不该设的指标上（思路同 Riot 的“任一玩家群体超上限就算过强，所有群体都低于下限才算过弱”）。

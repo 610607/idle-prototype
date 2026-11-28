@@ -6,10 +6,11 @@ use crate::data::hooks;
 use crate::data::{
     balance, content, Act, Cond, FacilityDef, FixtureDef, Gambit, Row, Tag, Target, TraitEffect,
 };
-use crate::kernel::geom::{self, ring};
+use crate::kernel::geom;
 use crate::mech::combat::{self, enemy_spec, BattleInput, BattleKind, BattleReport, UnitSpec};
 use crate::mech::economy::{self, EconCalc};
 use crate::mech::operative;
+use crate::mech::pressure;
 use crate::mech::state::{EventKind, GameState, Terrain, TideEntry};
 use crate::mech::world;
 use crate::{l10n, t, txt};
@@ -188,7 +189,7 @@ pub fn surge_setup(
         .and_then(|d| d.policy.as_deref())
         .and_then(|p| c.policy(p));
 
-    let mut mult: i64 = world::attention_bp(cy) as i64 * b.surge_strength_bp as i64 / 10_000;
+    let mut mult: i64 = pressure::surge_base_bp(cy);
     if let Some(r) = &src.rift {
         if src.owned {
             mult = mult * b.rift_surge_bp[r.dial.idx()] as i64 / 10_000;
@@ -197,17 +198,8 @@ pub fn surge_setup(
     if let Some(p) = policy {
         mult = mult * (10_000 + p.surge_bp) as i64 / 10_000;
     }
-    let r = ring(source).max(1);
-    // Surges follow their own ring curve: `enemy_spec` scales by the route table, so trade it for
-    // the surge one.
-    let at = |t: &Vec<i32>| -> i64 {
-        t.get(r as usize)
-            .or(t.last())
-            .copied()
-            .unwrap_or(10_000)
-            .max(1) as i64
-    };
-    mult = mult * at(&b.surge_ring_bp) / at(&b.enemy_ring_bp);
+    let r = pressure::surge_level(cy, source);
+    mult = pressure::surge_level_adjust(mult, r);
     let waves: Vec<Vec<UnitSpec>> = src
         .waves
         .iter()

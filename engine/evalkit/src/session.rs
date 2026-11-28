@@ -424,7 +424,7 @@ mod tests {
         let (seed, hours) = (0, 12);
         let dir = tmp("bot");
         let persona = Persona::REFERENCE;
-        let (mut g, used) = run::play_bot(seed, persona, hours);
+        let (mut g, used) = run::play_bot(seed, persona, run::Stop::hours(hours));
         write_bot(&dir, seed, persona, hours, &mut g).unwrap();
         let bot = RunFile::collect(persona.name(), hours, vec![(seed, g.metrics, used)]);
 

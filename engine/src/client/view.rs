@@ -2,7 +2,7 @@
 //! they render these and send commands back.
 
 use crate::data::{balance, content, Gambit, OrgPerks, Resources, Stat, Tag, Trigger};
-use crate::kernel::geom::{self, ring, TILES};
+use crate::kernel::geom::{self, TILES};
 use crate::mech::actions;
 use crate::mech::economy::{self, EconCalc};
 use crate::mech::operative::{self, Derived, RARITY_NAMES};
@@ -1199,7 +1199,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 i,
                 label: geom::label(i),
                 terrain: terrain_name(t),
-                ring: ring(i),
+                ring: crate::mech::pressure::depth(cy, i),
                 revealed: t.revealed,
                 owned: t.owned,
                 warden: if t.revealed { t.warden } else { 0 },
@@ -1322,7 +1322,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             last: s.last.as_ref().map(trip_view),
             rest_until: s.rest_until,
             trips: s.trips,
-            deepest: s.route.iter().map(|i| ring(*i)).max().unwrap_or(0),
+            deepest: crate::mech::pressure::deepest_of(cy, &s.route),
         })
         .collect();
 
@@ -1538,9 +1538,9 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         income,
         power: (calc.power_supply, calc.power_demand, calc.power_bp),
         attention: (
-            world::attention_level(cy),
-            world::deepest_route(cy),
-            world::attention_bp(cy),
+            crate::mech::pressure::attention_level(cy),
+            crate::mech::pressure::deepest_route(cy),
+            crate::mech::pressure::attention_bp(cy),
         ),
         self_sufficient: sim::self_sufficient(state),
         border_count: border.len(),

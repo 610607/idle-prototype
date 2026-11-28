@@ -1,20 +1,12 @@
 //! Readings of the game state that several parts of the kit share (probes, calibration, the
 //! strength series).
-use idle_engine::kernel::geom::ring;
 use idle_engine::mech::combat::UnitSpec;
 use idle_engine::mech::operative;
 use idle_engine::mech::state::{GameState, Terrain};
 
-/// Deepest ring with an owned tile (0: only the HQ).
+/// Deepest level with an owned tile (0: only the HQ); see `mech::pressure`.
 pub fn deepest_owned(st: &GameState) -> i32 {
-    st.cycle
-        .tiles
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| t.owned)
-        .map(|(i, _)| ring(i as u16))
-        .max()
-        .unwrap_or(0)
+    idle_engine::mech::pressure::deepest_owned(&st.cycle)
 }
 
 /// Tiles a route could fight on: unowned, with enemies, not barrier or HQ.

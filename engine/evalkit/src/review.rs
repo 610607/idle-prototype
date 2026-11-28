@@ -74,10 +74,30 @@ pub struct Goal {
     pub text: String,
     pub doc: String,
     pub checks: BTreeMap<String, Vec<Band>>,
+    /// Which runs the goal reads: "hours" (fixed-length runs, the default), "plateau" (runs
+    /// played to the plateau, `eval run --until plateau`) or "any".
+    #[serde(default = "default_run")]
+    pub run: String,
     /// Personas whose results can fail this gate (the file's `gate_personas`); empty = all.
     /// Other personas' results outside a band read as watch: a strategy reading, not a verdict.
     #[serde(skip)]
     pub gate_personas: Vec<String>,
+}
+
+fn default_run() -> String {
+    "hours".into()
+}
+
+impl Goal {
+    /// Whether this goal reads run `f` (by how the run stopped).
+    pub fn reads(&self, f: &RunFile) -> bool {
+        let plateau = f.until.as_deref().is_some_and(|u| u.starts_with("plateau"));
+        match self.run.as_str() {
+            "plateau" => plateau,
+            "any" => true,
+            _ => !plateau,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -100,6 +120,11 @@ pub fn load(path: &str) -> Vec<Goal> {
         assert!(
             ["experience", "selfcheck"].contains(&g.kind.as_str()),
             "{path}: {}: kind must be experience or selfcheck",
+            g.id
+        );
+        assert!(
+            ["hours", "plateau", "any"].contains(&g.run.as_str()),
+            "{path}: {}: run must be hours, plateau or any",
             g.id
         );
         assert!(
@@ -161,7 +186,7 @@ pub fn stat(s: &Summary, name: &str) -> f64 {
 /// Every check of every goal that applies to this run's persona.
 pub fn evaluate<'a>(goals: &'a [Goal], f: &RunFile) -> Vec<Outcome<'a>> {
     let mut out = Vec::new();
-    for g in goals {
+    for g in goals.iter().filter(|g| g.reads(f)) {
         for (id, bands) in &g.checks {
             for b in bands.iter().filter(|b| applies(&b.personas, &f.persona)) {
                 let watch = b.watch || g.level == "watch" || !applies(&g.gate_personas, &f.persona);
@@ -642,6 +667,29 @@ pub fn review(files: &[RunFile], base: Option<&str>, goals_path: &str) -> (Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn goals_read_runs_by_how_they_stopped() {
+        let goal = |run: &str| -> Goal {
+            serde_json::from_value(serde_json::json!({
+                "id": "g", "kind": "experience", "level": "gate", "text": "", "doc": "",
+                "checks": { "stop.h": [{ "stat": "p50", "min": 1.0 }] }, "run": run
+            }))
+            .unwrap()
+        };
+        let hours = RunFile::default();
+        let plateau = RunFile {
+            until: Some("plateau:48:0.02".into()),
+            ..Default::default()
+        };
+        assert!(goal("hours").reads(&hours) && !goal("hours").reads(&plateau));
+        assert!(goal("plateau").reads(&plateau) && !goal("plateau").reads(&hours));
+        assert!(goal("any").reads(&hours) && goal("any").reads(&plateau));
+        assert_eq!(
+            evaluate(std::slice::from_ref(&goal("plateau")), &hours).len(),
+            0
+        );
+    }
 
     #[test]
     fn goals_use_registered_ids() {
