@@ -24,6 +24,8 @@ pub const START_CREW: [&str; 3] = ["vanguard", "marksman", "medic"];
 /// militia unit elsewhere (same id as the profession whose workers back it).
 pub const HQ_GUARD: &str = "hq_guard";
 pub const MILITIA_UNIT: &str = "militia";
+/// The fixed map a new player starts on (`maps.json`).
+pub const TUTORIAL_MAP: &str = "tutorial";
 /// Automation rules (规章): each is a piece of code in `mech::sim`.
 pub const RULE_AUTO_CLAIM: &str = "auto_claim";
 pub const RULE_AUTO_RECRUIT: &str = "auto_recruit";
@@ -60,6 +62,7 @@ pub fn check(c: &Content) -> Vec<String> {
     for id in [RULE_AUTO_CLAIM, RULE_AUTO_RECRUIT, RULE_AUTO_COUNTER] {
         need(c.rule(id).is_some(), "rule", id);
     }
+    need(c.map(TUTORIAL_MAP).is_some(), "map", TUTORIAL_MAP);
     errs
 }
 
@@ -77,6 +80,7 @@ pub fn all() -> Vec<&'static str> {
         RULE_AUTO_CLAIM,
         RULE_AUTO_RECRUIT,
         RULE_AUTO_COUNTER,
+        TUTORIAL_MAP,
     ];
     v.extend(START_CREW);
     v

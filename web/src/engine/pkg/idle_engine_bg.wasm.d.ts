@@ -10,6 +10,7 @@ export const wasmengine_dry_run: (a: number, b: number, c: number) => [number, n
 export const wasmengine_garrison_options: (a: number, b: number) => [number, number];
 export const wasmengine_load: (a: number, b: number) => [number, number, number];
 export const wasmengine_new: (a: number, b: number, c: number, d: number) => number;
+export const wasmengine_new_map: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
 export const wasmengine_parse_command: (a: number, b: number) => number;
 export const wasmengine_preview_route: (a: number, b: number, c: number, d: number) => [number, number];
 export const wasmengine_preview_surge: (a: number, b: number, c: number) => [number, number];

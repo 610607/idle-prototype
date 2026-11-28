@@ -141,6 +141,9 @@ pub struct TileView {
     pub squads: Vec<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workers: Option<(i32, i32)>,
+    /// 曾经的用途 of a fixed map's plot (a facility id or `housing`); absent on random maps.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub former: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -745,6 +748,36 @@ pub struct View {
     pub research: ResearchView,
     pub armory: Vec<ArmoryView>,
     pub tasks: TasksView,
+    /// The part of the board a fixed map uses; absent on random maps (the whole board).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounds: Option<Bounds>,
+    /// A fixed map's pace (`data::maps::Pace`); absent on random maps.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pace: Option<crate::data::maps::Pace>,
+}
+
+/// A rectangle of the board: left column, top row, width, height.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Bounds {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+}
+
+/// The board rectangle and pace of the fixed map in play (`None` on a random map).
+pub fn fixed_map(state: &GameState) -> Option<(Bounds, crate::data::maps::Pace)> {
+    let m = content().map(state.cycle.map.as_deref()?)?;
+    let (x, y) = m.origin();
+    Some((
+        Bounds {
+            x,
+            y,
+            w: m.size[0],
+            h: m.size[1],
+        },
+        m.pace,
+    ))
 }
 
 /// An event as shown: the kept key and arguments rendered in the current language.
@@ -1191,6 +1224,8 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             research: research_view(state),
             armory: armory_view(state),
             tasks: tasks_view(state),
+            bounds: None,
+            pace: None,
         };
     }
 
@@ -1270,6 +1305,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 },
                 squads: squads_on.get(&i).cloned().unwrap_or_default(),
                 workers,
+                former: if t.revealed { t.former.clone() } else { None },
             }
         })
         .collect();
@@ -1577,7 +1613,10 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         }
     }
 
-    let income = calc.income.map(|v| v / 100);
+    // Per hour of real time: a fixed map's hour of output comes `output_mult` times an hour.
+    let mult = pace.output_mult;
+    let income = calc.income.map(|v| v * mult / 100);
+    let fixed = fixed_map(state);
     View {
         time: state.time,
         revision: state.revision,
@@ -1613,6 +1652,8 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         research: research_view(state),
         armory: armory_view(state),
         tasks: tasks_view(state),
+        bounds: fixed.map(|f| f.0),
+        pace: fixed.map(|f| f.1),
     }
 }
 

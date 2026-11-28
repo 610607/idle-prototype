@@ -16,6 +16,10 @@ export class WasmEngine {
     static load(save: string): WasmEngine;
     constructor(seed: number, now: number, device: string);
     /**
+     * A new game on a fixed map (`maps.json` id, e.g. `tutorial`).
+     */
+    static new_map(seed: number, now: number, device: string, map: string): WasmEngine;
+    /**
      * Parse-check a command without running it (lets the client validate saved macros).
      */
     static parse_command(json: string): boolean;
@@ -45,6 +49,7 @@ export interface InitOutput {
     readonly wasmengine_garrison_options: (a: number, b: number) => [number, number];
     readonly wasmengine_load: (a: number, b: number) => [number, number, number];
     readonly wasmengine_new: (a: number, b: number, c: number, d: number) => number;
+    readonly wasmengine_new_map: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly wasmengine_parse_command: (a: number, b: number) => number;
     readonly wasmengine_preview_route: (a: number, b: number, c: number, d: number) => [number, number];
     readonly wasmengine_preview_surge: (a: number, b: number, c: number) => [number, number];

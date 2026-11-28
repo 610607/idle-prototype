@@ -83,7 +83,14 @@ function Brackets({ x, y, color, className }: { x: number; y: number; color: str
 
 export function Board() {
   const { view, now, open, pages, routeEdit, setRouteEdit, focusTile, selectedTile, game, toast } = useCtx();
+  // A fixed map uses only part of the board: draw that rectangle (coordinates stay the board's).
+  const b = view.bounds ?? { x: 0, y: 0, w: N, h: N };
+  const inside = (i: number) => {
+    const [x, y] = xy(i);
+    return x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+  };
   const tiles = view.tiles;
+  const shown = view.bounds ? tiles.filter((t) => inside(t.i)) : tiles;
   const top = pages[pages.length - 1];
   const district = top?.kind === 'district' ? top.district : null;
 
@@ -99,8 +106,9 @@ export function Board() {
     const territory: string[] = [];
     for (const t of tiles) {
       const [x, y] = xy(t.i);
-      const right = x + 1 < N ? tiles[t.i + 1] : undefined;
-      const down = y + 1 < N ? tiles[t.i + N] : undefined;
+      if (x < b.x || x >= b.x + b.w || y < b.y || y >= b.y + b.h) continue;
+      const right = x + 1 < b.x + b.w ? tiles[t.i + 1] : undefined;
+      const down = y + 1 < b.y + b.h ? tiles[t.i + N] : undefined;
       for (const [o, dir] of [
         [right, 'r'],
         [down, 'd'],
@@ -112,7 +120,7 @@ export function Board() {
       }
     }
     return { district: district.join(''), territory: territory.join('') };
-  }, [tiles]);
+  }, [tiles, b.x, b.y, b.w, b.h]);
 
   const onTile = (tile: TileView) => {
     if (routeEdit) {
@@ -140,10 +148,10 @@ export function Board() {
     .map((s, si) => ({ s, si, route: routeEdit?.squad === s.id ? routeEdit.route : s.route }))
     .filter((r) => r.route.length > 0);
 
-  const size = N * C;
+  const [ox, oy, wide, high] = [b.x * C, b.y * C, b.w * C, b.h * C];
   return (
     <div className="board-frame">
-      <svg className="board" viewBox={`${-M} ${-M} ${size + M + 2} ${size + M + 2}`} role="img" aria-label={t('board.map_label')}>
+      <svg className="board" viewBox={`${ox - M} ${oy - M} ${wide + M + 2} ${high + M + 2}`} role="img" aria-label={t('board.map_label')}>
         <defs>
           {/* fog: one continuous sheet with a faint diagonal hatch, darker than anything known */}
           <pattern id="fog" width="6" height="6" patternUnits="userSpaceOnUse">
@@ -188,21 +196,21 @@ export function Board() {
         </defs>
 
         {/* coordinates */}
-        {Array.from({ length: N }, (_, k) => (
-          <g key={'c' + k}>
-            <text x={k * C + C / 2} y={-4} textAnchor="middle" className="label">
-              {String.fromCharCode(65 + k)}
-            </text>
-            <text x={-4} y={k * C + C / 2 + 3.5} textAnchor="end" className="label">
-              {k + 1}
-            </text>
-          </g>
+        {Array.from({ length: b.w }, (_, k) => (
+          <text key={'cx' + k} x={(b.x + k) * C + C / 2} y={oy - 4} textAnchor="middle" className="label">
+            {String.fromCharCode(65 + b.x + k)}
+          </text>
+        ))}
+        {Array.from({ length: b.h }, (_, k) => (
+          <text key={'cy' + k} x={ox - 4} y={(b.y + k) * C + C / 2 + 3.5} textAnchor="end" className="label">
+            {b.y + k + 1}
+          </text>
         ))}
 
-        <rect x={-1} y={-1} width={size + 1} height={size + 1} fill={COL.sunk} />
+        <rect x={ox - 1} y={oy - 1} width={wide + 1} height={high + 1} fill={COL.sunk} />
 
         {/* tiles */}
-        {tiles.map((t) => {
+        {shown.map((t) => {
           const [x, y] = xy(t.i);
           const px = x * C;
           const py = y * C;

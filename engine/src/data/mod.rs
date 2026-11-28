@@ -1303,6 +1303,8 @@ pub struct Content {
     pub doctrines: Vec<DoctrineDef>,
     pub armory: Vec<ArmoryDef>,
     pub tasks: Vec<TaskDef>,
+    /// Fixed maps (`maps.json`).
+    pub maps: Vec<maps::MapDef>,
     /// The defenders that are not operatives (`defenders.json`): the HQ guard and the militia.
     pub defenders: BTreeMap<String, defs::DefenderDef>,
     /// Every kind above that is a thing in the world, as one definition table (`defs`).
@@ -1349,6 +1351,10 @@ impl Content {
     pub fn armory_track(&self, id: &str) -> Option<&ArmoryDef> {
         self.armory.iter().find(|a| a.id == id)
     }
+    /// A fixed map (`maps.json`).
+    pub fn map(&self, id: &str) -> Option<&maps::MapDef> {
+        self.maps.iter().find(|m| m.id == id)
+    }
     /// A definition from the one table (`defs`).
     pub fn def(&self, id: &str) -> Option<&defs::EntityDef> {
         self.defs.get(id)
@@ -1393,6 +1399,7 @@ const FILES: &[(&str, &str)] = &[
         "armory_tracks.json",
         include_str!("../../content/armory_tracks.json"),
     ),
+    ("maps.json", include_str!("../../content/maps.json")),
 ];
 
 fn parse<T: for<'de> Deserialize<'de>>(name: &str) -> T {
@@ -1455,6 +1462,7 @@ fn load() -> Content {
     let tasks: Vec<TaskDef> = parse("tasks.json");
     let armory: Vec<ArmoryDef> = parse("armory_tracks.json");
     let defenders: Vec<defs::DefenderDef> = parse("defenders.json");
+    let maps: Vec<maps::MapDef> = parse("maps.json");
     let table = defs::table(
         classes
             .iter()
@@ -1497,6 +1505,7 @@ fn load() -> Content {
         doctrines,
         armory,
         tasks,
+        maps,
         defenders: defenders.into_iter().map(|d| (d.id.clone(), d)).collect(),
         defs: table.by_id,
         def_clashes: table.clashes,
@@ -1592,6 +1601,9 @@ fn localize(c: &mut Content) {
         a.name = text("armory", &a.id, "name");
         a.desc = text("armory", &a.id, "desc");
     }
+    for m in &mut c.maps {
+        m.name = text("map", &m.id, "name");
+    }
     for t in &mut c.tasks {
         t.group = text("task", &t.id, "group");
         t.name = text("task", &t.id, "name");
@@ -1632,6 +1644,9 @@ pub fn validate() -> Vec<String> {
     let c = content();
     let mut errs = hooks::check(c);
     errs.extend(c.balance.pace().check("balance.json pace"));
+    for m in &c.maps {
+        errs.extend(m.check(c));
+    }
     let skill = |id: &str, ctx: &str, errs: &mut Vec<String>| {
         if !c.skills.contains_key(id) {
             errs.push(format!("{ctx}: unknown skill {id}"));

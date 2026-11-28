@@ -76,6 +76,182 @@ impl Pace {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Fixed maps (`maps.json`)
+// ---------------------------------------------------------------------------
+
+/// Terrain a fixed map can lay down.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MapTerrain {
+    Hq,
+    City,
+    Barrier,
+}
+
+/// What one legend letter of a fixed map stands for.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MapTileDef {
+    pub terrain: MapTerrain,
+    /// Index into the map's `districts`.
+    #[serde(default)]
+    pub district: Option<u16>,
+    /// 难度档: the level its enemies and loot count as (in place of the ring). Default: the
+    /// map's `level` (city tiles) or 0.
+    #[serde(default)]
+    pub level: Option<i32>,
+    /// Starting wardenship; default: the map's `warden`.
+    #[serde(default)]
+    pub warden: Option<i32>,
+    /// 巢穴强度 in basis points; default 10000.
+    #[serde(default)]
+    pub danger_bp: Option<i32>,
+    #[serde(default)]
+    pub natives: i32,
+    /// 曾经的用途: the facility id (or `housing`) this plot suits.
+    #[serde(default)]
+    pub former: Option<String>,
+    /// Revealed from the start (the tiles next to the HQ always are).
+    #[serde(default)]
+    pub revealed: bool,
+    /// Enemy ids per wave.
+    #[serde(default)]
+    pub waves: Vec<Vec<String>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MapDistrictDef {
+    /// Index into the `names.district` list.
+    pub name: u16,
+    /// District flavour trait.
+    pub flavor: String,
+}
+
+/// A fixed map: a `size` grid in the middle of the board (everything around it is barrier),
+/// drawn as `rows` of legend letters, with its own starting crew, resources and pace.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MapDef {
+    pub id: String,
+    /// Width and height.
+    pub size: [i32; 2],
+    /// One string per row, one legend letter per tile.
+    pub rows: Vec<String>,
+    pub legend: std::collections::BTreeMap<String, MapTileDef>,
+    /// Default 难度档 of city tiles.
+    pub level: i32,
+    /// Default starting wardenship of city tiles.
+    pub warden: i32,
+    pub districts: Vec<MapDistrictDef>,
+    /// Classes of the starting crew; all of them make up the first squad.
+    pub crew: Vec<String>,
+    pub resources: super::Resources,
+    pub pace: Pace,
+    #[serde(skip)]
+    pub name: String,
+}
+
+impl MapDef {
+    /// The board column and row of the map's top-left tile: the map sits in the middle.
+    pub fn origin(&self) -> (i32, i32) {
+        let n = crate::kernel::geom::SIZE;
+        ((n - self.size[0]) / 2, (n - self.size[1]) / 2)
+    }
+
+    /// Whether board index `i` lies on the map.
+    pub fn contains(&self, i: u16) -> bool {
+        self.cell_of(i).is_some()
+    }
+
+    /// The map cell (column, row) of board index `i`, if it lies on the map.
+    pub fn cell_of(&self, i: u16) -> Option<(i32, i32)> {
+        let (x, y) = crate::kernel::geom::xy(i);
+        let (ox, oy) = self.origin();
+        let (cx, cy) = (x - ox, y - oy);
+        ((0..self.size[0]).contains(&cx) && (0..self.size[1]).contains(&cy)).then_some((cx, cy))
+    }
+
+    /// The legend entry of board index `i` (`None` off the map).
+    pub fn tile(&self, i: u16) -> Option<&MapTileDef> {
+        let (cx, cy) = self.cell_of(i)?;
+        let ch = self.rows.get(cy as usize)?.chars().nth(cx as usize)?;
+        self.legend.get(ch.encode_utf8(&mut [0; 4]) as &str)
+    }
+
+    /// The board index of the HQ.
+    pub fn hq(&self) -> Option<u16> {
+        (0..crate::kernel::geom::TILES as u16)
+            .find(|i| self.tile(*i).is_some_and(|t| t.terrain == MapTerrain::Hq))
+    }
+
+    /// Shape and reference check (ids against `c`).
+    pub fn check(&self, c: &super::Content) -> Vec<String> {
+        let ctx = format!("maps.json {}", self.id);
+        let mut errs = self.pace.check(&ctx);
+        let n = crate::kernel::geom::SIZE;
+        if self.size[0] < 1 || self.size[1] < 1 || self.size[0] > n || self.size[1] > n {
+            errs.push(format!("{ctx}: size must fit the board"));
+        }
+        if self.rows.len() != self.size[1] as usize
+            || self
+                .rows
+                .iter()
+                .any(|r| r.chars().count() != self.size[0] as usize)
+        {
+            errs.push(format!("{ctx}: rows must match the size"));
+        }
+        for r in &self.rows {
+            for ch in r.chars() {
+                if !self
+                    .legend
+                    .contains_key(ch.encode_utf8(&mut [0; 4]) as &str)
+                {
+                    errs.push(format!("{ctx}: letter {ch} is not in the legend"));
+                }
+            }
+        }
+        let hqs = (0..crate::kernel::geom::TILES as u16)
+            .filter(|i| self.tile(*i).is_some_and(|t| t.terrain == MapTerrain::Hq))
+            .count();
+        if hqs != 1 {
+            errs.push(format!("{ctx}: needs exactly one hq, has {hqs}"));
+        }
+        for (k, t) in &self.legend {
+            for id in t.waves.iter().flatten() {
+                if !c.enemies.contains_key(id) {
+                    errs.push(format!("{ctx} {k}: unknown enemy {id}"));
+                }
+            }
+            if let Some(f) = &t.former {
+                if f != "housing" && c.facility(f).is_none() {
+                    errs.push(format!("{ctx} {k}: unknown former use {f}"));
+                }
+            }
+            if t.district
+                .is_some_and(|d| d as usize >= self.districts.len())
+            {
+                errs.push(format!("{ctx} {k}: no such district"));
+            }
+            if t.terrain == MapTerrain::City && t.district.is_none() {
+                errs.push(format!("{ctx} {k}: city tiles need a district"));
+            }
+        }
+        for d in &self.districts {
+            if !c.district_traits.contains(&d.flavor) {
+                errs.push(format!("{ctx}: unknown district trait {}", d.flavor));
+            }
+        }
+        for cl in &self.crew {
+            if !c.classes.contains_key(cl) {
+                errs.push(format!("{ctx}: unknown class {cl}"));
+            }
+        }
+        if self.crew.is_empty() {
+            errs.push(format!("{ctx}: needs a crew"));
+        }
+        errs
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -124,6 +124,7 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         rerolls: 0,
         reactions: Default::default(),
         armory: Default::default(),
+        map: None,
     }
 }
 
@@ -258,6 +259,95 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
             "event.cycle_started",
             n = n,
             modifier = l10n::name("modifier", &p.modifier)
+        ),
+        None,
+        None,
+        None,
+    );
+    Ok(())
+}
+
+/// A new game on a fixed map (`maps.json`) instead of the map choice: the cycle starts right
+/// away with the map's tiles, crew, resources and pace. `new_game` and `choose_map` stay as they
+/// are (random maps).
+pub fn new_map_game(seed: u64, now: i64, device: &str, map: &str) -> Result<GameState, String> {
+    let mut state = new_game(seed, now, device);
+    start_map(&mut state, map)?;
+    Ok(state)
+}
+
+/// Start the cycle on fixed map `map` (between cycles).
+pub fn start_map(state: &mut GameState, map: &str) -> Result<(), String> {
+    let b = balance();
+    if state.cycle.phase != Phase::ChoosingMap {
+        return Err(t!("err.cycle_started"));
+    }
+    let m = content().map(map).ok_or_else(|| t!("err.no_map"))?;
+    let g = mapgen::fixed(m);
+    let cy = &mut state.cycle;
+    cy.phase = Phase::Active;
+    cy.previews = vec![];
+    cy.seed = 0;
+    cy.modifier = String::new();
+    cy.map = Some(m.id.clone());
+    cy.started_at = state.time;
+    cy.tiles = g.tiles;
+    cy.districts = g.districts;
+    cy.resources = m.resources.clone();
+    world::reveal_frontier(cy);
+
+    // The map's crew, all in the first squad; specials kept from earlier cycles join the roster.
+    let mut ops = Vec::new();
+    for class in &m.crew {
+        let id = state.alloc_id();
+        let origin = Origin {
+            label: txt!("origin.hq"),
+            district: None,
+            profession: None,
+            flavor_trait: None,
+            policy_trait: None,
+            rarity_bonus_bp: 0,
+            min_rarity: 0,
+            lock_trait: None,
+        };
+        let mut op = operative::generate(&mut state.rng, id, class, &origin);
+        op.persona_mut().rarity = op.persona().rarity.min(1);
+        ops.push(op);
+    }
+    let first: Vec<u32> = ops.iter().take(b.squad_size).map(|o| o.id.0).collect();
+    for sp in &state.org.specials {
+        ops.push(sp.to_operative());
+    }
+    let sid = state.alloc_id();
+    for op in ops.iter_mut() {
+        if first.contains(&op.id.0) {
+            op.state.assignment = Assignment::Squad { squad: sid };
+        }
+    }
+    state.cycle.squads = vec![Squad {
+        id: sid,
+        name: l10n::Text::item("names.squad", 0),
+        members: first,
+        route: vec![],
+        trip: None,
+        last: None,
+        trips: 0,
+        rest_until: 0,
+        force: false,
+    }];
+    state.cycle.roster = ops.iter().map(|o| o.id).collect();
+    for op in ops {
+        state.cycle.entities.insert(op);
+    }
+    state.cycle.inventory = state.org.sealed.clone();
+    state.cycle.doctrines = state.org.archive.clone();
+    let n = state.cycle.number;
+    state.event(
+        EventKind::Info,
+        txt!(
+            "event.cycle_started",
+            n = n,
+            modifier = l10n::name("map", map)
         ),
         None,
         None,

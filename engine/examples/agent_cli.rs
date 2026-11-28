@@ -210,7 +210,16 @@ fn main() {
     match cmd {
         "session" => session_cli(&a),
         "new" => {
-            let mut e = textui::new_game(num(3, 0) as u64);
+            let seed = num(3, 0) as u64;
+            let map = a
+                .iter()
+                .position(|x| x == "--map")
+                .map(|k| a.get(k + 1).cloned().unwrap_or_default());
+            let mut e = match map {
+                Some(m) => textui::new_map_game(seed, &m)
+                    .unwrap_or_else(|err| fail(t!("cli.run.bad_map", map = m, err = err))),
+                None => textui::new_game(seed),
+            };
             textui::claim_tasks(&mut e);
             save(&e, &path);
             let since = e.state.time - 1;
@@ -229,6 +238,7 @@ fn main() {
             let m = textui::menu(&mut e, &opts);
             let (mut picks, mut json) = (Vec::<usize>::new(), Vec::<String>::new());
             let (mut wait, mut note) = (0i64, String::new());
+            let mut secs = 0i64;
             let mut i = 3;
             while i < a.len() {
                 let next = a.get(i + 1).cloned().unwrap_or_default();
@@ -239,6 +249,10 @@ fn main() {
                     }
                     "--wait" => {
                         wait = next.parse().unwrap_or(0);
+                        i += 1;
+                    }
+                    "--secs" => {
+                        secs = next.parse().unwrap_or(0);
                         i += 1;
                     }
                     "--note" => {
@@ -291,6 +305,13 @@ fn main() {
                 e.advance(now + wait * 3600);
                 println!("{}", t!("cli.run.waited", h = wait));
             }
+            // Seconds, for maps with a fast pace (at most as long as the longest wait).
+            let secs = secs.clamp(0, MAX_WAIT * 3600);
+            if secs > 0 {
+                let now = e.state.time;
+                e.advance(now + secs);
+                println!("{}", t!("cli.run.waited_secs", s = secs));
+            }
             let claimed = textui::claim_tasks(&mut e);
             if !claimed.is_empty() {
                 let tasks = claimed.join(&t!("cli.sep.list"));
@@ -300,7 +321,7 @@ fn main() {
             let sum = textui::summary(&mut e);
             log(
                 &path,
-                serde_json::json!({"picks": picks, "json": json, "wait": wait, "note": note,
+                serde_json::json!({"picks": picks, "json": json, "wait": wait, "secs": secs, "note": note,
                     "results": done, "summary": sum}),
             );
             println!();

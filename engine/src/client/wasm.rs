@@ -19,6 +19,13 @@ impl WasmEngine {
         }
     }
 
+    /// A new game on a fixed map (`maps.json` id, e.g. `tutorial`).
+    pub fn new_map(seed: f64, now: f64, device: &str, map: &str) -> Result<WasmEngine, JsError> {
+        Engine::new_map(seed as u64, now as i64, device, map)
+            .map(|inner| WasmEngine { inner })
+            .map_err(|e| JsError::new(&e))
+    }
+
     pub fn load(save: &str) -> Result<WasmEngine, JsError> {
         Engine::load(save)
             .map(|inner| WasmEngine { inner })

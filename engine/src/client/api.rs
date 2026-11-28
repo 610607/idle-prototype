@@ -110,6 +110,9 @@ pub struct RoutePreview {
     pub steps: Vec<RouteStep>,
     pub outcome: Option<combat::Outcome>,
     pub minutes: i64,
+    /// The duration in seconds, on a fixed map only (its pace counts in seconds).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<i64>,
     pub loot: Resources,
     pub drops: Vec<String>,
 }
@@ -128,6 +131,13 @@ impl Engine {
             state: sim::new_game(seed, now, device),
             tide: None,
         }
+    }
+
+    /// A new game on fixed map `map` (`maps.json`), e.g. `data::hooks::TUTORIAL_MAP`.
+    pub fn new_map(seed: u64, now: i64, device: &str, map: &str) -> Result<Engine, String> {
+        Ok(Engine::from_state(sim::new_map_game(
+            seed, now, device, map,
+        )?))
     }
 
     pub fn from_state(state: GameState) -> Engine {
@@ -615,6 +625,7 @@ impl Engine {
             steps: vec![],
             outcome: None,
             minutes: 0,
+            seconds: None,
             loot: Resources::default(),
             drops: vec![],
         };
@@ -647,6 +658,12 @@ impl Engine {
             steps,
             outcome: Some(trip.outcome),
             minutes: (trip.end - trip.start + 59) / 60,
+            seconds: self
+                .state
+                .cycle
+                .map
+                .is_some()
+                .then_some(trip.end - trip.start),
             loot: trip.loot,
             drops: trip.drops,
         }
