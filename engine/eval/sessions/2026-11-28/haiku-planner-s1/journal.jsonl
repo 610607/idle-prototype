@@ -67,3 +67,14 @@
 {"t":432000,"cmd":{"cmd":"upgrade","track":"armor"}}
 {"t":432000,"cmd":{"cmd":"set_route","squad":4,"route":[81]}}
 {"t":432000,"cmd":{"cmd":"set_squad","squad":4,"members":[2,48,66]}}
+{"t":460800,"cmd":{"cmd":"claim","tile":81}}
+{"t":460800,"cmd":{"cmd":"build","tile":128,"facility":"workshop"}}
+{"t":489600,"cmd":{"cmd":"garrison","op":79,"tile":81}}
+{"t":489600,"cmd":{"cmd":"build","tile":81,"facility":"workshop"}}
+{"t":489600,"cmd":{"cmd":"set_route","squad":4,"route":[95]}}
+{"t":518400,"cmd":{"cmd":"set_route","squad":4,"route":[99]}}
+{"t":547200,"cmd":{"cmd":"claim","tile":99}}
+{"t":547200,"cmd":{"cmd":"research"}}
+{"t":576000,"cmd":{"cmd":"pick_doctrine","doctrine":"shock_drill"}}
+{"t":576000,"cmd":{"cmd":"garrison","op":79,"tile":99}}
+{"t":576000,"cmd":{"cmd":"hire","candidate":114}}

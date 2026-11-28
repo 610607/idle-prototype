@@ -79,3 +79,7 @@
 {"t":518400,"cmd":{"cmd":"claim","tile":143}}
 {"t":518400,"cmd":{"cmd":"upgrade","track":"arms"}}
 {"t":518400,"cmd":{"cmd":"set_route","squad":4,"route":[129,144]}}
+{"t":547200,"cmd":{"cmd":"claim","tile":144}}
+{"t":547200,"cmd":{"cmd":"upgrade","track":"arms"}}
+{"t":576000,"cmd":{"cmd":"garrison","op":3,"tile":144}}
+{"t":576000,"cmd":{"cmd":"upgrade","track":"drills"}}
