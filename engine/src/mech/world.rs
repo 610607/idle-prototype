@@ -1,8 +1,9 @@
 //! Territory queries: border tiles, surge sources, attention, who defends what.
 
-use crate::data::{balance, content, TraitEffect};
-use crate::kernel::geom::{self, ring, TILES};
+use crate::data::{content, TraitEffect};
+use crate::kernel::geom::{self, TILES};
 use crate::mech::operative;
+use crate::mech::pressure;
 use crate::mech::state::{Assignment, Cycle, GameState, SpecialKind, Terrain};
 
 /// A tile is a surge source if it is unowned, passable, and not the core.
@@ -36,40 +37,10 @@ pub fn surge_source(c: &Cycle, i: u16) -> Option<u16> {
     }
     geom::neighbors(i)
         .filter(|n| is_hostile(c, *n))
-        .max_by(|a, b| ring(*a).cmp(&ring(*b)).then(b.cmp(a)))
-}
-
-/// Deepest ring with an owned tile (the HQ is ring 0).
-pub fn deepest_owned(c: &Cycle) -> i32 {
-    c.tiles
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| t.owned)
-        .map(|(i, _)| ring(i as u16))
-        .max()
-        .unwrap_or(0)
-}
-
-/// Deepest ring any squad's route reaches.
-pub fn deepest_route(c: &Cycle) -> i32 {
-    c.squads
-        .iter()
-        .filter(|s| !s.members.is_empty())
-        .flat_map(|s| s.route.iter().map(|i| ring(*i)))
-        .max()
-        .unwrap_or(0)
-}
-
-/// 注视度: how far out we are walking makes the whole border feel it.
-pub fn attention_level(c: &Cycle) -> i32 {
-    (deepest_route(c) - balance().attention_free_ring)
-        .max(0)
-        .saturating_sub(c.core_cut)
-        .max(0)
-}
-
-pub fn attention_bp(c: &Cycle) -> i32 {
-    10_000 + attention_level(c) * balance().attention_step_bp
+        .max_by(|a, b| {
+            let (da, db) = (pressure::depth(c, *a), pressure::depth(c, *b));
+            da.cmp(&db).then(b.cmp(a))
+        })
 }
 
 pub fn garrison_on(c: &Cycle, tile: u16) -> Option<u32> {

@@ -189,7 +189,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
     // 快反规章: the first ring starts fully held.
     if level >= perks.rapid_response {
         for i in 0..TILES as u16 {
-            if crate::kernel::geom::ring(i) == 1 && cy.tiles[i as usize].claimable_kind() {
+            if crate::mech::pressure::starts_held(&cy.tiles, i) {
                 cy.tiles[i as usize].warden = b.warden_max;
             }
         }
@@ -273,39 +273,16 @@ pub struct CycleResults {
 }
 
 pub fn cycle_results(state: &GameState) -> CycleResults {
-    let cy = &state.cycle;
-    let s = &cy.stats;
-    let mut lines = Vec::new();
-    let owned_d: Vec<&District> = cy
-        .districts
+    use crate::mech::score::{self, Group};
+    let items = score::breakdown(state);
+    let lines = items
         .iter()
-        .filter(|d| world::district_owned(cy, d.id) > 0)
+        .filter(|i| i.always)
+        .map(|i| (l10n::tr(i.key), i.value))
         .collect();
-    let trust: i64 = owned_d.iter().map(|d| d.trust as i64 / 10).sum();
-    let pop: i64 = owned_d.iter().map(|d| d.population as i64).sum::<i64>()
-        / balance().score_pop_div.max(1) as i64;
-    lines.push((t!("results.trust"), trust));
-    lines.push((t!("results.population"), pop));
-    let w = &balance().score;
-    let contiguous = s.contiguous_districts as i64 * w.contiguous;
-    lines.push((t!("results.contiguous"), contiguous));
-    let management = trust + pop + contiguous;
-    let held = s.surges_held as i64 * w.surge_held_bp / 10_000;
-    let fed = s.self_sufficient_hours as i64 / w.self_sufficient_div.max(1);
-    lines.push((t!("results.surges_held"), held));
-    lines.push((t!("results.self_sufficient"), fed));
-    let defense = held + fed;
-    let ring = s.max_ring as i64 * w.max_ring;
-    let rifts = s.rifts_suppressed as i64 * w.rift;
-    let tiles = s.tiles_claimed as i64 * w.tile;
-    let core = if s.core_sealed { w.core } else { 0 };
-    lines.push((t!("results.max_ring"), ring));
-    lines.push((t!("results.rifts"), rifts));
-    if w.tile > 0 {
-        lines.push((t!("results.tiles"), tiles));
-    }
-    lines.push((t!("results.core"), core));
-    let exploration = ring + rifts + tiles + core;
+    let management = score::group_total(&items, Group::Management);
+    let defense = score::group_total(&items, Group::Defense);
+    let exploration = score::group_total(&items, Group::Exploration);
     CycleResults {
         management,
         defense,

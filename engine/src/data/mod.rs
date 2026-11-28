@@ -954,6 +954,14 @@ pub struct Balance {
     pub warden_counter_restore: i32,
     pub warden_counter_restore_clinic: i32,
     pub start_warden_by_ring: Vec<i32>,
+    /// Enemy waves on a tile by its level (index = level, the last entry holds for deeper ones).
+    pub waves_by_level: Vec<i32>,
+    /// Enemies per wave by the tile's level (same indexing).
+    pub wave_size_by_level: Vec<i32>,
+    /// The core's level for its enemies, and the size of its three waves (rift, city, then rift
+    /// guards next to the modifier's core enemy).
+    pub core_level: i32,
+    pub core_wave_sizes: [i32; 3],
     pub travel_owned: i64,
     pub travel_unowned: i64,
     pub battle_round_secs: i64,
@@ -1616,6 +1624,9 @@ pub fn validate() -> Vec<String> {
                 errs.push(format!("no {terrain} enemy for ring {ring}"));
             }
         }
+    }
+    if c.balance.waves_by_level.is_empty() || c.balance.wave_size_by_level.is_empty() {
+        errs.push("balance.waves_by_level and wave_size_by_level need entries".into());
     }
     if c.balance.start_warden_by_ring.len() < 8 {
         errs.push("balance.start_warden_by_ring needs 8 entries".into());

@@ -28,7 +28,7 @@ pub fn archive_slots(state: &GameState) -> usize {
 pub fn pool(state: &GameState) -> Vec<&'static DoctrineDef> {
     let level = crate::mech::sim::org_level(state);
     let cy = &state.cycle;
-    let ring = crate::mech::world::deepest_owned(cy);
+    let ring = crate::mech::pressure::research_level(cy);
     content()
         .doctrines
         .iter()
@@ -41,7 +41,7 @@ pub fn pool(state: &GameState) -> Vec<&'static DoctrineDef> {
 /// organisation level).
 pub fn next_unlock(state: &GameState) -> Option<(i32, usize)> {
     let level = crate::mech::sim::org_level(state);
-    let ring = crate::mech::world::deepest_owned(&state.cycle);
+    let ring = crate::mech::pressure::research_level(&state.cycle);
     let c = content();
     let next = c
         .doctrines

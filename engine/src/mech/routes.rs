@@ -4,7 +4,7 @@
 //! result, so offline trips are just repeated.
 
 use crate::data::{balance, content, Resources, TraitEffect};
-use crate::kernel::geom::{self, ring};
+use crate::kernel::geom;
 use crate::mech::combat::{self, enemy_spec, BattleInput, BattleKind, Outcome, UnitSpec};
 use crate::mech::operative;
 use crate::mech::state::{EventKind, GameState, SpecialKind, TileResult, Trip};
@@ -69,7 +69,7 @@ pub fn route_battle(
     let c = content();
     let cy = &state.cycle;
     let t = &cy.tiles[tile as usize];
-    let r = ring(tile).max(1);
+    let r = crate::mech::pressure::attack_level(cy, tile);
     let m = c.modifier(&cy.modifier);
     let mut input = BattleInput {
         kind: if t.special == Some(SpecialKind::Core) {
@@ -98,7 +98,7 @@ fn tile_loot(state: &mut GameState, tile: u16, drops: &mut Vec<String>) -> Resou
     let b = balance();
     let c = content();
     let t = &state.cycle.tiles[tile as usize];
-    let r = ring(tile) as i64;
+    let r = crate::mech::pressure::attack_level(&state.cycle, tile) as i64;
     let mut loot = Resources::default();
     match (t.terrain, t.special) {
         (crate::mech::state::Terrain::Rift, _) => {
@@ -357,7 +357,7 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             crate::mech::sim::bump_counter(state, *id, "tiles_revealed", revealed);
         }
     }
-    let deepest = trip.walked.iter().map(|i| ring(*i)).max().unwrap_or(0);
+    let deepest = crate::mech::pressure::deepest_of(&state.cycle, &trip.walked);
     let st = &mut state.cycle.stats;
     st.route_wins += wins;
     st.max_ring = st.max_ring.max(deepest);
