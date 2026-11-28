@@ -236,6 +236,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
             last: None,
             trips: 0,
             rest_until: 0,
+            force: false,
         });
     }
     for op in ops.iter_mut() {

@@ -1,7 +1,11 @@
 //! Routes (巡): a squad walks a chain of adjacent tiles out from the territory and back, fighting a
-//! deterministic battle on every unowned tile. Wins push wardenship +10; owned border tiles on the way
+//! deterministic battle on every unowned tile. Wins push wardenship up; owned border tiles on the way
 //! get patrolled back up. With the map unchanged a trip always takes the same time and yields the same
 //! result, so offline trips are just repeated.
+//!
+//! Design v2: a squad only fights what it surely wins. At the first tile it would not win it turns
+//! back (`Trip::stopped_at`) and keeps patrolling the ground behind it, so idle offense never loses.
+//! Fighting through anyway is the player's call (`Command::Assault`), and a lost hard fight rests.
 
 use crate::data::{balance, content, Resources, TraitEffect};
 use crate::kernel::geom;
@@ -161,20 +165,55 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
     let mut outcome = Outcome::Victory;
     let mut counters: BTreeMap<u32, BTreeMap<String, i32>> = BTreeMap::new();
     let mut inputs = Vec::new();
+    let forced = squad.force;
+    let mut stopped_at = None;
+    let mut stop_report = None;
+    let mut stop_outcome = None;
+    let mut patrolled = 0i64;
+    if forced {
+        if let Some(s) = state.squad_mut(squad_id) {
+            s.force = false;
+        }
+    }
 
     for &tile in &squad.route {
-        walked.push(tile);
         let t = state.cycle.tiles[tile as usize].clone();
-        travel += if t.owned {
+        let step = if t.owned {
             b.travel_owned
         } else {
             b.travel_unowned
         };
         if t.owned || !t.passable() || (t.special == Some(SpecialKind::Core) && t.special_done) {
+            walked.push(tile);
+            travel += step;
+            if t.owned && world::is_border(&state.cycle, tile) {
+                patrolled += 1;
+            }
             continue;
         }
         let input = route_battle(state, &specs, tile, false);
         let report = combat::simulate(&input);
+        if !report.won() && !forced {
+            // Not a sure win: turn back in front of it (combat is deterministic, so this is the
+            // fight the squad would have lost). Keep why, once per wall.
+            stopped_at = Some(tile);
+            stop_outcome = Some(report.outcome);
+            stop_report = squad
+                .last
+                .as_ref()
+                .filter(|l| l.stopped_at == Some(tile))
+                .and_then(|l| l.stop_report)
+                .filter(|id| state.reports.iter().any(|(r, _)| r == id));
+            if stop_report.is_none() {
+                let mut rec = input.clone();
+                rec.record = true;
+                stop_report = Some(state.store_report(combat::simulate(&rec)));
+            }
+            inputs.push((tile, input));
+            break;
+        }
+        walked.push(tile);
+        travel += step;
         crate::mech::doctrine::note(state, &report);
         inputs.push((tile, input.clone()));
         rounds += report.rounds;
@@ -232,6 +271,10 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
             break;
         }
     }
+    let patrol = results.is_empty();
+    if patrol {
+        loot.scrap += b.patrol_scrap * patrolled;
+    }
     let duration = travel * 2 + rounds as i64 * b.battle_round_secs;
     Some(Trip {
         start,
@@ -243,6 +286,11 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
         drops,
         counters,
         inputs,
+        stopped_at,
+        stop_report,
+        stop_outcome,
+        forced,
+        patrol,
     })
 }
 
@@ -268,8 +316,11 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
         if special == Some(SpecialKind::Core) && !state.cycle.tiles[i].special_done {
             state.cycle.tiles[i].special_done = true;
             state.cycle.stats.core_sealed = true;
-            state.cycle.core_cut += b.core_attention_cut;
-            state.cycle.resources.crystal += b.core_crystal;
+            state.cycle.core_cut += b.core_threat_cut;
+            state.gain(&Resources {
+                crystal: b.core_crystal,
+                ..Default::default()
+            });
             let core = l10n::Text::new(&format!("modifier.{}.core_name", state.cycle.modifier));
             state.event(
                 EventKind::Core,
@@ -277,7 +328,7 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
                     "event.core_sealed",
                     core = core,
                     tile = label.clone(),
-                    cut = b.core_attention_cut,
+                    cut = b.core_threat_cut,
                     crystal = b.core_crystal
                 ),
                 Some(r.tile),
@@ -342,7 +393,7 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
         revealed += world::reveal(&mut state.cycle, w, radius);
     }
     // Loot and drops.
-    state.cycle.resources.add(&trip.loot);
+    state.gain(&trip.loot);
     for d in &trip.drops {
         crate::mech::actions::receive_item(state, d);
     }
@@ -386,8 +437,25 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             None,
             rid,
         );
-        if trip.outcome != Outcome::Planned {
+        if trip.outcome != Outcome::Planned || trip.forced {
             state.cycle.squads[si].rest_until = trip.end + b.rest_after_loss;
+        }
+    }
+    // A new wall: say where the squad stopped and why (once, not every patrol).
+    if let Some(at) = trip.stopped_at {
+        let before = state.cycle.squads[si]
+            .last
+            .as_ref()
+            .and_then(|l| l.stopped_at);
+        if before != Some(at) {
+            let name = state.cycle.squads[si].name.clone();
+            state.event(
+                EventKind::Trip,
+                txt!("event.trip.stopped", squad = name, tile = geom::label(at)),
+                Some(at),
+                None,
+                trip.stop_report,
+            );
         }
     }
     if let Some(tr) = state.trace.as_mut() {
@@ -424,5 +492,131 @@ pub fn try_start(state: &mut GameState, squad_id: u32, at: i64) -> bool {
             true
         }
         None => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mech::sim::{advance, choose_map, new_game};
+
+    fn started(seed: u64) -> GameState {
+        let mut s = new_game(seed, 1_000_000_000 - 1_000_000_000 % 3600, "test");
+        choose_map(&mut s, 0).unwrap();
+        s
+    }
+
+    /// A tile next to the territory with enemies on it.
+    fn front(s: &GameState) -> u16 {
+        let cy = &s.cycle;
+        (0..cy.tiles.len() as u16)
+            .find(|&i| {
+                let t = &cy.tiles[i as usize];
+                !t.owned
+                    && t.revealed
+                    && t.passable()
+                    && !t.waves.is_empty()
+                    && geom::neighbors(i).any(|n| cy.tiles[n as usize].owned)
+            })
+            .expect("a front tile")
+    }
+
+    fn squad(s: &GameState) -> u32 {
+        s.cycle.squads[0].id
+    }
+
+    /// Make `tile` a fight no starting squad wins.
+    fn wall(s: &mut GameState, tile: u16) {
+        let strongest = content()
+            .enemies
+            .iter()
+            .max_by_key(|(_, e)| e.base.hp)
+            .map(|(id, _)| id.clone())
+            .unwrap();
+        let t = &mut s.cycle.tiles[tile as usize];
+        t.waves = vec![vec![strongest; 5]; 3];
+        t.danger_bp = 200_000;
+    }
+
+    #[test]
+    fn a_previewed_win_is_won() {
+        let mut s = started(5);
+        let (sq, tile) = (squad(&s), front(&s));
+        let mut copy = s.clone();
+        copy.tide_log = Some(Vec::new());
+        copy.cycle.squads[0].route = vec![tile];
+        let t = copy.time;
+        let preview = plan_trip(&mut copy, sq, t).unwrap();
+        crate::mech::actions::set_route(&mut s, sq, &[tile]).unwrap();
+        let end = s.cycle.squads[0].trip.as_ref().unwrap().end;
+        advance(&mut s, end + 1);
+        let done = s.cycle.squads[0].last.as_ref().unwrap();
+        assert_eq!(done.outcome, preview.outcome);
+        let tiles = |t: &Trip| {
+            t.results
+                .iter()
+                .map(|r| (r.tile, r.outcome))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(tiles(done), tiles(&preview));
+        assert_eq!(done.stopped_at, preview.stopped_at);
+    }
+
+    #[test]
+    fn routes_stop_in_front_of_walls_and_hard_fights_rest() {
+        let mut s = started(5);
+        let (sq, tile) = (squad(&s), front(&s));
+        wall(&mut s, tile);
+        let before = s.reports.len();
+        crate::mech::actions::set_route(&mut s, sq, &[tile]).unwrap();
+        let trip = s.cycle.squads[0].trip.clone().unwrap();
+        assert_eq!(trip.stopped_at, Some(tile));
+        assert!(trip.stop_outcome.is_some_and(|o| o != Outcome::Victory));
+        assert!(trip.results.is_empty(), "the wall is not fought");
+        assert!(trip.patrol);
+        assert_eq!(trip.outcome, Outcome::Victory, "no loss");
+        assert_eq!(s.reports.len(), before + 1, "why it stopped, kept once");
+        advance(&mut s, trip.end + 1);
+        assert!(
+            s.cycle.squads[0].rest_until <= s.time,
+            "no rest after a stop"
+        );
+        // The next stop at the same wall keeps the same report.
+        let again = s.cycle.squads[0].trip.clone().unwrap();
+        assert_eq!(again.stop_report, trip.stop_report);
+        assert_eq!(s.reports.len(), before + 1);
+
+        // A hard fight goes in, loses, and sends the squad to rest.
+        crate::mech::actions::assault(&mut s, sq).unwrap();
+        assert!(s.cycle.squads[0].force);
+        advance(&mut s, again.end + 1);
+        let hard = s.cycle.squads[0].trip.clone().unwrap();
+        assert!(hard.forced && !s.cycle.squads[0].force);
+        assert_eq!(hard.results.len(), 1);
+        assert_ne!(hard.outcome, Outcome::Victory);
+        advance(&mut s, hard.end + 1);
+        assert!(s.cycle.squads[0].rest_until > hard.end);
+    }
+
+    #[test]
+    fn patrols_bring_back_a_little() {
+        let mut s = started(5);
+        let sq = squad(&s);
+        let cy = &s.cycle;
+        let border = (0..cy.tiles.len() as u16)
+            .find(|&i| {
+                cy.tiles[i as usize].owned
+                    && cy.tiles[i as usize].terrain != crate::mech::state::Terrain::Hq
+                    && world::is_border(cy, i)
+            })
+            .or_else(|| {
+                (0..cy.tiles.len() as u16)
+                    .find(|&i| cy.tiles[i as usize].owned && world::is_border(cy, i))
+            })
+            .unwrap();
+        crate::mech::actions::set_route(&mut s, sq, &[border]).unwrap();
+        let trip = s.cycle.squads[0].trip.clone().unwrap();
+        assert!(trip.patrol && trip.stopped_at.is_none());
+        assert_eq!(trip.loot.scrap, balance().patrol_scrap);
     }
 }

@@ -71,7 +71,7 @@ pub fn claim(state: &mut GameState, id: &str) -> ActResult {
     if has_reward && state.cycle.phase != Phase::Active {
         return Err(t!("err.task_needs_cycle"));
     }
-    state.cycle.resources.add(&t.reward);
+    state.gain(&t.reward);
     state.org.tasks_done.push(t.id.clone());
     state.event(
         EventKind::Info,

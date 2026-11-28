@@ -318,6 +318,21 @@ pub struct TripView {
     pub results: Vec<TileResultView>,
     pub loot: Resources,
     pub drops: Vec<String>,
+    /// Where the squad turned back because the next fight is not a sure win.
+    pub stopped: Option<StopView>,
+    /// A hard fight (`assault`).
+    pub forced: bool,
+    /// Only walked owned ground.
+    pub patrol: bool,
+}
+
+#[derive(Serialize)]
+pub struct StopView {
+    pub tile: u16,
+    pub label: String,
+    /// How the fight there would end (the squad did not fight it).
+    pub outcome: Option<crate::mech::combat::Outcome>,
+    pub report: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -339,6 +354,8 @@ pub struct SquadView {
     pub rest_until: i64,
     pub trips: u32,
     pub deepest: i32,
+    /// A hard fight is ordered for the next trip.
+    pub force: bool,
 }
 
 #[derive(Serialize)]
@@ -704,7 +721,8 @@ pub struct View {
     /// Income per hour x100 per resource (scrap, parts, intel, crystal).
     pub income: [i64; 4],
     pub power: (i32, i32, i32),
-    pub attention: (i32, i32, i32),
+    /// 威胁：来潮按统计分数变强（`mech::pressure::reading`）。
+    pub threat: crate::mech::pressure::Reading,
     pub self_sufficient: bool,
     pub border_count: usize,
     pub tiles: Vec<TileView>,
@@ -945,6 +963,14 @@ fn trip_view(t: &Trip) -> TripView {
             .collect(),
         loot: t.loot.clone(),
         drops: t.drops.clone(),
+        stopped: t.stopped_at.map(|tile| StopView {
+            tile,
+            label: geom::label(tile),
+            outcome: t.stop_outcome,
+            report: t.stop_report,
+        }),
+        forced: t.forced,
+        patrol: t.patrol,
     }
 }
 
@@ -1125,7 +1151,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             resources: Resources::default(),
             income: [0; 4],
             power: (0, 0, 10_000),
-            attention: (0, 0, 10_000),
+            threat: crate::mech::pressure::reading(state),
             self_sufficient: false,
             border_count: 0,
             tiles: vec![],
@@ -1323,6 +1349,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             rest_until: s.rest_until,
             trips: s.trips,
             deepest: crate::mech::pressure::deepest_of(cy, &s.route),
+            force: s.force,
         })
         .collect();
 
@@ -1537,11 +1564,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         resources: cy.resources.clone(),
         income,
         power: (calc.power_supply, calc.power_demand, calc.power_bp),
-        attention: (
-            crate::mech::pressure::attention_level(cy),
-            crate::mech::pressure::deepest_route(cy),
-            crate::mech::pressure::attention_bp(cy),
-        ),
+        threat: crate::mech::pressure::reading(state),
         self_sufficient: sim::self_sufficient(state),
         border_count: border.len(),
         tiles,

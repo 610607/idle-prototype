@@ -5,7 +5,7 @@
 //! `balance.json` 的 `score`。
 
 use crate::data::balance;
-use crate::mech::state::{District, GameState};
+use crate::mech::state::{District, GameState, Terrain};
 use crate::mech::world;
 use serde::Serialize;
 
@@ -29,10 +29,10 @@ pub struct Item {
     pub always: bool,
 }
 
-/// 各项明细，按显示顺序。
+/// 各项明细，按显示顺序。全部是“现在手里有的”：建好的、练好的按高权重，库存按低权重
+/// （docs/design-v2-outline.md 已定）。不含随时间累加的项，所以放手不管时分数会停住。
 pub fn breakdown(state: &GameState) -> Vec<Item> {
     let cy = &state.cycle;
-    let s = &cy.stats;
     let b = balance();
     let w = &b.score;
     let owned_d: Vec<&District> = cy
@@ -43,65 +43,83 @@ pub fn breakdown(state: &GameState) -> Vec<Item> {
     let trust: i64 = owned_d.iter().map(|d| d.trust as i64 / 10).sum();
     let pop: i64 =
         owned_d.iter().map(|d| d.population as i64).sum::<i64>() / b.score_pop_div.max(1) as i64;
-    let item = |id, key, group, value, always| Item {
+    let owned = |t: &&crate::mech::state::Tile| t.owned && t.terrain != Terrain::Hq;
+    let tiles = cy.tiles.iter().filter(owned).count() as i64;
+    let facilities = cy
+        .tiles
+        .iter()
+        .filter(owned)
+        .filter(|t| t.usage.facility().is_some())
+        .count() as i64;
+    let rifts = cy
+        .tiles
+        .iter()
+        .filter(owned)
+        .filter(|t| t.terrain == Terrain::Rift)
+        .count() as i64;
+    let contiguous = cy.districts.iter().filter(|d| d.contiguous).count() as i64;
+    let items = cy.inventory.len() as i64
+        + cy.operatives
+            .iter()
+            .filter(|o| o.equipment.is_some())
+            .count() as i64;
+    let armory = cy
+        .armory
+        .values()
+        .map(|t| t.level as i64 * w.armory_level + t.breaks as i64 * w.armory_break)
+        .sum();
+    let r = &cy.resources;
+    let d = &w.stock_div;
+    let per = |v: i64, div: i64| v.max(0) / div.max(1);
+    let stock = per(r.scrap, d.scrap)
+        + per(r.parts, d.parts)
+        + per(r.intel, d.intel)
+        + per(r.crystal, d.crystal);
+    let item = |id, key, group, value| Item {
         id,
         key,
         group,
         value,
-        always,
+        always: true,
     };
     use Group::*;
     vec![
-        item("trust", "results.trust", Management, trust, true),
-        item("population", "results.population", Management, pop, true),
+        item("trust", "results.trust", Management, trust),
+        item("population", "results.population", Management, pop),
         item(
             "contiguous",
             "results.contiguous",
             Management,
-            s.contiguous_districts as i64 * w.contiguous,
-            true,
+            contiguous * w.contiguous,
         ),
         item(
-            "surges_held",
-            "results.surges_held",
+            "facilities",
+            "results.facilities",
+            Management,
+            facilities * w.facility,
+        ),
+        item("stock", "results.stock", Management, stock),
+        item(
+            "operatives",
+            "results.operatives",
             Defense,
-            s.surges_held as i64 * w.surge_held_bp / 10_000,
-            true,
+            cy.operatives.len() as i64 * w.operative,
         ),
+        item("items", "results.items", Defense, items * w.item),
         item(
-            "self_sufficient",
-            "results.self_sufficient",
+            "doctrines",
+            "results.doctrines",
             Defense,
-            s.self_sufficient_hours as i64 / w.self_sufficient_div.max(1),
-            true,
+            cy.doctrines.len() as i64 * w.doctrine,
         ),
-        item(
-            "max_ring",
-            "results.max_ring",
-            Exploration,
-            s.max_ring as i64 * w.max_ring,
-            true,
-        ),
-        item(
-            "rifts",
-            "results.rifts",
-            Exploration,
-            s.rifts_suppressed as i64 * w.rift,
-            true,
-        ),
-        item(
-            "tiles",
-            "results.tiles",
-            Exploration,
-            s.tiles_claimed as i64 * w.tile,
-            w.tile > 0,
-        ),
+        item("armory", "results.armory", Defense, armory),
+        item("tiles", "results.tiles", Exploration, tiles * w.tile),
+        item("rifts", "results.rifts", Exploration, rifts * w.rift),
         item(
             "core",
             "results.core",
             Exploration,
-            if s.core_sealed { w.core } else { 0 },
-            true,
+            if cy.stats.core_sealed { w.core } else { 0 },
         ),
     ]
 }
@@ -127,4 +145,43 @@ pub fn value(items: &[Item], id: &str) -> i64 {
         .find(|i| i.id == id)
         .map(|i| i.value)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::Resources;
+    use crate::mech::sim::{choose_map, new_game};
+
+    #[test]
+    fn full_stores_stop_the_score_and_the_threat() {
+        let mut s = new_game(7, 1_000_000_000 - 1_000_000_000 % 3600, "test");
+        choose_map(&mut s, 0).unwrap();
+        let cap = balance().storage_cap.clone();
+        s.cycle.resources = cap.clone();
+        let score = total(&s);
+        let threat = crate::mech::pressure::threat(&s);
+        s.gain(&Resources {
+            scrap: 500,
+            parts: 50,
+            intel: 50,
+            crystal: 50,
+        });
+        assert_eq!(s.cycle.resources, cap, "income past the cap is lost");
+        assert_eq!(total(&s), score);
+        assert_eq!(crate::mech::pressure::threat(&s), threat);
+        // Spending makes room again; stock already above the cap is not taken away.
+        s.cycle.resources.scrap -= 100;
+        s.gain(&Resources {
+            scrap: 30,
+            ..Default::default()
+        });
+        assert_eq!(s.cycle.resources.scrap, cap.scrap - 70);
+        s.cycle.resources.parts = cap.parts + 40;
+        s.gain(&Resources {
+            parts: 5,
+            ..Default::default()
+        });
+        assert_eq!(s.cycle.resources.parts, cap.parts + 40);
+    }
 }

@@ -30,6 +30,7 @@
 
     "event.trip.emergency": { "class": "trip", "tier": 0, "novel": false },
     "event.trip.wiped": { "class": "trip", "tier": 0, "novel": false },
+    "event.trip.stopped": { "class": "trip", "tier": 0, "novel": false },
     "event.counter.lost": { "class": "counter", "tier": 0, "novel": false },
     "event.abandoned": { "class": "abandoned", "tier": 0, "novel": false },
     "event.retired.left": { "class": "retired", "tier": 0, "novel": false },

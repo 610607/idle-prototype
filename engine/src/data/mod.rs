@@ -632,6 +632,14 @@ impl Resources {
             _ => 0,
         }
     }
+    /// Each amount held down to `cap`'s (a stock already above it is left as it is).
+    pub fn cap_to(&mut self, before: &Resources, cap: &Resources) {
+        let f = |now: i64, was: i64, cap: i64| if now > cap { was.max(cap) } else { now };
+        self.scrap = f(self.scrap, before.scrap, cap.scrap);
+        self.parts = f(self.parts, before.parts, cap.parts);
+        self.intel = f(self.intel, before.intel, cap.intel);
+        self.crystal = f(self.crystal, before.crystal, cap.crystal);
+    }
     pub fn add_key(&mut self, key: &str, v: i64) {
         match key {
             "scrap" => self.scrap += v,
@@ -968,14 +976,19 @@ pub struct Balance {
     pub rest_after_loss: i64,
     pub route_max_len: usize,
     pub squad_size: usize,
-    pub attention_free_ring: i32,
-    pub attention_step_bp: i32,
     /// Enemy HP and attack by the ring they stand on (basis points; index = ring, the last entry
     /// holds for deeper rings). Applies wherever they fight: routes, surges, counters.
     pub enemy_ring_bp: Vec<i32>,
-    /// The same for the enemies of a surge (in place of `enemy_ring_bp`): the tide that washes
-    /// over the border is weaker than the nests a squad assaults.
-    pub surge_ring_bp: Vec<i32>,
+    /// Surge enemies' HP and attack by threat level (in place of `enemy_ring_bp`; index = level,
+    /// the last entry holds for higher ones, fractions between levels interpolate). The threat
+    /// level comes from the score (`threat_levels`), not from where the border is.
+    pub surge_level_bp: Vec<i32>,
+    /// Score (`mech::score`) at which each threat level starts (index = level; level 1 from 0).
+    pub threat_levels: Vec<i64>,
+    /// Most of each resource the stores hold; income past it is lost.
+    pub storage_cap: Resources,
+    /// Scrap a patrol brings back per owned border tile it walks (a squad stopped at a wall).
+    pub patrol_scrap: i64,
     /// 巢穴强度: each tile's enemies get a multiplier drawn from this range (basis points, both
     /// ends included), so a ring has soft and hard nests.
     #[serde(default = "default_tile_danger_bp")]
@@ -1018,7 +1031,8 @@ pub struct Balance {
     pub hq_guard_atk: i32,
     pub rift_residue_crystal: i64,
     pub core_crystal: i64,
-    pub core_attention_cut: i32,
+    /// Score points taken off the threat once the core is sealed.
+    pub core_threat_cut: i32,
     pub sealed_slots: usize,
     /// Research: intel for the n-th draw of a cycle = base + step x n.
     #[serde(default = "default_research_base")]
@@ -1114,32 +1128,48 @@ fn default_score_pop_div() -> i32 {
 /// (`score_pop_div`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScoreDef {
-    /// Per district first joined into the contiguous network.
-    pub contiguous: i64,
-    /// Per surge held, in basis points of a point (rounded down on the total).
-    pub surge_held_bp: i64,
-    /// One point per this many hours the line fed itself.
-    pub self_sufficient_div: i64,
-    /// Per ring of the deepest tile reached.
-    pub max_ring: i64,
-    /// Per rift first suppressed.
-    pub rift: i64,
-    /// Per tile first claimed.
+    /// Per owned tile (the HQ does not count).
     pub tile: i64,
-    /// For sealing the core.
+    /// Per facility on an owned tile.
+    pub facility: i64,
+    /// Per operative on the roster.
+    pub operative: i64,
+    /// Per item held, equipped or in the stash.
+    pub item: i64,
+    /// Per doctrine learned this cycle.
+    pub doctrine: i64,
+    /// Per armory level (all tracks), and per breakthrough.
+    pub armory_level: i64,
+    pub armory_break: i64,
+    /// Per district in the contiguous network.
+    pub contiguous: i64,
+    /// Per owned rift.
+    pub rift: i64,
+    /// For the sealed core.
     pub core: i64,
+    /// Resources in stock: one point per this many of each (stock counts low).
+    pub stock_div: Resources,
 }
 
 impl Default for ScoreDef {
     fn default() -> Self {
         ScoreDef {
+            tile: 4,
+            facility: 6,
+            operative: 10,
+            item: 4,
+            doctrine: 8,
+            armory_level: 1,
+            armory_break: 10,
             contiguous: 5,
-            surge_held_bp: 10_000,
-            self_sufficient_div: 2,
-            max_ring: 10,
             rift: 15,
-            tile: 0,
             core: 120,
+            stock_div: Resources {
+                scrap: 50,
+                parts: 10,
+                intel: 20,
+                crystal: 5,
+            },
         }
     }
 }
@@ -1624,6 +1654,10 @@ pub fn validate() -> Vec<String> {
                 errs.push(format!("no {terrain} enemy for ring {ring}"));
             }
         }
+    }
+    let tl = &c.balance.threat_levels;
+    if tl.len() < 3 || tl[1..].windows(2).any(|w| w[0] >= w[1]) {
+        errs.push("balance.threat_levels needs two or more rising entries".into());
     }
     if c.balance.waves_by_level.is_empty() || c.balance.wave_size_by_level.is_empty() {
         errs.push("balance.waves_by_level and wave_size_by_level need entries".into());

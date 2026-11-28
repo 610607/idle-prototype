@@ -111,8 +111,6 @@ pub struct RoutePreview {
     pub minutes: i64,
     pub loot: Resources,
     pub drops: Vec<String>,
-    pub attention_before: i32,
-    pub attention_after: i32,
 }
 
 fn fmt_rate(v: i64) -> String {
@@ -611,7 +609,6 @@ impl Engine {
         copy.reports.clear();
         copy.tide_log = Some(Vec::new());
         copy.trace = None;
-        let attention_before = crate::mech::pressure::attention_level(&copy.cycle);
         let empty = |e: String| RoutePreview {
             ok: false,
             error: Some(e),
@@ -620,8 +617,6 @@ impl Engine {
             minutes: 0,
             loot: Resources::default(),
             drops: vec![],
-            attention_before,
-            attention_after: attention_before,
         };
         if let Err(e) = crate::mech::actions::set_route(&mut copy, squad, route) {
             return empty(e);
@@ -629,7 +624,6 @@ impl Engine {
         if let Some(sq) = copy.cycle.squads.iter_mut().find(|s| s.id == squad) {
             sq.trip = None;
         }
-        let attention_after = crate::mech::pressure::attention_level(&copy.cycle);
         let t = copy.time;
         let Some(trip) = routes::plan_trip(&mut copy, squad, t) else {
             return empty(t!("err.route_empty"));
@@ -655,8 +649,6 @@ impl Engine {
             minutes: (trip.end - trip.start + 59) / 60,
             loot: trip.loot,
             drops: trip.drops,
-            attention_before,
-            attention_after,
         }
     }
 

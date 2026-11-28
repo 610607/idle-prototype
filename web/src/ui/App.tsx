@@ -356,12 +356,6 @@ function RouteEditor() {
                   </span>
                 ))}
               <span className="muted">{t('app.route.minutes', { n: preview.minutes })}</span>
-              {preview.attention_after !== preview.attention_before ? (
-                <span className="warn">
-                  {' '}
-                  {t('app.route.attention', { before: preview.attention_before, after: preview.attention_after })}
-                </span>
-              ) : null}
             </div>
           ) : (
             <div className="small bad">{preview.error}</div>

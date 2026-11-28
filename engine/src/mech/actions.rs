@@ -571,6 +571,25 @@ pub fn set_route(state: &mut GameState, squad: u32, route: &[u16]) -> ActResult 
     Ok(())
 }
 
+/// Order a hard fight: the next trip fights through the wall the squad keeps stopping at.
+pub fn assault(state: &mut GameState, squad: u32) -> ActResult {
+    let s = state
+        .cycle
+        .squads
+        .iter()
+        .find(|s| s.id == squad)
+        .ok_or_else(|| t!("err.no_squad"))?;
+    if s.members.is_empty() || s.route.is_empty() {
+        return Err(t!("err.assault_no_route"));
+    }
+    let s = state.squad_mut(squad).unwrap();
+    s.force = true;
+    // Idle squads go now; one already out fights on its next trip.
+    let now = state.time;
+    crate::mech::routes::try_start(state, squad, now);
+    Ok(())
+}
+
 pub fn receive_item(state: &mut GameState, id: &str) {
     let b = balance();
     let owned = state.cycle.inventory.iter().any(|x| x == id)
@@ -583,7 +602,10 @@ pub fn receive_item(state: &mut GameState, id: &str) {
     let name = l10n::name("equip", id);
     if owned {
         // Duplicates turn into materials on arrival.
-        state.cycle.resources.parts += b.salvage_parts;
+        state.gain(&crate::data::Resources {
+            parts: b.salvage_parts,
+            ..Default::default()
+        });
         state.event(
             EventKind::Drop,
             txt!("event.drop.salvaged", item = name, parts = b.salvage_parts),

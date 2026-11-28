@@ -123,7 +123,8 @@ pub type Metrics = BTreeMap<String, Option<f64>>;
 pub enum Style {
     /// The reference: nearest ring first, production first.
     Greedy,
-    /// Routes to the deepest target it can win.
+    /// Routes to the deepest target it can win, and fights through each new wall once when
+    /// the loss would be a planned fallback (`assault`).
     Explorer,
     /// Economy first: production buildings and jobs, market day.
     Builder,
@@ -198,6 +199,7 @@ impl Persona {
             Style::Greedy => base,
             Style::Explorer => Policy {
                 deep_first: true,
+                assault: true,
                 ..base
             },
             Style::Builder => Policy {
