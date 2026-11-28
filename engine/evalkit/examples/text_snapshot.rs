@@ -83,13 +83,6 @@ fn snapshot(o: &mut String, e: &mut Engine, label: &str, seen: &mut u32) {
             .unwrap();
         }
     }
-    if v.tiles.is_empty() {
-        // Between cycles: the text client plays one cycle and has no screen for this.
-        for c in refusals() {
-            writeln!(o, "## refuse {}\n{}", json(&c), json(&e.dry_run(&c))).unwrap();
-        }
-        return;
-    }
     let opts = Options::default();
     let since = e.state.time - 2 * 3600;
     writeln!(o, "## board\n{}", textui::board(e, since, &opts)).unwrap();

@@ -413,6 +413,14 @@ pub struct PerkView {
     pub unlocked: bool,
 }
 
+/// A finished cycle: the saved summary and its climate's name.
+#[derive(Serialize)]
+pub struct HistoryView {
+    #[serde(flatten)]
+    pub summary: CycleSummary,
+    pub modifier_name: String,
+}
+
 #[derive(Serialize)]
 pub struct OrgView {
     pub level: u32,
@@ -422,7 +430,7 @@ pub struct OrgView {
     pub rules: Vec<RuleView>,
     pub specials: Vec<SpecialView>,
     pub perks: Vec<PerkView>,
-    pub history: Vec<CycleSummary>,
+    pub history: Vec<HistoryView>,
     pub sealed_slots: usize,
 }
 
@@ -1071,8 +1079,19 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             })
             .collect(),
         perks: perks(level),
-        history: state.org.history.clone(),
-        sealed_slots: b.sealed_slots + if level >= 5 { 1 } else { 0 },
+        history: state
+            .org
+            .history
+            .iter()
+            .map(|h| HistoryView {
+                summary: h.clone(),
+                modifier_name: c
+                    .modifier(&h.modifier)
+                    .map(|m| m.name.clone())
+                    .unwrap_or_else(|| h.modifier.clone()),
+            })
+            .collect(),
+        sealed_slots: b.sealed_slots + OrgPerks::count(&b.org_perks.sealed, level),
     };
     let previews = cy
         .previews

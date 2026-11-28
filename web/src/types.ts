@@ -356,6 +356,7 @@ export interface OrgView {
   history: {
     number: number;
     modifier: string;
+    modifier_name: string;
     exp: number;
     management: number;
     defense: number;

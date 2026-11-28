@@ -8,11 +8,11 @@
 //! and action JSON, session directory. It reads and writes files, so it stays out of wasm.
 use crate::client::api::{Engine, RoutePreview};
 use crate::client::view::{OpView, View};
-use crate::data::{content, Tag};
+use crate::data::{content, Act, Cond, Gambit, Stat, Tag, Target};
 use crate::kernel::geom;
 use crate::mech::combat::Outcome;
 use crate::mech::commands::Command;
-use crate::mech::state::Dial;
+use crate::mech::state::{Dial, Phase};
 use crate::t;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -53,7 +53,7 @@ pub enum Reach {
     Json,
     /// Done for the player (rules the harness turns on, finished tasks).
     Auto,
-    /// Between cycles; the harness plays one cycle.
+    /// Ends the cycle. The harness plays one cycle to `Options::hours` and does not offer it.
     BetweenCycles,
 }
 
@@ -71,7 +71,8 @@ pub fn reach(cmd: &Command) -> Reach {
         | Command::Research
         | Command::Reroll
         | Command::PickDoctrine { .. }
-        | Command::Upgrade { .. } => Reach::Menu,
+        | Command::Upgrade { .. }
+        | Command::ChooseMap { .. } => Reach::Menu,
         Command::SetSquad { .. }
         | Command::SetDial { .. }
         | Command::Dismiss { .. }
@@ -84,7 +85,7 @@ pub fn reach(cmd: &Command) -> Reach {
         | Command::Lock { .. }
         | Command::Archive { .. } => Reach::Json,
         Command::SetRule { .. } | Command::ClaimTask { .. } => Reach::Auto,
-        Command::ChooseMap { .. } | Command::Collapse => Reach::BetweenCycles,
+        Command::Collapse => Reach::BetweenCycles,
     }
 }
 
@@ -139,7 +140,15 @@ pub fn samples() -> Vec<Command> {
         },
         Command::SetGambits {
             op: 2,
-            gambits: vec![],
+            gambits: vec![Gambit {
+                cond: Cond::EnemyCountAtLeast { n: 2 },
+                cond2: Some(Cond::EnemyHasTag { tag: Tag::Mark }),
+                act: Act::Skill {
+                    skill: "skill_id".into(),
+                },
+                target: Target::WithTag,
+                on: true,
+            }],
         },
         Command::Equip {
             op: 2,
@@ -288,7 +297,11 @@ pub fn parse_json(j: &str) -> Result<Command, String> {
     serde_json::from_value(v).map_err(|e| t!("cli.bad_json", err = e))
 }
 
+/// Hours into the cycle; 0 between cycles.
 pub fn hour(e: &Engine, v: &View) -> i64 {
+    if v.phase != Phase::Active {
+        return 0;
+    }
     (e.state.time - v.started_at) / 3600
 }
 
@@ -350,20 +363,148 @@ fn rw(reads: &[Tag], writes: &[Tag]) -> String {
     }
 }
 
-fn op_line(o: &OpView) -> String {
+/// A combat condition in words (the web's 战术 editor wording).
+fn cond_text(c: &Cond) -> String {
+    match c {
+        Cond::Always => t!("cli.cond.always"),
+        Cond::SelfHpBelow { pct } => t!("cli.cond.self_hp_below", pct = pct),
+        Cond::SelfHpAbove { pct } => t!("cli.cond.self_hp_above", pct = pct),
+        Cond::AllyHpBelow { pct } => t!("cli.cond.ally_hp_below", pct = pct),
+        Cond::EnemyHasTag { tag } => t!("cli.cond.enemy_has_tag", tag = tag.name()),
+        Cond::SelfHasTag { tag } => t!("cli.cond.self_has_tag", tag = tag.name()),
+        Cond::EnemyTagAtLeast { tag, n } => {
+            t!("cli.cond.enemy_tag_at_least", tag = tag.name(), n = n)
+        }
+        Cond::AnyTagAtLeast { n } => t!("cli.cond.any_tag_at_least", n = n),
+        Cond::EnemyCountAtLeast { n } => t!("cli.cond.enemy_count_at_least", n = n),
+        Cond::WaveAtLeast { n } => t!("cli.cond.wave_at_least", n = n),
+        Cond::RoundAtLeast { n } => t!("cli.cond.round_at_least", n = n),
+    }
+}
+
+fn target_text(t: Target) -> String {
+    t!(match t {
+        Target::Default => "cli.target.default",
+        Target::FrontLowest => "cli.target.front_lowest",
+        Target::BackFirst => "cli.target.back_first",
+        Target::HighestAtk => "cli.target.highest_atk",
+        Target::WithTag => "cli.target.with_tag",
+        Target::LowestAlly => "cli.target.lowest_ally",
+        Target::SelfUnit => "cli.target.self",
+        Target::MostTags => "cli.target.most_tags",
+    })
+}
+
+/// One 战术 rule in words, then its JSON for `set_gambits`.
+fn gambit_line(o: &OpView, k: usize, g: &Gambit) -> String {
+    let action = match &g.act {
+        Act::Skill { skill } => t!(
+            "cli.gambit.use_skill",
+            skill = o
+                .skills
+                .iter()
+                .find(|s| &s.id == skill)
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| skill.clone()),
+            target = target_text(g.target)
+        ),
+        Act::RetreatPlanned => t!("cli.gambit.planned"),
+        Act::RetreatEmergency => t!("cli.gambit.emergency"),
+    };
+    let rule = t!(
+        "cli.gambit.rule",
+        cond = cond_text(&g.cond),
+        and = g
+            .cond2
+            .as_ref()
+            .map(|c| t!("cli.gambit.and", cond = cond_text(c)))
+            .unwrap_or_default(),
+        action = action
+    );
+    t!(
+        if g.on {
+            "cli.op.gambit_on"
+        } else {
+            "cli.op.gambit_off"
+        },
+        k = k,
+        rule = rule,
+        json = serde_json::to_string(g).unwrap_or_default()
+    )
+}
+
+/// Everything the web's operative page shows, one fact per line. `own` adds what only the
+/// player's operatives have (equipment, 战术); candidates show the rest, as on the web.
+fn op_line(o: &OpView, own: bool) -> String {
     let d = &o.derived;
+    let sep = t!("cli.sep.item");
+    let mut out = vec![t!(
+        "cli.op.head",
+        id = o.id,
+        name = o.name,
+        rarity = o.rarity_name,
+        class = o.class_name,
+        row = row(o.front),
+        hp = d.hp,
+        atk = d.atk,
+        def = d.def,
+        spd = d.spd,
+        status = o.status
+    )];
+    let stats: Vec<String> = Stat::ALL
+        .iter()
+        .map(|s| t!("cli.op.stat", name = s.name(), n = o.stats[s.idx()]))
+        .collect();
+    out.push(t!(
+        "cli.op.more",
+        origin = o.origin,
+        special = if o.special.is_some() {
+            t!("cli.op.special")
+        } else {
+            String::new()
+        },
+        locked = if o.locked {
+            t!("cli.op.locked")
+        } else {
+            String::new()
+        },
+        ap = d.ap,
+        pp = d.pp,
+        stats = stats.join(" ")
+    ));
     let traits: Vec<String> = o
         .traits
         .iter()
         .map(|x| {
             t!(
-                "cli.op.trait",
+                if x.exp {
+                    "cli.op.trait_exp"
+                } else {
+                    "cli.op.trait"
+                },
                 name = x.name,
                 rw = rw(&x.reads, &x.writes),
                 desc = x.desc
             )
         })
         .collect();
+    out.push(t!("cli.op.traits", list = none_or(&traits, &sep)));
+    if !o.growing.is_empty() {
+        let growing: Vec<String> = o
+            .growing
+            .iter()
+            .map(|g| {
+                t!(
+                    "cli.op.growing_one",
+                    name = g.name,
+                    have = g.have,
+                    need = g.need,
+                    hint = g.hint
+                )
+            })
+            .collect();
+        out.push(t!("cli.op.growing", list = growing.join(&sep)));
+    }
     let skills: Vec<String> = o
         .skills
         .iter()
@@ -376,27 +517,32 @@ fn op_line(o: &OpView) -> String {
                     String::new()
                 },
                 name = s.name,
+                id = s.id,
                 rw = rw(&s.reads, &s.writes),
                 desc = s.desc
             )
         })
         .collect();
-    let sep = t!("cli.sep.item");
-    t!(
-        "cli.op.full",
-        id = o.id,
-        name = o.name,
-        rarity = o.rarity_name,
-        class = o.class_name,
-        row = row(o.front),
-        hp = d.hp,
-        atk = d.atk,
-        def = d.def,
-        spd = d.spd,
-        status = o.status,
-        traits = none_or(&traits, &sep),
-        skills = none_or(&skills, &sep)
-    )
+    out.push(t!("cli.op.skills", list = none_or(&skills, &sep)));
+    if own {
+        if let Some(it) = &o.equipment {
+            out.push(t!(
+                "cli.op.equip",
+                name = it.name,
+                rw = rw(&it.reads, &it.writes),
+                desc = it.desc
+            ));
+        }
+        out.push(t!(
+            "cli.op.gambits",
+            on = o.gambits.iter().filter(|g| g.on).count(),
+            slots = d.tactic_slots
+        ));
+        for (k, g) in o.gambits.iter().enumerate() {
+            out.push(gambit_line(o, k + 1, g));
+        }
+    }
+    out.join("\n")
 }
 
 fn op_short(o: &OpView) -> String {
@@ -439,9 +585,23 @@ fn op_short(o: &OpView) -> String {
         def = o.derived.def,
         spd = o.derived.spd,
         status = o.status,
+        lock = if o.locked {
+            t!("cli.op.lock_short")
+        } else {
+            String::new()
+        },
         writes = dash(&w),
         reads = dash(&r),
-        traits = none_or(&traits, &t!("cli.sep.list"))
+        traits = none_or(&traits, &t!("cli.sep.list")),
+        equip = o
+            .equipment
+            .as_ref()
+            .map(|it| t!(
+                "cli.op.equip_short",
+                name = it.name,
+                rw = rw(&it.reads, &it.writes)
+            ))
+            .unwrap_or_default()
     )
 }
 
@@ -491,8 +651,184 @@ fn line(o: &mut String, s: String) {
     o.push('\n');
 }
 
+/// Organisation level, experience and what each level unlocks (the web's 总部 → 组织 panel).
+fn org(o: &mut String, v: &View) {
+    let g = &v.org;
+    line(
+        o,
+        match g.next {
+            Some(next) => t!("cli.org.title", level = g.level, exp = g.exp, next = next),
+            None => t!("cli.org.title_max", level = g.level, exp = g.exp),
+        },
+    );
+    for p in &g.perks {
+        line(
+            o,
+            t!(
+                if p.unlocked {
+                    "cli.org.perk_on"
+                } else {
+                    "cli.org.perk_off"
+                },
+                level = p.level,
+                text = p.text
+            ),
+        );
+    }
+}
+
+/// The rest of the web's 总部 page: rules, special operatives, sealed items, past cycles.
+fn hq(o: &mut String, v: &View) {
+    let g = &v.org;
+    org(o, v);
+    line(o, t!("cli.rules.title"));
+    for r in &g.rules {
+        line(
+            o,
+            t!(
+                if r.on {
+                    "cli.rules.on"
+                } else {
+                    "cli.rules.off"
+                },
+                name = r.name,
+                id = r.id,
+                desc = r.desc
+            ),
+        );
+    }
+    line(o, t!("cli.specials.title"));
+    for x in &g.specials {
+        line(
+            o,
+            t!(
+                "cli.specials.one",
+                name = x.name,
+                side = x.side,
+                state = if x.recruited {
+                    t!("cli.specials.recruited")
+                } else if x.met {
+                    t!("cli.specials.met")
+                } else {
+                    String::new()
+                },
+                rule = x.rule,
+                hint = x.hint,
+                have = x.have.min(x.need),
+                need = x.need
+            ),
+        );
+    }
+    let sealed: Vec<String> = v
+        .sealed
+        .iter()
+        .map(|x| t!("cli.sealed_item", name = x.name, id = x.id))
+        .collect();
+    line(
+        o,
+        t!(
+            "cli.sealed",
+            n = sealed.len(),
+            slots = g.sealed_slots,
+            list = none_or(&sealed, &t!("cli.sep.list"))
+        ),
+    );
+    if !g.history.is_empty() {
+        line(o, t!("cli.history.title"));
+        for h in &g.history {
+            let s = &h.summary;
+            line(
+                o,
+                t!(
+                    "cli.history.one",
+                    n = s.number,
+                    modifier = h.modifier_name,
+                    exp = s.exp,
+                    m = s.management,
+                    d = s.defense,
+                    x = s.exploration
+                ),
+            );
+        }
+    }
+}
+
+/// The 知识库: every doctrine researched so far; the archived ones start the next cycle held.
+fn library(o: &mut String, v: &View) {
+    let r = &v.research;
+    line(
+        o,
+        t!(
+            "cli.library.title",
+            n = r.archive.len(),
+            slots = r.archive_slots,
+            have = r.library.len(),
+            total = r.total
+        ),
+    );
+    if r.library.is_empty() {
+        line(o, t!("cli.library.empty"));
+    }
+    for d in &r.library {
+        line(
+            o,
+            t!(
+                if d.archived {
+                    "cli.library.on"
+                } else {
+                    "cli.library.off"
+                },
+                name = d.name,
+                id = d.id,
+                desc = d.desc
+            ),
+        );
+    }
+}
+
+/// Events after `since`, the latest few.
+fn events(o: &mut String, v: &View, since: i64) {
+    let ev: Vec<String> = v
+        .events
+        .iter()
+        .filter(|x| x.t > since)
+        .map(|x| x.text.clone())
+        .collect();
+    const SHOWN: usize = 12;
+    let n = ev.len();
+    line(
+        o,
+        if n > SHOWN {
+            t!("cli.board.events_more", n = n, shown = SHOWN)
+        } else {
+            t!("cli.board.events", n = n)
+        },
+    );
+    for x in ev.into_iter().skip(n.saturating_sub(SHOWN)) {
+        line(o, format!("  - {x}"));
+    }
+}
+
+/// Between cycles (the web's map choice): the maps on offer, the 知识库, the 总部 page and what
+/// just happened. The maps themselves are menu items.
+fn between(v: &View, since: i64) -> String {
+    let mut o = String::new();
+    line(&mut o, t!("cli.between.title", n = v.org.cycles));
+    line(
+        &mut o,
+        t!("cli.between.maps", cycle = v.cycle, n = v.previews.len()),
+    );
+    library(&mut o, v);
+    hq(&mut o, v);
+    events(&mut o, v, since);
+    o
+}
+
 pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     let v = e.view();
+    if v.phase != Phase::Active {
+        return between(&v, since);
+    }
     let mut o = String::new();
     let res = &v.resources;
     let rate = |x: i64| format!("{:.1}", x as f64 / 100.0);
@@ -505,6 +841,9 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             cycle = v.cycle
         ),
     );
+    if let Some((_, name, desc)) = &v.modifier {
+        line(&mut o, t!("cli.board.climate", name = name, desc = desc));
+    }
     line(
         &mut o,
         t!(
@@ -617,6 +956,14 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             ),
         );
     }
+    let g = &v.org;
+    line(
+        &mut o,
+        match g.next {
+            Some(next) => t!("cli.board.org", level = g.level, exp = g.exp, next = next),
+            None => t!("cli.board.org_max", level = g.level, exp = g.exp),
+        },
+    );
     line(&mut o, t!("cli.board.map"));
     o += &map(&v);
     line(&mut o, t!("cli.board.squads"));
@@ -716,6 +1063,15 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     for op in &v.operatives {
         line(&mut o, op_short(op));
     }
+    let stash: Vec<String> = v.inventory.iter().map(|x| x.name.clone()).collect();
+    line(
+        &mut o,
+        if stash.is_empty() {
+            t!("cli.board.stash_empty")
+        } else {
+            t!("cli.board.stash", n = stash.len(), list = list(&stash))
+        },
+    );
     let r = &v.research;
     line(
         &mut o,
@@ -868,25 +1224,7 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         &mut o,
         t!("cli.board.facilities", list = none_or(&names, " ")),
     );
-    let ev: Vec<String> = v
-        .events
-        .iter()
-        .filter(|x| x.t > since)
-        .map(|x| x.text.clone())
-        .collect();
-    const SHOWN: usize = 12;
-    let n = ev.len();
-    line(
-        &mut o,
-        if n > SHOWN {
-            t!("cli.board.events_more", n = n, shown = SHOWN)
-        } else {
-            t!("cli.board.events", n = n)
-        },
-    );
-    for x in ev.into_iter().skip(n.saturating_sub(SHOWN)) {
-        line(&mut o, format!("  - {x}"));
-    }
+    events(&mut o, &v, since);
     if !v.pending.is_empty() {
         line(&mut o, t!("cli.board.pending"));
         for p in v.pending.iter().take(8) {
@@ -896,19 +1234,37 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     o
 }
 
-/// Full skill and trait text, candidates, facilities, policies and the command reference.
+/// Full skill and trait text (with equipment), candidates, the stash, facilities, policies, the
+/// 总部 page (organisation, rules, special operatives, sealed items, past cycles), the 知识库
+/// and the command reference.
 pub fn info(e: &mut Engine) -> String {
     let v = e.view();
     let mut o = String::new();
     line(&mut o, t!("cli.info.ops"));
     for op in &v.operatives {
-        line(&mut o, op_line(op));
+        line(&mut o, op_line(op, true));
     }
     if !v.candidates.is_empty() {
         line(&mut o, t!("cli.info.candidates"));
         for c in &v.candidates {
-            line(&mut o, op_line(&c.op));
+            line(&mut o, op_line(&c.op, false));
         }
+    }
+    line(&mut o, t!("cli.info.stash", n = v.inventory.len()));
+    if v.inventory.is_empty() {
+        line(&mut o, t!("cli.info.stash_empty"));
+    }
+    for it in &v.inventory {
+        line(
+            &mut o,
+            t!(
+                "cli.info.stash_item",
+                name = it.name,
+                id = it.id,
+                rw = rw(&it.reads, &it.writes),
+                desc = it.desc
+            ),
+        );
     }
     line(&mut o, t!("cli.info.facilities"));
     for f in v.facilities.iter().filter(|f| f.visible) {
@@ -944,7 +1300,13 @@ pub fn info(e: &mut Engine) -> String {
             );
         }
     }
+    hq(&mut o, &v);
+    library(&mut o, &v);
     line(&mut o, t!("cli.info.commands"));
+    let tag_ids: Vec<String> = Tag::ALL
+        .iter()
+        .map(|x| t!("cli.tag_id", id = x.id(), name = x.name()))
+        .collect();
     for c in samples() {
         if reach(&c) == Reach::BetweenCycles {
             continue;
@@ -957,7 +1319,8 @@ pub fn info(e: &mut Engine) -> String {
                 json = serde_json::to_string(&c).unwrap(),
                 desc = t!(
                     &format!("cli.cmd.{name}"),
-                    squad_size = crate::data::balance().squad_size
+                    squad_size = crate::data::balance().squad_size,
+                    tags = list(&tag_ids)
                 )
             ),
         );
@@ -1057,6 +1420,23 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
 pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
     let v = e.view();
     let mut m: Vec<Item> = vec![];
+    if v.phase != Phase::Active {
+        for p in &v.previews {
+            m.push(Item {
+                label: t!(
+                    "cli.menu.map",
+                    cycle = v.cycle,
+                    name = p.modifier_name,
+                    desc = p.modifier_desc,
+                    rifts = p.rifts,
+                    specials = p.specials,
+                    districts = p.districts
+                ),
+                cmd: Command::ChooseMap { index: p.index },
+            });
+        }
+        return m;
+    }
     let r = &v.research;
     if opts.research {
         if r.offers.is_empty() {
@@ -1308,6 +1688,10 @@ pub fn menu_text(e: &mut Engine, items: &[Item]) -> String {
     for (i, it) in items.iter().enumerate() {
         line(&mut o, format!("  {}. {}", i + 1, it.label));
     }
+    if v.phase != Phase::Active {
+        // The hints below are about the map.
+        return o;
+    }
     line(
         &mut o,
         t!(
@@ -1406,6 +1790,210 @@ mod tests {
         }
         for k in ["set_route", "claim", "build"] {
             assert!(kinds.contains(k), "menu never offered {k}: {kinds:?}");
+        }
+    }
+
+    /// The HQ page shows in a cycle (a line on the board, everything in info) and between
+    /// cycles, where the board used to index an empty map and the maps are now menu items.
+    #[test]
+    fn hq_is_shown_in_and_between_cycles() {
+        let opts = Options::default();
+        let mut e = new_game(0);
+        let now = e.state.time;
+        e.advance(now + 24 * 3600);
+        let v = e.view();
+        let line = t!(
+            "cli.board.org",
+            level = v.org.level,
+            exp = v.org.exp,
+            next = v.org.next.unwrap()
+        );
+        let text = board(&mut e, now, &opts);
+        assert!(text.contains(&line));
+        assert!(text.contains(&v.modifier.as_ref().unwrap().1));
+        let text = info(&mut e);
+        assert!(v.org.perks.iter().all(|p| text.contains(&p.text)));
+        assert!(v.org.rules.iter().all(|r| text.contains(&r.desc)));
+        assert!(v.org.specials.iter().all(|x| text.contains(&x.rule)));
+        assert!(v.research.library.iter().all(|d| text.contains(&d.desc)));
+
+        e.command(&Command::Collapse).unwrap();
+        let v = e.view();
+        assert!(v.org.exp > 0);
+        assert_eq!(hour(&e, &v), 0);
+        let text = board(&mut e, now, &opts);
+        assert!(!text.contains("cli."), "unresolved key in:\n{text}");
+        assert!(text.contains(&t!("cli.between.title", n = v.org.cycles)));
+        assert!(v.org.perks.iter().all(|p| text.contains(&p.text)));
+        assert!(text.contains(&v.org.history[0].modifier_name));
+        assert!(v.events.iter().any(|x| text.contains(&x.text)));
+        let items = menu(&mut e, &opts);
+        assert_eq!(items.len(), v.previews.len());
+        assert!(!menu_text(&mut e, &items).contains("cli."));
+        for it in &items {
+            assert!(matches!(it.cmd, Command::ChooseMap { .. }));
+            assert!(e.dry_run(&it.cmd).ok, "{}", it.label);
+        }
+        run(&mut e, &items[1].cmd, &opts).unwrap();
+        let v = e.view();
+        assert_eq!(v.phase, Phase::Active);
+        assert_eq!(hour(&e, &v), 0);
+        assert!(board(&mut e, now, &opts).contains(&v.modifier.as_ref().unwrap().1));
+    }
+
+    /// The stash shows on the board and with ids in info; equipping and sealing by those ids
+    /// works. An equipped item leaves the stash and shows on the operative; a sealed one stays in
+    /// the stash (sealing only marks it to come back next cycle) and also shows in the sealed list.
+    #[test]
+    fn stash_and_equipment_are_shown() {
+        let opts = Options::default();
+        let mut e = new_game(0);
+        let now = e.state.time;
+        assert!(board(&mut e, now, &opts).contains(&t!("cli.board.stash_empty")));
+        let items: Vec<String> = content()
+            .equipment
+            .iter()
+            .take(2)
+            .map(|x| x.id.clone())
+            .collect();
+        e.state.cycle.inventory.extend(items.iter().cloned());
+        let v = e.view();
+        let text = board(&mut e, now, &opts) + &info(&mut e);
+        assert!(!text.contains("cli."), "unresolved key in:\n{text}");
+        for it in &v.inventory {
+            assert!(text.contains(&it.name) && text.contains(&format!("（{}）", it.id)));
+        }
+        let op = v.operatives[0].id;
+        let equip = format!(r#"{{"cmd":"equip","op":{op},"item":"{}"}}"#, items[0]);
+        run(&mut e, &parse_json(&equip).unwrap(), &opts).unwrap();
+        let seal = format!(r#"{{"cmd":"seal","item":"{}","on":true}}"#, items[1]);
+        run(&mut e, &parse_json(&seal).unwrap(), &opts).unwrap();
+        let v = e.view();
+        assert_eq!(v.inventory.len(), 1);
+        assert_eq!(v.inventory[0].id, items[1]);
+        let it = v.operatives[0].equipment.as_ref().unwrap();
+        let short = t!(
+            "cli.op.equip_short",
+            name = it.name,
+            rw = rw(&it.reads, &it.writes)
+        );
+        assert!(board(&mut e, now, &opts).contains(&short));
+        let text = info(&mut e);
+        assert!(text.contains(&it.desc));
+        let sealed = &v.sealed[0];
+        assert!(text.contains(&t!("cli.sealed_item", name = sealed.name, id = sealed.id)));
+    }
+
+    /// What the web's operative page shows is in info: origin, base stats, growing traits,
+    /// skill ids and the combat rules with their JSON, which set_gambits takes back as printed.
+    #[test]
+    fn operative_page_is_shown() {
+        let opts = Options::default();
+        let mut e = new_game(0);
+        let now = e.state.time;
+        e.advance(now + 24 * 3600);
+        let v = e.view();
+        let text = info(&mut e);
+        assert!(!text.contains("cli."), "unresolved key in:\n{text}");
+        for o in &v.operatives {
+            assert!(text.contains(&o.origin));
+            for s in Stat::ALL {
+                assert!(text.contains(&t!("cli.op.stat", name = s.name(), n = o.stats[s.idx()])));
+            }
+            assert!(o.growing.iter().all(|g| text.contains(&g.hint)));
+            assert!(o
+                .skills
+                .iter()
+                .all(|s| text.contains(&format!("（{}）", s.id))));
+            for g in &o.gambits {
+                assert!(text.contains(&serde_json::to_string(g).unwrap()));
+            }
+        }
+        let header = t!("cli.op.gambits", on = 0, slots = 0);
+        let header = header.split('（').next().unwrap();
+        assert_eq!(text.matches(header).count(), v.operatives.len());
+
+        // Reorder and switch off a rule by sending back the printed JSON, then lock.
+        let o = &v.operatives[0];
+        let mut rules: Vec<String> = o
+            .gambits
+            .iter()
+            .rev()
+            .map(|g| serde_json::to_string(g).unwrap())
+            .collect();
+        rules[0] = rules[0].replace(r#""on":true"#, r#""on":false"#);
+        let cmd = format!(
+            r#"{{"cmd":"set_gambits","op":{},"gambits":[{}]}}"#,
+            o.id,
+            rules.join(",")
+        );
+        run(&mut e, &parse_json(&cmd).unwrap(), &opts).unwrap();
+        let lock = format!(r#"{{"cmd":"lock","op":{},"locked":true}}"#, o.id);
+        run(&mut e, &parse_json(&lock).unwrap(), &opts).unwrap();
+        let v = e.view();
+        let o = &v.operatives[0];
+        assert!(!o.gambits[0].on);
+        let text = info(&mut e);
+        assert!(text.contains(&gambit_line(o, 1, &o.gambits[0])));
+        assert!(text.contains(&t!("cli.op.locked")));
+        assert!(board(&mut e, now, &opts).contains(&t!("cli.op.lock_short")));
+    }
+
+    /// The set_gambits help names every condition, action and target the JSON can take.
+    #[test]
+    fn set_gambits_help_lists_every_choice() {
+        let help = t!("cli.cmd.set_gambits");
+        let tag = Tag::Mark;
+        let conds = [
+            Cond::Always,
+            Cond::SelfHpBelow { pct: 0 },
+            Cond::SelfHpAbove { pct: 0 },
+            Cond::AllyHpBelow { pct: 0 },
+            Cond::EnemyHasTag { tag },
+            Cond::SelfHasTag { tag },
+            Cond::EnemyTagAtLeast { tag, n: 0 },
+            Cond::AnyTagAtLeast { n: 0 },
+            Cond::EnemyCountAtLeast { n: 0 },
+            Cond::WaveAtLeast { n: 0 },
+            Cond::RoundAtLeast { n: 0 },
+        ];
+        // Each condition also has words (cond_text has no catch-all arm).
+        assert!(conds.iter().all(|c| !cond_text(c).contains("cli.")));
+        let acts = [
+            Act::Skill { skill: "x".into() },
+            Act::RetreatPlanned,
+            Act::RetreatEmergency,
+        ];
+        let name = |v: serde_json::Value| v["t"].as_str().unwrap().to_string();
+        let mut words: Vec<String> = conds
+            .iter()
+            .map(|c| name(serde_json::to_value(c).unwrap()))
+            .chain(acts.iter().map(|a| name(serde_json::to_value(a).unwrap())))
+            .collect();
+        for t in [
+            Target::Default,
+            Target::FrontLowest,
+            Target::BackFirst,
+            Target::HighestAtk,
+            Target::WithTag,
+            Target::LowestAlly,
+            Target::SelfUnit,
+            Target::MostTags,
+        ] {
+            assert!(!target_text(t).contains("cli."));
+            words.push(
+                serde_json::to_value(t)
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            );
+        }
+        for w in words {
+            assert!(
+                help.contains(&w),
+                "cli.cmd.set_gambits does not mention {w}"
+            );
         }
     }
 
