@@ -367,6 +367,47 @@ pub fn stand_up(state: &mut GameState, t: i64) {
     }
 }
 
+/// 在家休养 (`Pace::rest_bp`, fixed maps only): once an hour of the pace, everyone at home (not
+/// out on a trip, not downed) gets back `rest_bp` of max HP. A floor, not a cure: medicine is
+/// much faster, but nobody is stuck with no medicine and no fight they can win.
+pub fn rest(state: &mut GameState) {
+    let bp = crate::mech::pace::of(&state.cycle).rest_bp;
+    if bp <= 0 {
+        return;
+    }
+    // At home, or out on a trip that fights nothing (walking their own ground counts as rest).
+    let ids: Vec<(u32, Option<usize>)> = state
+        .cycle
+        .operatives()
+        .map(|o| (o.id.0, away_trip(&state.cycle, o.id.0)))
+        .filter(|(_, away)| {
+            away.is_none_or(|si| {
+                state.cycle.squads[si]
+                    .trip
+                    .as_ref()
+                    .is_some_and(|t| t.results.is_empty())
+            })
+        })
+        .collect();
+    for (id, away) in ids {
+        let max = max_hp(state, state.op(id).unwrap());
+        let gain = ((max as i64 * bp / 10_000) as i32).max(1);
+        if let Some(si) = away {
+            let h = state.cycle.squads[si]
+                .trip
+                .as_mut()
+                .and_then(|t| t.hp.get_mut(&id));
+            if let Some(h) = h.filter(|h| !h.down) {
+                h.damage = (h.damage - gain).max(0);
+            }
+        }
+        let f = state.op_mut(id).unwrap().fighter_mut();
+        if !f.down {
+            f.damage = (f.damage - gain).max(0);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Medical buildings on the way
 

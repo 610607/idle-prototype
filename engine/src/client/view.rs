@@ -626,7 +626,8 @@ pub struct OrgView {
     #[serde(skip_serializing_if = "Gated::closed")]
     pub rules: Gated<Vec<RuleView>>,
     pub specials: Vec<SpecialView>,
-    pub perks: Vec<PerkView>,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub perks: Gated<Vec<PerkView>>,
     pub history: Vec<HistoryView>,
     pub sealed_slots: usize,
 }
@@ -900,9 +901,12 @@ pub struct View {
     pub resources: Resources,
     /// Income per hour x100 per resource (scrap, parts, intel, crystal, medicine).
     pub income: [i64; crate::mech::economy::RES_N],
-    pub power: (i32, i32, i32),
-    /// 威胁：来潮按统计分数变强（`mech::pressure::reading`）。
-    pub threat: crate::mech::pressure::Reading,
+    /// 电力 (supply, demand, efficiency bp); absent while locked.
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub power: Gated<(i32, i32, i32)>,
+    /// 威胁：来潮按统计分数变强（`mech::pressure::reading`）；absent while locked.
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub threat: Gated<crate::mech::pressure::Reading>,
     pub self_sufficient: bool,
     pub border_count: usize,
     pub tiles: Vec<TileView>,
@@ -919,11 +923,15 @@ pub struct View {
     pub sealed: Gated<Vec<ItemView>>,
     #[serde(skip_serializing_if = "Gated::closed")]
     pub facilities: Gated<Vec<FacilityOption>>,
-    pub tide: Vec<TideView>,
+    /// The 来潮 forecast; absent while the threat block is locked.
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub tide: Gated<Vec<TideView>>,
     pub pending: Vec<PendingView>,
     pub events: Vec<EventView>,
     pub org: OrgView,
-    pub results: CycleResults,
+    /// 本轮成果; absent while locked.
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub results: Gated<CycleResults>,
     pub hire_cost: i64,
     #[serde(skip_serializing_if = "Gated::closed")]
     pub research: Gated<ResearchView>,
@@ -951,6 +959,73 @@ pub struct View {
     /// A fixed map's pace (`data::maps::Pace`); absent on random maps.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pace: Option<crate::data::maps::Pace>,
+    /// A fixed map's current one-line hint (`mech::script`); absent when there is none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<HintView>,
+    /// The fixed map's chapter is over (`MapDef::ending`): what to say, and that `leave_map` is
+    /// open. Absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chapter_end: Option<HintView>,
+    /// 规章和档案 (`Org::records`): every record kept, then the next one or two not done yet.
+    /// Absent before any record is kept outside a fixed map (a plain random-map game).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub records: Vec<RecordView>,
+}
+
+/// One entry of the 规章和档案 page: did X → got Y.
+#[derive(Serialize, Clone, Debug)]
+pub struct RecordView {
+    pub id: String,
+    pub did: String,
+    pub got: String,
+    /// Kept by the organisation; false: one of the next ones, not done yet.
+    pub done: bool,
+}
+
+/// How many records not done yet the page lists (designer decision: the next one or two).
+const NEXT_RECORDS: usize = 2;
+
+pub fn records_view(state: &GameState) -> Vec<RecordView> {
+    if state.org.records.is_empty() && state.cycle.script.is_none() {
+        return vec![];
+    }
+    let all = &content().unlocks.records;
+    let done = all.iter().filter(|r| state.org.records.contains(&r.id));
+    let next = all
+        .iter()
+        .filter(|r| !state.org.records.contains(&r.id))
+        .take(NEXT_RECORDS);
+    done.chain(next)
+        .map(|r| RecordView {
+            id: r.id.clone(),
+            did: r.did.clone(),
+            got: r.got.clone(),
+            done: state.org.records.contains(&r.id),
+        })
+        .collect()
+}
+
+pub fn chapter_end_view(state: &GameState) -> Option<HintView> {
+    let t = crate::mech::script::ended(state)?;
+    let map = state.cycle.map.as_deref()?;
+    Some(HintView {
+        text: crate::l10n::tr(&format!("event.ending.{map}")),
+        t,
+    })
+}
+
+/// The hint shown now: its text and when it came up.
+#[derive(Serialize, Clone, Debug)]
+pub struct HintView {
+    pub text: String,
+    pub t: i64,
+}
+
+pub fn hint_view(state: &GameState) -> Option<HintView> {
+    crate::mech::script::current_hint(state).map(|(key, t)| HintView {
+        text: crate::l10n::tr(&key),
+        t,
+    })
 }
 
 impl View {
@@ -1001,6 +1076,7 @@ fn cond_text(c: &crate::data::unlocks::Condition) -> String {
                 Action::Research => "unlock.cond.done.research",
                 Action::SurgeHeld => "unlock.cond.done.surge_held",
                 Action::RouteWin => "unlock.cond.done.route_win",
+                Action::Heal => "unlock.cond.done.heal",
             },
             n = n
         ),
@@ -1009,6 +1085,10 @@ fn cond_text(c: &crate::data::unlocks::Condition) -> String {
             "unlock.cond.department",
             name = crate::l10n::tr(&format!("department.{id}.name"))
         ),
+        Condition::LowHp { pct } => t!("unlock.cond.low_hp", pct = pct),
+        Condition::StoppedAt { tile } => {
+            t!("unlock.cond.stopped_at", tile = geom::label(*tile))
+        }
     }
 }
 
@@ -1509,7 +1589,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 }
             })
             .collect(),
-        perks: perks(level),
+        perks: Gated::new(open(System::OrgLevel), || perks(level)),
         history: state
             .org
             .history
@@ -1555,8 +1635,10 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             previews,
             resources: Resources::default(),
             income: [0; crate::mech::economy::RES_N],
-            power: (0, 0, 10_000),
-            threat: crate::mech::pressure::reading(state),
+            power: Gated::new(open(System::Power), || (0, 0, 10_000)),
+            threat: Gated::new(open(System::Threat), || {
+                crate::mech::pressure::reading(state)
+            }),
             self_sufficient: false,
             border_count: 0,
             tiles: vec![],
@@ -1571,7 +1653,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 state.org.sealed.iter().map(|s| item_view(s)).collect()
             }),
             facilities: Gated::new(open(System::Build), Vec::new),
-            tide: vec![],
+            tide: Gated::new(open(System::Threat), Vec::new),
             pending: vec![PendingView {
                 kind: "map",
                 text: t!("view.pending.choose_map"),
@@ -1582,7 +1664,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             }],
             events,
             org,
-            results: sim::cycle_results(state),
+            results: Gated::new(open(System::Score), || sim::cycle_results(state)),
             hire_cost: b.hire_cost_scrap,
             research: Gated::new(open(System::Research), || research_view(state)),
             armory: Gated::new(open(System::Armory), || armory_view(state)),
@@ -1594,6 +1676,9 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             claim_price: None,
             bounds: None,
             pace: None,
+            hint: None,
+            chapter_end: None,
+            records: records_view(state),
         };
     }
 
@@ -1778,11 +1863,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 source: cd.source.render(),
                 arrived: cd.arrived,
                 op: op_view(state, op),
-                cost: if op.persona().special.is_some() {
-                    0
-                } else {
-                    b.hire_cost_scrap
-                },
+                cost: actions::hire_cost(cd, op.persona().special.is_some()),
             })
             .collect()
     });
@@ -1844,11 +1925,16 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         let (before, after) = actions::border_after_claim(state, i);
         let key = if t.terrain == Terrain::Rift {
             "view.pending.suppress"
+        } else if pace.surge_interval == 0 {
+            // No surges on this map: the border and holding it do not matter yet.
+            "view.pending.claim_quiet"
         } else {
             "view.pending.claim"
         };
         use crate::mech::defense;
         let (hold, guard) = match defense::claim_forecast(state, i) {
+            // No surges on this map: nothing to hold.
+            _ if pace.surge_interval == 0 => (String::new(), None),
             defense::ClaimForecast::Holds => (t!("view.pending.claim_holds"), None),
             defense::ClaimForecast::Guard(op) => (
                 t!(
@@ -2012,8 +2098,12 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         previews,
         resources: cy.resources.clone(),
         income,
-        power: (calc.power_supply, calc.power_demand, calc.power_bp),
-        threat: crate::mech::pressure::reading(state),
+        power: Gated::new(open(System::Power), || {
+            (calc.power_supply, calc.power_demand, calc.power_bp)
+        }),
+        threat: Gated::new(open(System::Threat), || {
+            crate::mech::pressure::reading(state)
+        }),
         self_sufficient: sim::self_sufficient(state),
         border_count: border.len(),
         tiles,
@@ -2030,11 +2120,11 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             state.org.sealed.iter().map(|s| item_view(s)).collect()
         }),
         facilities,
-        tide: tide_view(tide),
+        tide: Gated::new(open(System::Threat), || tide_view(tide)),
         pending,
         events,
         org,
-        results: sim::cycle_results(state),
+        results: Gated::new(open(System::Score), || sim::cycle_results(state)),
         hire_cost: b.hire_cost_scrap,
         research: Gated::new(open(System::Research), || research_view(state)),
         armory: Gated::new(open(System::Armory), || armory_view(state)),
@@ -2047,6 +2137,9 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             .filter(|p| *p != Resources::default()),
         bounds: fixed.map(|f| f.0),
         pace: fixed.map(|f| f.1),
+        hint: hint_view(state),
+        chapter_end: chapter_end_view(state),
+        records: records_view(state),
     }
 }
 

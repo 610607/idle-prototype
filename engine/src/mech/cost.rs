@@ -93,10 +93,18 @@ mod tests {
             const { std::cell::RefCell::new(None) };
     }
 
-    /// A random map (the whole board to claim on) priced like the tutorial: random maps are
+    /// A random map (the whole board to claim on) priced the way S6 set the tutorial: random maps are
     /// free for now (`balance.json`), the growing prices are the tutorial's (`maps.json`).
     fn started() -> GameState {
-        let tutorial = content().map(hooks::TUTORIAL_MAP).unwrap().costs.clone();
+        // The numbers S6 was written with (the tutorial itself is tuned in `maps.json`).
+        let tutorial = Some(Costs {
+            claim_base: Resources {
+                scrap: 10,
+                ..Default::default()
+            },
+            claim_mult_bp: 13_500,
+            build_mult_bp: 15_000,
+        });
         OVERRIDE.with(|o| *o.borrow_mut() = tutorial);
         let mut s = sim::new_game(3, 1_000_000, "test");
         apply(&mut s, &Command::ChooseMap { index: 0 }).unwrap();
@@ -234,7 +242,17 @@ mod tests {
         sim::start_map(&mut t, hooks::TUTORIAL_MAP).unwrap();
         assert_eq!(claim_price(&t).scrap, 10);
         t.cycle.stats.tiles_claimed = 2;
-        assert_eq!(claim_price(&t).scrap, 19);
+        let c = content()
+            .map(hooks::TUTORIAL_MAP)
+            .unwrap()
+            .costs
+            .clone()
+            .unwrap();
+        assert_eq!(
+            claim_price(&t).scrap,
+            grow(c.claim_base.scrap, c.claim_mult_bp, 2)
+        );
+        assert!(claim_price(&t).scrap > 10);
     }
 
     #[test]

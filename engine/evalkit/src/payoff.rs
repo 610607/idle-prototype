@@ -145,7 +145,7 @@ pub fn classes_path() -> String {
 }
 
 /// Every class the file may name.
-const KNOWN: [&str; 25] = [
+const KNOWN: [&str; 26] = [
     "research",
     "armory",
     "contiguous",
@@ -171,6 +171,7 @@ const KNOWN: [&str; 25] = [
     "cycle",
     "auto",
     "unlock",
+    "hint",
 ];
 
 #[derive(Deserialize)]

@@ -263,7 +263,7 @@ fn clients_read_state_through_queries() {
     // Relation fields of the state's structs. The view models have fields of the same names, which
     // some files read: those files are listed with the field and what it belongs to there.
     const FIELDS: [&str; 5] = ["members", "assignment", "equipment", "usage", "frozen"];
-    const ELSEWHERE: [(&str, &str, &str); 9] = [
+    const ELSEWHERE: [(&str, &str, &str); 11] = [
         ("src/client/textui.rs", "members", "SquadView"),
         ("src/client/textui.rs", "equipment", "OpView"),
         ("src/client/textui.rs", "usage", "TileView"),
@@ -271,6 +271,8 @@ fn clients_read_state_through_queries() {
         ("evalkit/src/bot/mod.rs", "assignment", "OpView"),
         ("evalkit/src/bot/mod.rs", "usage", "TileView"),
         ("evalkit/examples/bot.rs", "members", "SquadView"),
+        ("evalkit/src/tutorial.rs", "members", "SquadView"),
+        ("evalkit/src/tutorial.rs", "usage", "TileView"),
         (
             "evalkit/src/price.rs",
             "equipment",

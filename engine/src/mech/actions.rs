@@ -309,7 +309,7 @@ pub fn hire(state: &mut GameState, candidate: u32) -> ActResult {
         .persona()
         .special
         .is_some();
-    let cost = if is_special { 0 } else { b.hire_cost_scrap };
+    let cost = hire_cost(&state.cycle.candidates[pos], is_special);
     if state.cycle.resources.scrap < cost {
         return Err(t!("err.not_enough_scrap"));
     }
@@ -334,6 +334,9 @@ pub fn hire(state: &mut GameState, candidate: u32) -> ActResult {
     }
     state.cycle.roster.push(c.entity);
     state.cycle.stats.hired += 1;
+    if c.joins {
+        join_first_squad(state, c.entity.0);
+    }
     state.event(
         EventKind::Info,
         txt!("event.hired", name = name),
@@ -342,6 +345,35 @@ pub fn hire(state: &mut GameState, candidate: u32) -> ActResult {
         None,
     );
     Ok(())
+}
+
+/// What hiring this candidate costs in scrap: nothing for specials and scripted walk-ins.
+pub fn hire_cost(c: &crate::mech::state::Candidate, special: bool) -> i64 {
+    if special || c.free {
+        0
+    } else {
+        balance().hire_cost_scrap
+    }
+}
+
+/// Put a new hire in the first squad with room (a trip under way goes on; they go next time).
+fn join_first_squad(state: &mut GameState, op: u32) {
+    let size = balance().squad_size;
+    let Some(sq) = state
+        .cycle
+        .squads
+        .iter()
+        .find(|s| s.members.len() < size)
+        .map(|s| s.id)
+    else {
+        return;
+    };
+    if let Some(o) = state.op_mut(op) {
+        o.state.assignment = Assignment::Squad { squad: sq };
+    }
+    state.squad_mut(sq).unwrap().members.push(op);
+    let now = state.time;
+    crate::mech::routes::try_start(state, sq, now);
 }
 
 /// Customised recruits open once a district is contiguous this cycle, or after the first cycle.
@@ -624,6 +656,10 @@ pub fn dispatch(state: &mut GameState, squad: u32, tile: u16) -> ActResult {
         return Err(t!("err.squad_empty"));
     }
     crate::mech::routes::validate(state, &members, &[tile])?;
+    // Where routes walk through claimable tiles, there is nothing to fight there: claim it.
+    if crate::mech::routes::passes_claimable(&state.cycle) && state.cycle.is_claimable(tile) {
+        return Err(t!("err.dispatch_claimable", tile = geom::label(tile)));
+    }
     // Like a route, the downed stay home (`mech::medic`); with nobody standing there is no trip.
     if state.cycle.member_ops(squad).all(|o| o.fighter().down) {
         let name = state.cycle.squad(squad).map(|s| s.name.clone());

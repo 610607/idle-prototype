@@ -64,6 +64,7 @@ pub fn reach(cmd: &Command) -> Reach {
         Command::SetRoute { .. }
         | Command::Dispatch { .. }
         | Command::FoundDepartment { .. }
+        | Command::LeaveMap
         | Command::Assault { .. }
         | Command::Garrison { .. }
         | Command::Claim { .. }
@@ -198,6 +199,7 @@ pub fn samples() -> Vec<Command> {
         Command::FoundDepartment {
             department: "dispatch_office".into(),
         },
+        Command::LeaveMap,
     ]
 }
 
@@ -750,7 +752,9 @@ fn org(o: &mut String, v: &View) {
 /// The rest of the web's 总部 page: rules, special operatives, sealed items, past cycles.
 fn hq(o: &mut String, v: &View) {
     let g = &v.org;
-    org(o, v);
+    if v.shows(System::OrgLevel) {
+        org(o, v);
+    }
     if v.shows(System::Rules) {
         line(o, t!("cli.rules.title"));
     }
@@ -897,6 +901,7 @@ fn between(v: &View, since: i64) -> String {
     );
     library(&mut o, v);
     hq(&mut o, v);
+    records(&mut o, v);
     events(&mut o, v, since);
     o
 }
@@ -929,30 +934,75 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     if let Some((_, name, desc)) = &v.modifier {
         line(&mut o, t!("cli.board.climate", name = name, desc = desc));
     }
-    line(
-        &mut o,
-        t!(
-            "cli.board.res",
-            scrap = res.scrap,
-            parts = res.parts,
-            intel = res.intel,
-            crystal = res.crystal,
-            is = rate(v.income[0]),
-            ip = rate(v.income[1]),
-            ii = rate(v.income[2]),
-            ic = rate(v.income[3])
-        ),
-    );
-    if res.medicine > 0 || v.income[4] > 0 || v.shows(System::Medicine) {
+    if let Some(end) = &v.chapter_end {
+        line(&mut o, t!("cli.board.chapter_end", text = end.text));
+    } else if let Some(h) = &v.hint {
+        line(&mut o, t!("cli.board.hint", text = h.text));
+    }
+    // A fast map counts per minute and leaves out what it has none of; a random map keeps the
+    // old hourly line.
+    let per_min = v.pace.is_some_and(|p| p.hour_secs() < 3600);
+    if per_min {
+        let rate_min = |x: i64| format!("{:.1}", x as f64 / 6000.0);
+        let mut parts = vec![];
+        for (k, key) in crate::mech::economy::RES_KEYS.iter().enumerate() {
+            let have = match k {
+                0 => res.scrap,
+                1 => res.parts,
+                2 => res.intel,
+                3 => res.crystal,
+                _ => res.medicine,
+            };
+            // Medicine has its own line once healing is open.
+            if k == 4 && v.shows(System::Medicine) {
+                continue;
+            }
+            if k == 0 || have > 0 || v.income[k] > 0 {
+                parts.push(t!(
+                    "cli.board.res_item",
+                    name = t!(&format!("delta.res.{key}")),
+                    n = have,
+                    rate = rate_min(v.income[k])
+                ));
+            }
+        }
+        line(&mut o, t!("cli.board.res_min", list = parts.join(" ")));
+        if v.shows(System::Medicine) {
+            line(
+                &mut o,
+                t!(
+                    "cli.board.medicine_min",
+                    n = res.medicine,
+                    rate = rate_min(v.income[4])
+                ),
+            );
+        }
+    } else {
         line(
             &mut o,
             t!(
-                "cli.board.medicine",
-                n = res.medicine,
-                rate = rate(v.income[4]),
-                cap = crate::data::balance().storage_cap.medicine
+                "cli.board.res",
+                scrap = res.scrap,
+                parts = res.parts,
+                intel = res.intel,
+                crystal = res.crystal,
+                is = rate(v.income[0]),
+                ip = rate(v.income[1]),
+                ii = rate(v.income[2]),
+                ic = rate(v.income[3])
             ),
         );
+        if res.medicine > 0 || v.income[4] > 0 || v.shows(System::Medicine) {
+            line(
+                &mut o,
+                t!(
+                    "cli.board.medicine",
+                    n = res.medicine,
+                    rate = rate(v.income[4]),
+                    cap = crate::data::balance().storage_cap.medicine
+                ),
+            );
+        }
     }
     if v.med_line.is_open() {
         let m = &*v.med_line;
@@ -982,39 +1032,50 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             String::new()
         }
     };
-    line(
-        &mut o,
-        t!(
-            "cli.board.cap",
-            scrap = cap.scrap,
-            parts = cap.parts,
-            intel = cap.intel,
-            crystal = cap.crystal,
-            fs = full(res.scrap, cap.scrap),
-            fp = full(res.parts, cap.parts),
-            fi = full(res.intel, cap.intel),
-            fc = full(res.crystal, cap.crystal)
-        ),
-    );
-    line(
-        &mut o,
-        t!(
-            "cli.board.power",
-            supply = v.power.0,
-            demand = v.power.1,
-            eff = v.power.2 / 100
-        ),
-    );
-    line(
-        &mut o,
-        t!(
-            "cli.board.threat",
-            threat = v.threat.value,
-            level = format!("{:.1}", v.threat.level_bp as f64 / 10_000.0),
-            mult = v.threat.strength_bp / 100,
-            next = v.threat.next
-        ),
-    );
+    // With systems still locked the storage cap only matters once a stock gets near it.
+    let near_cap = res.scrap * 2 >= cap.scrap
+        || res.parts * 2 >= cap.parts
+        || res.intel * 2 >= cap.intel
+        || res.crystal * 2 >= cap.crystal;
+    if v.locked.is_empty() || near_cap {
+        line(
+            &mut o,
+            t!(
+                "cli.board.cap",
+                scrap = cap.scrap,
+                parts = cap.parts,
+                intel = cap.intel,
+                crystal = cap.crystal,
+                fs = full(res.scrap, cap.scrap),
+                fp = full(res.parts, cap.parts),
+                fi = full(res.intel, cap.intel),
+                fc = full(res.crystal, cap.crystal)
+            ),
+        );
+    }
+    if v.power.is_open() {
+        line(
+            &mut o,
+            t!(
+                "cli.board.power",
+                supply = v.power.0,
+                demand = v.power.1,
+                eff = v.power.2 / 100
+            ),
+        );
+    }
+    if v.threat.is_open() {
+        line(
+            &mut o,
+            t!(
+                "cli.board.threat",
+                threat = v.threat.value,
+                level = format!("{:.1}", v.threat.level_bp as f64 / 10_000.0),
+                mult = v.threat.strength_bp / 100,
+                next = v.threat.next
+            ),
+        );
+    }
     let alerts: Vec<String> = v
         .tiles
         .iter()
@@ -1022,23 +1083,34 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         .map(|x| x.label.clone())
         .collect();
     let st = &e.state.cycle.stats;
-    line(
-        &mut o,
-        t!(
-            "cli.board.land",
-            owned = v.tiles.iter().filter(|x| x.owned).count(),
-            ring = st.max_ring,
-            border = v.border_count,
-            held = st.surges_held,
-            lost = st.surges_lost,
-            alerts = alerts.len(),
-            list = if alerts.is_empty() {
-                String::new()
-            } else {
-                t!("cli.paren", x = alerts.join(" "))
-            }
-        ),
-    );
+    if !v.threat.is_open() {
+        // No surges yet: how far and how long the border is does not matter.
+        line(
+            &mut o,
+            t!(
+                "cli.board.land_short",
+                owned = v.tiles.iter().filter(|x| x.owned).count()
+            ),
+        );
+    } else {
+        line(
+            &mut o,
+            t!(
+                "cli.board.land",
+                owned = v.tiles.iter().filter(|x| x.owned).count(),
+                ring = st.max_ring,
+                border = v.border_count,
+                held = st.surges_held,
+                lost = st.surges_lost,
+                alerts = alerts.len(),
+                list = if alerts.is_empty() {
+                    String::new()
+                } else {
+                    t!("cli.paren", x = alerts.join(" "))
+                }
+            ),
+        );
+    }
     if let (Some(p), true) = (&v.claim_price, v.shows(System::Claim)) {
         line(
             &mut o,
@@ -1068,60 +1140,66 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             )
         })
         .collect();
-    line(
-        &mut o,
-        t!(
-            "cli.board.tide",
-            h = e.state.cycle.pace().tide_horizon / 3600,
-            n = v.tide.len(),
-            lost = lost.len(),
-            list = if lost.is_empty() {
-                String::new()
-            } else {
-                t!(
-                    "cli.colon_list",
-                    list = lost
-                        .into_iter()
-                        .take(8)
-                        .collect::<Vec<_>>()
-                        .join(&t!("cli.sep.item"))
-                )
-            }
-        ),
-    );
-    line(
-        &mut o,
-        t!(
-            "cli.board.score",
-            total = v.results.total,
-            m = v.results.management,
-            d = v.results.defense,
-            x = v.results.exploration
-        ),
-    );
-    if !v.results.lines.is_empty() {
-        let l: Vec<String> = v
-            .results
-            .lines
-            .iter()
-            .map(|(k, n)| format!("{k}{n}"))
-            .collect();
+    if v.tide.is_open() {
         line(
             &mut o,
             t!(
-                "cli.board.score_lines",
-                lines = l.join(&t!("cli.sep.comma"))
+                "cli.board.tide",
+                h = e.state.cycle.pace().tide_horizon / 3600,
+                n = v.tide.len(),
+                lost = lost.len(),
+                list = if lost.is_empty() {
+                    String::new()
+                } else {
+                    t!(
+                        "cli.colon_list",
+                        list = lost
+                            .into_iter()
+                            .take(8)
+                            .collect::<Vec<_>>()
+                            .join(&t!("cli.sep.item"))
+                    )
+                }
             ),
         );
     }
+    if v.results.is_open() {
+        line(
+            &mut o,
+            t!(
+                "cli.board.score",
+                total = v.results.total,
+                m = v.results.management,
+                d = v.results.defense,
+                x = v.results.exploration
+            ),
+        );
+        if !v.results.lines.is_empty() {
+            let l: Vec<String> = v
+                .results
+                .lines
+                .iter()
+                .map(|(k, n)| format!("{k}{n}"))
+                .collect();
+            line(
+                &mut o,
+                t!(
+                    "cli.board.score_lines",
+                    lines = l.join(&t!("cli.sep.comma"))
+                ),
+            );
+        }
+    }
     let g = &v.org;
-    line(
-        &mut o,
-        match g.next {
-            Some(next) => t!("cli.board.org", level = g.level, exp = g.exp, next = next),
-            None => t!("cli.board.org_max", level = g.level, exp = g.exp),
-        },
-    );
+    if v.shows(System::OrgLevel) {
+        line(
+            &mut o,
+            match g.next {
+                Some(next) => t!("cli.board.org", level = g.level, exp = g.exp, next = next),
+                None => t!("cli.board.org_max", level = g.level, exp = g.exp),
+            },
+        );
+    }
     line(&mut o, t!("cli.board.map"));
     o += &map(&v);
     line(&mut o, t!("cli.board.squads"));
@@ -1229,7 +1307,12 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         })
         .map(|x| {
             t!(
-                "cli.board.front_tile",
+                // A fixed map's tiles carry their own level (档), not a ring.
+                if v.bounds.is_some() {
+                    "cli.board.front_tile_level"
+                } else {
+                    "cli.board.front_tile"
+                },
                 tile = x.label,
                 ring = x.ring,
                 terrain = terrain(x.terrain),
@@ -1246,11 +1329,15 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     departments(&mut o, &v);
     line(
         &mut o,
-        t!(
-            "cli.board.roster",
-            n = v.operatives.len(),
-            cap = v.roster_cap
-        ),
+        if v.shows(System::Hire) {
+            t!(
+                "cli.board.roster",
+                n = v.operatives.len(),
+                cap = v.roster_cap
+            )
+        } else {
+            t!("cli.board.roster_nocap")
+        },
     );
     for op in &v.operatives {
         line(&mut o, op_short(op));
@@ -1370,7 +1457,12 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         line(
             &mut o,
             t!(
-                "cli.board.district",
+                // No surges yet: no militia to speak of.
+                if v.threat.is_open() {
+                    "cli.board.district"
+                } else {
+                    "cli.board.district_quiet"
+                },
                 name = d.name,
                 owned = d.owned,
                 total = d.total,
@@ -1409,10 +1501,10 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     let names: Vec<String> = built
         .iter()
         .map(|(k, n)| {
-            let name = v
-                .facilities
-                .iter()
-                .find(|f| &f.id == k)
+            // From the content, not the build menu: a scripted building stands before building
+            // is open.
+            let name = content()
+                .facility(k)
                 .map(|f| f.name.clone())
                 .unwrap_or(k.clone());
             t!("cli.board.facility_count", name = name, n = n)
@@ -1422,6 +1514,9 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         &mut o,
         t!("cli.board.facilities", list = none_or(&names, " ")),
     );
+    if v.chapter_end.is_some() {
+        records(&mut o, &v);
+    }
     events(&mut o, &v, since);
     if !v.pending.is_empty() {
         line(&mut o, t!("cli.board.pending"));
@@ -1431,6 +1526,28 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
     }
     next_lines(&mut o, &v);
     o
+}
+
+/// The organisation's 规章和档案: records kept, then the next one or two.
+fn records(o: &mut String, v: &View) {
+    if v.records.is_empty() {
+        return;
+    }
+    line(o, t!("cli.records.title"));
+    for r in &v.records {
+        line(
+            o,
+            t!(
+                if r.done {
+                    "cli.records.open"
+                } else {
+                    "cli.records.next"
+                },
+                did = r.did,
+                got = r.got
+            ),
+        );
+    }
 }
 
 /// The departments: founded, ready, or how far along (with what founding costs).
@@ -1572,6 +1689,7 @@ pub fn info(e: &mut Engine) -> String {
         }
     }
     hq(&mut o, &v);
+    records(&mut o, &v);
     library(&mut o, &v);
     line(&mut o, t!("cli.info.commands"));
     let tag_ids: Vec<String> = Tag::ALL
@@ -1644,8 +1762,22 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
         .map(|x| (x.ring, x.i))
         .collect();
     targets.sort();
+    // A fixed map's hardest tile in sight (the gate) is always offered too: the hints send the
+    // player there to see why the squad stops.
+    let extra = targets.last().copied().filter(|_| v.bounds.is_some());
+    let mut picks: Vec<(i32, u16)> = targets
+        .iter()
+        .filter(|x| Some(**x) != extra)
+        .take(10)
+        .copied()
+        .collect();
+    picks.extend(extra);
     let mut out = vec![];
-    for (ring, tile) in targets.iter().take(10) {
+    for (ring, tile) in picks.iter() {
+        let last = Some((*ring, *tile)) == extra;
+        if out.len() >= 4 && !last {
+            continue;
+        }
         let tv = &v.tiles[*tile as usize];
         let foes = foes_of(tv);
         let mut best: Option<(Vec<u16>, RoutePreview)> = None;
@@ -1688,6 +1820,8 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
                     outcome = outcome(p.outcome)
                         + &if p.low_hp {
                             t!("cli.route.low_hp")
+                        } else if p.stopped.is_some() && v.bounds.is_some() {
+                            t!("cli.route.stops")
                         } else {
                             String::new()
                         },
@@ -1696,7 +1830,7 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
                 ),
             ));
         }
-        if out.len() >= 4 {
+        if out.len() >= 4 && extra.is_none() {
             break;
         }
     }
@@ -1710,6 +1844,8 @@ fn dispatch_options(e: &mut Engine, squad: u32) -> Vec<(u16, String)> {
         return vec![];
     }
     let v = e.view();
+    // Where routes walk through claimable tiles, a dispatch there is refused: claim it instead.
+    let pass = crate::mech::routes::passes_claimable(&e.state.cycle);
     // Tiles next to the territory with enemies: the ones not claimable yet first, then claimable
     // ones (fighting there again still brings loot, which pays for the next claim), and walls
     // (a fight the squad would turn down) last.
@@ -1717,6 +1853,7 @@ fn dispatch_options(e: &mut Engine, squad: u32) -> Vec<(u16, String)> {
     for x in v.tiles.iter().filter(|x| {
         x.revealed
             && !x.owned
+            && !(pass && x.claimable)
             && x.terrain != "barrier"
             && !x.enemies.is_empty()
             && geom::neighbors(x.i).any(|n| v.tiles[n as usize].owned)
@@ -1742,13 +1879,21 @@ fn dispatch_options(e: &mut Engine, squad: u32) -> Vec<(u16, String)> {
             tile,
             t!(
                 key,
-                tile = tv.label,
+                // A plot with a past says so (empty on random maps).
+                tile = tv.label.clone()
+                    + &former(tv.former.as_deref()).replacen(
+                        &t!("cli.sep.comma"),
+                        &t!("cli.dispatch.former_sep"),
+                        1
+                    ),
                 ring = ring,
                 danger = tv.danger_pct,
                 warden = tv.warden,
                 terrain = terrain(tv.terrain),
                 foes = foes_of(tv),
-                outcome = if wall {
+                outcome = if wall && p.low_hp {
+                    t!("cli.dispatch.wall_hp")
+                } else if wall {
                     t!("cli.dispatch.wall")
                 } else {
                     outcome(p.outcome)
@@ -1967,16 +2112,37 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
     }
     // Builds: one suggested tile per affordable facility, with the client's dry-run deltas.
     for f in v.facilities.iter().filter(|f| f.visible && f.affordable) {
-        let spot = v
+        let homes = |x: &crate::client::view::TileView| {
+            let d = v.districts.iter().find(|d| Some(d.id) == x.district)?;
+            Some((x.i, d.population - d.employed, d.name.clone(), d))
+        };
+        let candidates = v
             .tiles
             .iter()
             .filter(|x| x.owned && x.terrain == "city" && x.usage == "housing")
-            .filter_map(|x| {
-                let d = v.districts.iter().find(|d| Some(d.id) == x.district)?;
-                Some((x.i, d.population - d.employed, d.name.clone()))
-            })
-            .filter(|(_, idle, _)| *idle > 0)
-            .max_by_key(|(i, idle, _)| (*idle, std::cmp::Reverse(*i)));
+            .filter_map(homes)
+            .filter(|(_, idle, _, _)| *idle > 0);
+        let spot = if v.bounds.is_some() {
+            // A fixed map: the plot that used to be this building first, then a home whose
+            // residents still have a roof once it is gone, then the rest.
+            candidates
+                .max_by_key(|(i, idle, _, d)| {
+                    let x = &v.tiles[*i as usize];
+                    (
+                        x.former.as_deref() == Some(f.id.as_str()),
+                        // Not the plot that was homes before: people live there.
+                        x.former.as_deref() != Some(crate::data::unlocks::HOUSING),
+                        d.housing - crate::data::balance().housing_capacity >= d.population,
+                        *idle,
+                        std::cmp::Reverse(*i),
+                    )
+                })
+                .map(|(i, idle, name, _)| (i, idle, name))
+        } else {
+            candidates
+                .max_by_key(|(i, idle, _, _)| (*idle, std::cmp::Reverse(*i)))
+                .map(|(i, idle, name, _)| (i, idle, name))
+        };
         let Some((tile, idle, district)) = spot else {
             continue;
         };
@@ -2159,6 +2325,24 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
                 cmd: Command::SetRoute { squad: s.id, route },
             });
         }
+    }
+    // The chapter is over: the way on to a formal run comes first.
+    if v.chapter_end.is_some() {
+        let map = e
+            .state
+            .cycle
+            .map
+            .as_deref()
+            .and_then(|id| content().map(id))
+            .map(|m| m.name.clone())
+            .unwrap_or_default();
+        m.insert(
+            0,
+            Item {
+                label: t!("cli.menu.leave_map", map = map),
+                cmd: Command::LeaveMap,
+            },
+        );
     }
     if !crate::mech::unlocks::all_open(&e.state) {
         m.retain(|i| e.allows(&i.cmd));
@@ -2516,7 +2700,9 @@ mod tests {
                 None => assert!(
                     matches!(
                         c,
-                        Command::ChooseMap { .. } | Command::FoundDepartment { .. }
+                        Command::ChooseMap { .. }
+                            | Command::FoundDepartment { .. }
+                            | Command::LeaveMap
                     ),
                     "{c:?} is ungated"
                 ),

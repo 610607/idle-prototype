@@ -514,5 +514,9 @@
   "panels.dept.founded": "已成立",
   "panels.dept.found": "成立",
   "panels.dept.done": "成立了{name}",
-  "tile.claim.price": "占领花费（每占一格都更贵）："
+  "tile.claim.price": "占领花费（每占一格都更贵）：",
+  "panels.chapter_end.title": "本章完。",
+  "panels.chapter_end.leave": "离开教学关，开始正式局",
+  "panels.chapter_end.left": "离开了教学关：选一张地图开始正式局",
+  "panels.records.title": "密室：底下那间屋子"
 }

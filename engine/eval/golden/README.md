@@ -108,11 +108,13 @@ cargo run -q --release --example eval -- session eval/sessions/*/*/ --bless
 
 ```bash
 cargo run -q --release --example text_snapshot -- /tmp/snap.txt
-sha256sum /tmp/snap.txt     # 应为 36a83137956d11e21b14df75a16c23d440a892bf010dd3e956ae772739a42db9（阶段 3 S4～S6 合并后重新生成）
+sha256sum /tmp/snap.txt     # 应为 f12e144e619a505ca0e0d8631c10b04f4b277258cad2d3a14586cc73f9d9ee9e（阶段 3 S7 重新生成）
 xz -dc eval/golden/text_snapshot.txt.xz | diff - /tmp/snap.txt | head     # 不同时看是哪一段
 ```
 
 输出是确定的（连跑两次逐字节相同），但有 45 MB、13173 行，所以存的是 `xz -9` 压过的（370 KB）。阶段 3 S4～S6 合并后重新生成过：S4 加了血量、医疗、用药线，S5 加了“[部门]”和派遣菜单；S6 的涨价现在只在教学关，随机地图又能占满，所以快照回到 S4 的大小。先比 sha256，不同再解压找是哪一段（每段以 `## ` 开头，写着种子和小时）。
+
+阶段 3 S7 重新生成过（13263 行，连跑两次 sha256 相同）：和 S4～S6 合并后的快照比，唯一的不同是每个种子的“拒绝的命令”一段多了新命令 `leave_map`（“这一章还没打完”）；随机地图的局面和菜单一个字没变。S7 的局面轨迹（`eval golden`）六条都对得上，没有重记：新加的局面块在随机地图上都不写。
 
 ## 用时
 

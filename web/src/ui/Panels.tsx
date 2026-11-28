@@ -212,6 +212,40 @@ export function Departments() {
 }
 
 /** The next one or two unlocks and how far along they are; absent in games with everything open. */
+/** A fixed map's one-line hint (S7; the highlight comes with S9). It never blocks anything. */
+export function HintLine() {
+  const { view, run } = useCtx();
+  if (view.chapter_end) {
+    return (
+      <div className="hint-line small">
+        <b>{t('panels.chapter_end.title')}</b> {view.chapter_end.text}{' '}
+        <button className="btn small primary" onClick={() => run({ cmd: 'leave_map' }, t('panels.chapter_end.left'))}>
+          {t('panels.chapter_end.leave')}
+        </button>
+      </div>
+    );
+  }
+  if (!view.hint) return null;
+  return <div className="hint-line small">{view.hint.text}</div>;
+}
+
+/** The organisation's 规章和档案: records kept, then the next one or two (S7, minimal). */
+export function RecordsPanel() {
+  const { view } = useCtx();
+  if (!view.records?.length) return null;
+  return (
+    <Section title={t('panels.records.title')} icon="check" tone="hazard">
+      <div className="stack" style={{ gap: 4 }}>
+        {view.records.map((r) => (
+          <div key={r.id} className={'small ' + (r.done ? '' : 'faint')}>
+            {r.done ? '✓' : '·'} {r.did} → {r.got}
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 export function NextUnlocks() {
   const { view } = useCtx();
   if (!view.next?.length) return null;
@@ -305,15 +339,22 @@ export function TideTable({ limit }: { limit?: number }) {
 export function SquadsPanel() {
   const { view } = useCtx();
   return (
-    <Section title={t('panels.squads.title')} icon="squad" tone="elec" hint={t('panels.squads.threat', { n: view.threat.value, level: (view.threat.level_bp / 10000).toFixed(1) })}>
+    <Section
+      title={t('panels.squads.title')}
+      icon="squad"
+      tone="elec"
+      hint={view.threat ? t('panels.squads.threat', { n: view.threat.value, level: (view.threat.level_bp / 10000).toFixed(1) }) : undefined}
+    >
       <div className="stack">
         {view.squads.map((s, i) => (
           <SquadCard key={s.id} s={s} color={SQUAD_HEX[i % SQUAD_HEX.length]!} />
         ))}
       </div>
-      <div className="small muted" style={{ marginTop: 6 }}>
-        {t('panels.squads.threat_note', { x: (view.threat.strength_bp / 10000).toFixed(1), next: view.threat.next })}
-      </div>
+      {view.threat ? (
+        <div className="small muted" style={{ marginTop: 6 }}>
+          {t('panels.squads.threat_note', { x: (view.threat.strength_bp / 10000).toFixed(1), next: view.threat.next })}
+        </div>
+      ) : null}
     </Section>
   );
 }
@@ -651,12 +692,13 @@ export function HQPanel() {
   return (
     <>
     {view.phase === 'active' && view.armory?.length ? <ArmoryPanel /> : null}
+    <RecordsPanel />
     <div className="split">
       <div className="col">
         <Section title={t('panels.org.title', { level: org.level })} icon="org" tone="hazard" hint={org.next ? `${org.exp}/${org.next}` : `${org.exp}`}>
           {org.next ? <Bar value={org.exp} max={org.next} /> : null}
           <div className="stack" style={{ gap: 2, marginTop: 8 }}>
-            {org.perks.map((p) => (
+            {(org.perks ?? []).map((p) => (
               <div key={p.level + p.text} className={'small ' + (p.unlocked ? '' : 'faint')}>
                 {p.unlocked ? '✓' : '·'} Lv.{p.level} {p.text}
               </div>
@@ -961,7 +1003,7 @@ function CycleBlock() {
     <Section title={t('panels.cycle.title', { n: view.cycle })} icon="collapse" tone="bad" hint={view.modifier?.[1]}>
       {view.modifier ? <div className="small muted">{view.modifier[2]}</div> : null}
       <div className="stack" style={{ gap: 2, marginTop: 6 }}>
-        {view.results.lines.map(([k, v]) => (
+        {(view.results?.lines ?? []).map(([k, v]) => (
           <div key={k} className="row small">
             <span className="grow">{k}</span>
             <span className="num">{v}</span>
@@ -969,7 +1011,7 @@ function CycleBlock() {
         ))}
         <div className="row">
           <b className="grow">{t('panels.cycle.exp')}</b>
-          <b className="num">{view.results.total}</b>
+          <b className="num">{view.results?.total ?? 0}</b>
         </div>
       </div>
       <div style={{ marginTop: 8 }}>
@@ -988,7 +1030,7 @@ function CycleBlock() {
                     <b>{t('panels.cycle.kept')}</b>
                     <div className="small muted">
                       {t('panels.cycle.kept_list', {
-                        exp: view.results.total,
+                        exp: view.results?.total ?? 0,
                         sealed: view.sealed?.length ?? 0,
                         doctrines: (view.research?.archive ?? []).map((d) => d.name).join(t('panels.sep.list')) || t('panels.cycle.none_picked'),
                       })}

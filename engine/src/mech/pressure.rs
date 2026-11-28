@@ -66,7 +66,7 @@ pub fn surge_strength_bp(level_bp: i64) -> i64 {
 }
 
 /// 威胁的读数（局面显示和评估用）。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct Reading {
     /// 威胁值：统计分数减去打下核心削掉的。
     pub value: i64,

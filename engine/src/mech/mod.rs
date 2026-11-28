@@ -17,6 +17,7 @@ pub mod pressure;
 pub mod query;
 pub mod routes;
 pub mod score;
+pub mod script;
 pub mod sim;
 pub mod state;
 pub mod tasks;

@@ -99,14 +99,20 @@ pub fn calc(state: &GameState) -> EconCalc {
                 TileUse::Facility { id } => {
                     if let Some(f) = c.facility(id) {
                         let fi = fac.len();
+                        // A scripted building's own staff fill its jobs first.
+                        let staff = tile.staff.clamp(0, f.jobs);
                         fac.push(FacilityCalc {
                             tile: t,
                             facility: id.clone(),
                             jobs: f.jobs,
+                            workers: staff,
                             ..Default::default()
                         });
                         if let Some(p) = &f.profession {
                             *dc.jobs.entry(p.clone()).or_insert(0) += f.jobs;
+                            if staff > 0 {
+                                *dc.workers.entry(p.clone()).or_insert(0) += staff;
+                            }
                             tiles_by_prof.entry(p.clone()).or_default().push(fi);
                         }
                     }
@@ -117,8 +123,8 @@ pub fn calc(state: &GameState) -> EconCalc {
         let mut free = d.population;
         for p in &d.priority {
             for &fi in tiles_by_prof.get(p).map(|v| v.as_slice()).unwrap_or(&[]) {
-                let n = free.min(fac[fi].jobs);
-                fac[fi].workers = n;
+                let n = free.min(fac[fi].jobs - fac[fi].workers);
+                fac[fi].workers += n;
                 free -= n;
                 *dc.workers.entry(p.clone()).or_insert(0) += n;
             }
@@ -376,9 +382,15 @@ fn hour_step(state: &mut GameState, calc: &EconCalc) {
         }
     }
 
-    // Talent and candidates.
+    // Talent and candidates (a fixed map may have none: its candidates are scripted).
     let threshold = b.talent_per_candidate * 100;
-    for dc in &calc.districts {
+    let talent = state
+        .cycle
+        .map
+        .as_deref()
+        .and_then(|m| c.map(m))
+        .is_none_or(|m| m.talent);
+    for dc in calc.districts.iter().filter(|_| talent) {
         for (p, rate) in &dc.talent_rate {
             let did = dc.id as usize;
             let v = state.cycle.districts[did]
@@ -565,7 +577,7 @@ pub fn push_candidate(
     state: &mut GameState,
     op: crate::mech::state::Operative,
     source: l10n::Text,
-) {
+) -> u32 {
     let cid = state.alloc_id();
     let name = op.persona().name.clone();
     let class = l10n::name("class", op.class());
@@ -577,6 +589,8 @@ pub fn push_candidate(
         entity,
         source: source.clone(),
         arrived: state.time,
+        free: false,
+        joins: false,
     });
     state.cycle.stats.candidates += 1;
     state.event(
@@ -592,6 +606,7 @@ pub fn push_candidate(
         None,
         None,
     );
+    cid
 }
 
 /// Militia strength of the district a tile belongs to.

@@ -39,8 +39,12 @@
 | `{"done": {"action": "dispatch", "n": 5}}` | 这一轮做过这件事不少于 n 次 | 几次/n |
 | `{"won_tile": {"tile": 112}}` | 在这一格打赢过一场路线战斗 | 0/1 |
 | `{"department": {"id": "…"}}` | 这个部门成立了（见下面“部门”） | 0/1 |
+| `{"low_hp": {"pct": 50}}` | 花名册上有人倒下了，或者血量低于生命上限的 pct% | 0/1 |
+| `{"stopped_at": {"tile": "H7"}}` | 某支小队上一趟停在这一格前面（那一仗不是稳赢） | 0/1 |
 
-`done` 能数的事（`data::unlocks::Action`）：`dispatch`（亲手派遣，`Command::Dispatch`）、`route`（玩家设的路线，`set_route` 不空）、`claim`、`build`、`hire`（玩家的命令，规章代做的不算）、`research`、`surge_held`、`route_win`（后三样读这一轮已有的统计）。前五样的计数在 `Cycle::done`，每一轮清零；有没有解锁状态都记（部门的条件要读）。`won_tile` 只在有解锁状态的局里记。
+写格子的地方（`own_tile`、`won_tile`、`stopped_at`，以及编排里的 `tile`）可以写棋盘下标，也可以写格子的标签（`"H7"`：列字母、行号），读进来都是下标。
+
+`done` 能数的事（`data::unlocks::Action`）：`dispatch`（亲手派遣，`Command::Dispatch`）、`route`（玩家设的路线，`set_route` 不空）、`claim`、`build`、`hire`、`heal`（玩家的命令，规章代做的不算，用药线治的也不算）、`research`、`surge_held`、`route_win`（后三样读这一轮已有的统计）。前六样的计数在 `Cycle::done`，每一轮清零；有没有解锁状态都记（部门的条件要读）。`won_tile` 只在有解锁状态的局里记。
 
 加一种条件：数据层的 `Condition` 加一个变体，`mech/unlocks.rs` 的 `progress` 里算进度，`client/view.rs` 的 `cond_text` 和 `locales/` 里的 `unlock.cond.*` 写它的说法。
 
@@ -51,7 +55,7 @@
 | 档案 | 内容 |
 |---|---|
 | `default` | `"all": true`：全部开放。随机地图的局（`Engine::new`、`sim::new_game`）用它，这时不存任何解锁状态 |
-| `tutorial` | 只开 `dispatch`、`claim`（第一章 0:00 只能派人打隔壁一格、占领），其余按条件开。教学关地图用它 |
+| `tutorial` | 只开 `dispatch`、`claim`（第一章 0:00 只能派人打隔壁一格、占领），其余按条件开；`when` 换掉两条：治疗是“占下曾是诊所的地”，用药线是“亲手治疗 3 次”。教学关地图用它 |
 
 固定地图在 `maps.json` 里用 `"unlocks": "<档案 id>"` 写开局用哪个档案，不写是 `default`；`sim::start_map`（`sim::new_map_game`、`Engine::new_map`、文字版 `--map`、网页 `?map=`）按它设解锁状态。校验要求档案存在。
 
@@ -66,15 +70,15 @@
 | `dispatch` | 亲手派遣（`dispatch`：打一格一次就回） | | 开局就开 |
 | `claim` | 占领 | | 开局就开 |
 | `build` | 建造 | 废材站、诊所、住房 | 占下 3 格 |
-| `hire` | 招募和辞退、编队（`set_squad`） | | 占下 1 块曾是民居的地，在 `build` 之后（教学关里占下的城区格都自动是住房，所以不用“建住房”当条件） |
-| `healing` | 治疗（`heal`，命令组 `medicine`）；队员卡上的治疗预览 | | 建 1 座诊所，在 `build` 之后 |
-| `med_line` | 用药线（`set_med_line`，命令组 `med_line`；`set_rule auto_medicate` 也归这组） | 规章“用药线” | 建 1 座诊所，在 `healing` 之后（医务部门也授予它） |
+| `hire` | 招募和辞退、编队（`set_squad`） | | 占下 7 格，在 `build` 之后（和编排里送巷战突击手的条件一样，S7） |
+| `healing` | 治疗（`heal`，命令组 `medicine`）；队员卡上的治疗预览 | | 建 1 座诊所；教学关档案里是“占下曾是诊所的地”（那块地占下就送一座诊所） |
+| `med_line` | 用药线（`set_med_line`，命令组 `med_line`；`set_rule auto_medicate` 也归这组） | 规章“用药线” | 建 1 座诊所，在 `healing` 之后（医务部门也授予它）；教学关档案里是“亲手治疗 3 次” |
 | `routes` | 路线（`set_route`，不论几格）、硬闯 | | 成立调度部门（调度部门也直接授予它） |
 | `rules` | 规章 | 三条规章 | never |
 | `research` | 研究、换一批、选学说、知识库 | 档案室 | never |
 | `equipment` | 装备 | | never |
 | `gambits` | 战术规则 | | never |
-| `industry` | | 工坊、发电站、市场、训练场 | never |
+| `industry` | 局面块“电力”（`power`） | 工坊、发电站、市场、训练场 | never |
 | `policy` | 政策 | | never |
 | `customize` | 定制招募 | | never |
 | `priority` | 岗位顺序 | | never |
@@ -84,9 +88,67 @@
 | `arsenal` | 军械 | | never |
 | `tasks` | 见习任务 | | never |
 | `retire` | 退役、锁定、封存 | | never |
-| `collapse` | 收束 | | never |
+| `threat` | 局面块“威胁”和来潮预报（`threat`：局面数据的 `threat`、`tide`） | | never（第三章） |
+| `collapse` | 收束；局面块“本轮成果”（`score`）、“组织等级”（`org_level`：局面数据的 `org.perks`，文字版的“组织：Lv.”一行） | | never |
 
 选地图（`choose_map`）和成立部门（`found_department`）不归任何命令组，永远能用；成立部门由每个部门自己的 `shown_after` 管。
+
+### 只是局面块的命令组
+
+S7 起 `System` 里有四项不管任何命令，只管局面数据里的一块：`threat`（威胁读数、来潮预报）、`score`（本轮成果）、`power`（电力）、`org_level`（组织等级和各级加成）。没开时这几块整个不写进局面数据（`Gated`），文字版不打印那几行，网页不画；“领地”一行在没有威胁块时只写有几格。仓库上限没有自己的解锁：有解锁状态的局里，库存到一半才显示上限那一行。
+
+## 编排好的赠送和提示（固定地图，S7）
+
+固定地图在 `maps.json` 里可以写 `script`：一串条目，按顺序检查，每条只触发一次。数据层的类型是 `data::maps::ScriptEntry` 和 `Gift`，机制在 `mech/script.rs`。
+
+```json
+{
+  "id": "scrapyard",
+  "when": { "own_tile": { "tile": "I10" } },
+  "after": "first_claim",
+  "give": { "tile": "I10", "facility": "scrapyard", "staff": 6 },
+  "hint": true
+}
+```
+
+| 字段 | 意思 |
+|---|---|
+| `id` | 条目 id（只在这张地图里唯一）。提示文字的 key 由它拼出来：`event.hint.<地图>.<id>`，在 `locales/<语言>/events.json`，一两句、不写数字；口气按世界观定稿（`design-v2-worldview.md`，在主干上）的多声部：街坊、诊所、废材站、招募用市井气，打仗、帮派、花费用冷嘲的台账口气，操作说明直白另起一句；自称“公所 / 我们”，对玩家说“你们” |
+| `when` | 条件，和解锁同一张清单（不能是 `never`） |
+| `after` | 前面某个条目触发过才检查这一条（可省） |
+| `give` | 送什么，可以几样一起（都可省）：`resources`（资源，进仓库，受上限）；`tile` + `facility` + `staff`（在这一格放一座建好的建筑，不花钱，自带 `staff` 名工人：他们先占这座建筑的岗位，不算街区居民、不要住房，存在 `Tile::staff`）；`residents`（`tile` 所在街区加这么多居民）；`candidate`：`{"class": "striker", "free": true, "joins": true}`（一名这个职业的候选人进招募列表，稀有度最高 R；`free` 招募不要钱，`joins` 招下来直接编进第一支有空位的小队）；`unlock`（解锁 id 的列表，直接授予） |
+| `hint` | `true`：触发时说那句提示 |
+
+- **状态**：`Cycle::script`（`mech::script::Script`）：触发过的条目 id（按触发顺序）、现在显示的提示是哪一条、什么时候出的。随机地图没有这块，不写进存档。`SAVE_VERSION` 10。
+- **检查时机**：开局（`sim::start_map` 的最后，所以 `"always"` 的条目在第 0 秒就出）、每条命令被接受以后（`commands::apply`，在解锁检查之后）、时间线每个时刻处理完以后（`sim::process_instant` 的最后）。一次检查里一条触发以后从头再查，直到没有新的；每触发一条也重查一遍解锁（送的诊所会开放治疗）。预报（`tide_log`）里不触发。
+- **提示**：触发时写一条事件（`EventKind::Hint`，key 是上面那个，爽点表里归为 `hint`：送东西的那几条算小爽点，其余是涓流），并成为“现在的提示”。局面数据的 `hint`（`view::HintView`：文字和时刻）是最新的一条，一直显示到下一条出来；文字版在局面最上面打印“[提示] …”，网页在地图上面一行。提示不挡任何操作。
+- **地图上的其他开关**（`MapDef`）：`talent: false` 街区不攒人才（候选人只来自编排）；`pass_claimable: true` 路线穿过“可占领但还没占”的格子不再打，亲手派遣去这种格子被拒绝（`err.dispatch_claimable`）；`offline_cap_secs` 一次追赶最多算多少秒，再长的部分当作暂停（路上的小队、倒下的读条都顺延，按整小时跳，结算的格子不错位）；`med_reserve` 开局把用药线的保留线设成这个数；节奏里的 `rest_bp`：在家（或路线这一趟没打仗）的队员每过节奏上的一小时回这么多血（万分比），兜底用。
+- **加一种送的东西**：`Gift` 加字段，`MapDef::check` 里查引用，`mech::script::fire` 里送。
+
+教学关第一章的编排（`maps.json` 的 `tutorial`）：
+
+| 条目 | 条件 | 送什么 | 提示（大意） |
+|---|---|---|---|
+| `opening` | 一开始 | | 有人从总部最底下那间屋子爬上来，只记得“我们得把底下那间屋子修好”；隔壁那格去看看，东边那块以前是废材站 |
+| `first_win` | 打赢 1 场 | | 清干净了，占下它 |
+| `first_claim` | 占下 1 格 | | 每多占一格都更贵 |
+| `scrapyard` | 占下 I10 | I10 一座废材站，自带 6 人 | 架子还在，老工人回来了 |
+| `clinic` | 占下 G10 | G10 一座诊所，自带 4 人 | 诊所重新开门，伤能治了 |
+| `low_hp` | 有人血量低于 50% | | 伤不会自己好，小伤便宜重伤贵 |
+| `healed` | 亲手治疗 1 次 | | 别等快倒下才治 |
+| `med_line` | 亲手治疗 3 次（在 `healed` 之后） | | 设一条用药线 |
+| `residents` | 占下 F8 | F8 所在街区 12 名居民 | 人一直没走，可以再开一座废材站 |
+| `striker` | 占下 7 格 | 一名巷战突击手，不要钱，招下就进甲队 | 有人找上门来 |
+| `dispatch_office` | 亲手派遣 5 次 | | 该有人专门管这件事了 |
+| `routes` | 调度部门成立 | | 画一条路线；往北那条通到变电所门口 |
+| `gate_stop` | 路线停在 H7 前 | | 变电所里蹲着一伙帮派和看门兽；照现在这样打不过，多一个人会不一样 |
+| `gate_won` | 打赢 H7 | | 窝点打服了，北、东、西的路都通了 |
+
+## 收尾和密室（S7 临时收尾）
+
+- 固定地图在 `maps.json` 里写 `"ending": {"when": <条件>, "record": "<档案 id>"}`。条件满足时（和编排同一个检查时机）这一章就完了：`Cycle::script.ended` 记下时刻，写事件 `event.ending.<地图>`，组织记下这条档案（`Org::records`，收束、离开都不清）并写 `event.record`。
+- 档案登记在 `unlocks.json` 顶层的 `records`（只有 id，按显示的顺序），文字在 `content.json`：`record.<id>.did`（做到了什么）、`record.<id>.got`（于是有了什么）。局面数据的 `records`：记下的全列出，再列接下来最多两条还没做到的；一条都没记下、又不在固定地图上时整块不写。
+- 命令 `leave_map`（不归任何命令组）：这一章完了才接受，结束这一轮，进入随机地图三选一；之后是全部开放的普通局，成立过的部门照样在。
 
 ## 部门
 
@@ -135,7 +197,7 @@
 - **开局**：`sim::new_game_with(seed, now, device, &Start)`、`Engine::new_with(…)`；`Start::default()` 是 `default` 档案，`Start::tutorial()` 是教学关的档案。固定地图开局时用地图的 `unlocks` 档案（见上）。新开一轮（收束以后）是全部开放，S7 再定。
 - **命令**：`Command::system()` 是一个没有兜底分支的 `match`，新命令不归类编译不过。`commands::apply` 先查 `mech::unlocks::check`（命令组，加上 `build` 的建筑、`set_rule` 的规章），没开就拒绝，错误文字是 `err.locked`，写着差哪个解锁。
 - **检查时机**：命令被接受以后（`after_command`：先记数——这一步每局都做——再查条件），时间线每个时刻处理完以后（`sim::process_instant` 的最后），按登记表的顺序查一遍，一遍就够（`after` 只指向前面的）。新开的解锁写事件 `event.unlocked`（`EventKind::Unlock`，在 `engine/eval/payoff_classes.json` 归为 `unlock`）。全部开放时这些函数直接返回，不花时间。
-- **局面数据**：没开的系统的块不出现（`view::Gated`：开着时序列化和原来的值一模一样，关着时整个键不写；Rust 这边读到的是空值）。现在挂上的块：`research`、`armory`、`tasks`、`facilities`、`candidates`、`inventory`、`sealed`、`org.rules`、`med_line`、街区的 `policy_options` 和 `customize`，队员血量里的治疗预览 `health.heal`（血量本身不挂解锁，一直显示）；待你决定里属于没开系统的条目也去掉。另有两个新字段，全部开放时都不写：`locked`（还锁着的命令组）和 `next`（最近的一两个没开、`after` 已满足、不是 `never` 的解锁，带条件的说法、进度、目标和一句说明）。
+- **局面数据**：没开的系统的块不出现（`view::Gated`：开着时序列化和原来的值一模一样，关着时整个键不写；Rust 这边读到的是空值）。现在挂上的块：`research`、`armory`、`tasks`、`facilities`、`candidates`、`inventory`、`sealed`、`org.rules`、`med_line`、街区的 `policy_options` 和 `customize`，队员血量里的治疗预览 `health.heal`（血量本身不挂解锁，一直显示），S7 起还有 `threat`、`tide`、`results`、`power`、`org.perks`；待你决定里属于没开系统的条目也去掉。另有两个新字段，全部开放时都不写：`locked`（还锁着的命令组）和 `next`（最近的一两个没开、`after` 已满足、不是 `never` 的解锁，带条件的说法、进度、目标和一句说明）。
 - **文字版**：菜单只列开着的命令（`Engine::allows`），锁着的块不打印，命令参考只列开着的命令，局面最后打印“接下来能解锁”。
 - **网页**：锁着的块不画（研究页签、候选人、仓库、封存、规章、军械、见习任务、建造），“接下来能解锁”固定在地图下面、待你决定上面。按钮层面的细节（驻扎、反击等按钮）留给 S9。
 

@@ -27,6 +27,10 @@ pub struct Pace {
     pub output_mult: i64,
     /// 倒下的队员回到家以后多久站起来（读条）。
     pub get_up_secs: i64,
+    /// 在家休养：没出门、没倒下的队员每过节奏上的一小时回这么多血（生命上限的万分比）。
+    /// 0 是不回（随机地图）。只是兜底，免得没药又打不动的时候卡死。
+    #[serde(default)]
+    pub rest_bp: i64,
     /// 每格多久来一次潮；0 是不来潮。
     pub surge_interval: i64,
     /// 来潮错开成几个时段（各格的相位是 `surge_interval / surge_slots` 的整数倍）。
@@ -68,6 +72,9 @@ impl Pace {
         }
         if self.surge_interval < 0 || (self.surge_interval > 0 && self.surge_slots <= 0) {
             errs.push(format!("{ctx}: surges need slots"));
+        }
+        if !(0..=10_000).contains(&self.rest_bp) {
+            errs.push(format!("{ctx}: rest_bp must be 0..=10000"));
         }
         if self.get_up_secs < 1 {
             errs.push(format!("{ctx}: get_up_secs must be positive"));
@@ -155,8 +162,105 @@ pub struct MapDef {
     /// Claim and building prices on this map, in place of `balance.json`'s `costs`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub costs: Option<Costs>,
+    /// 编排好的赠送和提示 (`mech::script`): each entry fires once, in this order, when its
+    /// condition holds.
+    #[serde(default)]
+    pub script: Vec<ScriptEntry>,
+    /// False: districts grow no talent, so no candidate comes by itself (only the script's).
+    #[serde(default = "yes")]
+    pub talent: bool,
+    /// Routes walk through a tile that is claimable but not claimed yet instead of fighting it
+    /// again, and a manual dispatch to one is refused (claim it instead).
+    #[serde(default)]
+    pub pass_claimable: bool,
+    /// Most seconds of absence one catch-up simulates (0: no bound); the rest of a longer absence
+    /// is skipped as if the game had been paused (`mech::sim::advance`).
+    #[serde(default)]
+    pub offline_cap_secs: i64,
+    /// The 用药线's reserve a game on this map starts with (`Org::med_line`), in place of
+    /// `balance.json`'s `med_line_reserve`: a map with a small medicine stock wants a small one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub med_reserve: Option<i64>,
+    /// How the map ends (`mech::script`): once the condition holds the chapter is over, the
+    /// organisation keeps the record and the player may leave for a formal run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ending: Option<Ending>,
     #[serde(skip)]
     pub name: String,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// One scripted step of a fixed map: when `when` holds (and the entry `after` names has fired),
+/// it gives `give` and, with `hint`, shows the one-line hint `event.hint.<map>.<id>`
+/// (`locales/<lang>/events.json`). Fired entries are kept in the save (`Cycle::script`).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScriptEntry {
+    pub id: String,
+    pub when: super::unlocks::Condition,
+    /// An earlier entry that must have fired first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
+    #[serde(default)]
+    pub give: Gift,
+    /// Shows its hint line (and logs it) when it fires.
+    #[serde(default)]
+    pub hint: bool,
+}
+
+/// What a scripted entry gives (any combination).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Gift {
+    #[serde(default)]
+    pub resources: super::Resources,
+    /// The tile `facility` stands on and whose district gets the `residents`.
+    #[serde(
+        default,
+        deserialize_with = "tile_opt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tile: Option<u16>,
+    /// A building put on `tile`, ready (no cost), with `staff` workers of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facility: Option<String>,
+    /// Workers who come with the building: they fill its jobs first and need no housing
+    /// (`Tile::staff`).
+    #[serde(default)]
+    pub staff: i32,
+    /// Residents joining the district of `tile`.
+    #[serde(default)]
+    pub residents: i32,
+    /// A candidate who walks in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate: Option<GiftCandidate>,
+    /// Unlock ids opened.
+    #[serde(default)]
+    pub unlock: Vec<String>,
+}
+
+/// A scripted candidate: a class, hired for nothing when `free`, straight into the first squad
+/// with room when `joins`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GiftCandidate {
+    pub class: String,
+    #[serde(default)]
+    pub free: bool,
+    #[serde(default)]
+    pub joins: bool,
+}
+
+/// The end of a fixed map's chapter.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Ending {
+    pub when: super::unlocks::Condition,
+    /// The organisation's record it writes (`unlocks.json`, `records`).
+    pub record: String,
+}
+
+fn tile_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<u16>, D::Error> {
+    super::unlocks::tile_ref(d).map(Some)
 }
 
 /// Claim and building prices (`mech::cost`): the n-th claim of a cycle costs
@@ -170,6 +274,11 @@ pub struct Costs {
     pub claim_mult_bp: i64,
     /// Basis points (15000 = ×1.5 per building of the same kind).
     pub build_mult_bp: i64,
+}
+
+/// The text key of a scripted hint (`locales/<lang>/events.json`).
+pub fn hint_key(map: &str, entry: &str) -> String {
+    format!("event.hint.{map}.{entry}")
 }
 
 fn default_profile() -> String {
@@ -277,6 +386,68 @@ impl MapDef {
         if self.crew.is_empty() {
             errs.push(format!("{ctx}: needs a crew"));
         }
+        for (k, e) in self.script.iter().enumerate() {
+            let at = format!("{ctx} script {}", e.id);
+            if self.script[..k].iter().any(|x| x.id == e.id) {
+                errs.push(format!("{at}: duplicate id"));
+            }
+            if let Some(a) = &e.after {
+                if !self.script[..k].iter().any(|x| &x.id == a) {
+                    errs.push(format!("{at}: after {a} is not an earlier entry"));
+                }
+            }
+            if matches!(e.when, super::unlocks::Condition::Never) {
+                errs.push(format!("{at}: never fires"));
+            }
+            let g = &e.give;
+            if let Some(f) = &g.facility {
+                if c.facility(f).is_none() {
+                    errs.push(format!("{at}: unknown facility {f}"));
+                }
+                if g.tile.is_none() {
+                    errs.push(format!("{at}: a facility needs a tile"));
+                }
+            }
+            if let Some(t) = g.tile {
+                if self.tile(t).is_none_or(|d| d.terrain != MapTerrain::City) {
+                    errs.push(format!("{at}: tile {t} is not a city tile of the map"));
+                }
+            }
+            if g.residents > 0 && g.tile.is_none() {
+                errs.push(format!("{at}: residents need a tile (its district)"));
+            }
+            if let Some(cand) = &g.candidate {
+                if !c.classes.contains_key(&cand.class) {
+                    errs.push(format!("{at}: unknown class {}", cand.class));
+                }
+            }
+            for u in &g.unlock {
+                if c.unlocks.get(u).is_none() {
+                    errs.push(format!("{at}: unknown unlock {u}"));
+                }
+            }
+            if e.hint {
+                let key = hint_key(&self.id, &e.id);
+                if !crate::l10n::has(&key) {
+                    errs.push(format!("{at}: no text {key}"));
+                }
+            }
+        }
+        if let Some(end) = &self.ending {
+            if c.unlocks.record(&end.record).is_none() {
+                errs.push(format!(
+                    "{ctx}: ending records unknown record {}",
+                    end.record
+                ));
+            }
+            let key = format!("event.ending.{}", self.id);
+            if !crate::l10n::has(&key) {
+                errs.push(format!("{ctx}: no text {key}"));
+            }
+        }
+        if self.offline_cap_secs < 0 {
+            errs.push(format!("{ctx}: offline_cap_secs must not be negative"));
+        }
         errs
     }
 }
@@ -300,6 +471,7 @@ mod tests {
             min_trip_secs: 2,
             ..p
         };
+        assert_eq!(p.rest_bp, 0, "random maps do not rest");
         assert!(fast.check("fast").is_empty());
         assert_eq!((fast.hour_secs(), fast.settles_per_hour()), (30, 6));
         assert_eq!(fast.trip_secs(1, 1, 9), 5);

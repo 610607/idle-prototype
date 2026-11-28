@@ -102,7 +102,10 @@ export class Game {
   }
 
   view(): View {
-    return JSON.parse(this.engine.view()) as View;
+    const v = JSON.parse(this.engine.view()) as View;
+    // Locked blocks are absent; the forecast reads as empty.
+    v.tide ??= [];
+    return v;
   }
 
   command(cmd: Command): Ack {

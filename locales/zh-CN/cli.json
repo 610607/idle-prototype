@@ -307,5 +307,22 @@
   "cli.menu.claim_guard_paid": "占领并派{name}驻扎（花费：{cost}）：{text}",
   "cli.board.claim_price": "下一次占领花费：{cost}（每占一格都更贵）",
   "cli.board.claim_price_short": "下一次占领花费：{cost}，现在不够（每占一格都更贵）",
-  "cli.dispatch.wall": "打不过，会停在前面不打"
+  "cli.dispatch.wall": "打不过，会停在前面不打",
+  "cli.board.hint": "[提示] {text}",
+  "cli.board.res_min": "资源：{list}",
+  "cli.board.res_item": "{name}{n}（每分钟 +{rate}）",
+  "cli.board.medicine_min": "医疗：{n}（每分钟 +{rate}）",
+  "cli.board.land_short": "领地：{owned} 格",
+  "cli.board.front_tile_level": "{tile}(第{ring}档{terrain}，镇守{warden}{claim})",
+  "cli.board.roster_nocap": "\n[队员]（技能和词条全文：agent_cli info <存档>）",
+  "cli.dispatch.wall_hp": "血量不够，会停在前面不打（满血能赢：先治疗）",
+  "cli.board.district_quiet": "  {name}：占{owned}/{total}格，居民{pop}/住房{housing}{unhoused}，在岗{employed}，信任{trust}→{target}{policy}",
+  "cli.dispatch.former_sep": "·",
+  "cli.route.stops": "（打不过，会停在它前面不打）",
+  "cli.cmd.leave_map": "这一章打完以后离开固定地图去正式局：接着从三张随机地图里选一张，成立过的部门直接在",
+  "cli.menu.leave_map": "离开{map}，开始正式局（接着从三张地图里选一张；成立过的部门都在）",
+  "cli.board.chapter_end": "[本章完] {text}",
+  "cli.records.title": "[密室] 底下那间屋子现在修成了这样：",
+  "cli.records.open": "  ✓ {did} → {got}",
+  "cli.records.next": "  · 还没修到：{did} → {got}"
 }

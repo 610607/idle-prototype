@@ -40,10 +40,18 @@ pub enum System {
     Medicine,
     /// 用药线: the automatic heal and its two lines.
     MedLine,
+    /// View block: 威胁 (the threat reading) and the 来潮 forecast.
+    Threat,
+    /// View block: 本轮成果 (the cycle's results and their breakdown).
+    Score,
+    /// View block: 电力 (supply and demand).
+    Power,
+    /// View block: 组织等级 (the organisation's level and its perks).
+    OrgLevel,
 }
 
 impl System {
-    pub const ALL: [System; 22] = [
+    pub const ALL: [System; 26] = [
         System::Dispatch,
         System::Routes,
         System::Squad,
@@ -66,6 +74,10 @@ impl System {
         System::Collapse,
         System::Medicine,
         System::MedLine,
+        System::Threat,
+        System::Score,
+        System::Power,
+        System::OrgLevel,
     ];
 }
 
@@ -89,6 +101,8 @@ pub enum Action {
     SurgeHeld,
     /// Route fights won (the cycle's own count).
     RouteWin,
+    /// Heals by the player (`Command::Heal`; the 用药线 rule's do not count).
+    Heal,
 }
 
 /// When an unlock opens. A closed list: a new kind of condition is a new variant here and its
@@ -100,8 +114,11 @@ pub enum Condition {
     Always,
     /// Only a grant opens it (`mech::unlocks::grant`: a department, the cycle shell).
     Never,
-    /// This tile (board index) is owned.
-    OwnTile { tile: u16 },
+    /// This tile (board index, or a label like `"H7"` in content files) is owned.
+    OwnTile {
+        #[serde(deserialize_with = "tile_ref")]
+        tile: u16,
+    },
     /// At least `n` tiles are owned, the HQ not counted.
     OwnTiles { n: i32 },
     /// At least `n` owned tiles have this building (`housing` or a facility id).
@@ -120,9 +137,46 @@ pub enum Condition {
     /// The action was done at least `n` times this cycle.
     Done { action: Action, n: i32 },
     /// A route fight on this tile (board index) was won.
-    WonTile { tile: u16 },
+    WonTile {
+        #[serde(deserialize_with = "tile_ref")]
+        tile: u16,
+    },
     /// The department is founded (`departments.json`, `Org::departments`).
     Department { id: String },
+    /// Someone on the roster is down or below `pct` percent of their max HP.
+    LowHp { pct: i32 },
+    /// A squad's last trip stopped in front of this tile (the fight there was not a sure win).
+    StoppedAt {
+        #[serde(deserialize_with = "tile_ref")]
+        tile: u16,
+    },
+}
+
+/// A board tile in a content file: its index, or its label (`"H7"`: column letter, row number).
+pub fn tile_ref<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u16, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Ref {
+        Index(u16),
+        Label(String),
+    }
+    match Ref::deserialize(d)? {
+        Ref::Index(i) => Ok(i),
+        Ref::Label(s) => parse_label(&s)
+            .ok_or_else(|| serde::de::Error::custom(format!("not a tile label: {s}"))),
+    }
+}
+
+/// `"H7"` → the board index (column letter A.., row number from 1).
+pub fn parse_label(s: &str) -> Option<u16> {
+    let s = s.trim();
+    let mut ch = s.chars();
+    let col = ch.next()?.to_ascii_uppercase();
+    if !col.is_ascii_uppercase() {
+        return None;
+    }
+    let row: i32 = ch.as_str().parse().ok()?;
+    crate::kernel::geom::idx(col as i32 - 'A' as i32, row - 1)
 }
 
 fn one() -> i32 {
@@ -175,6 +229,22 @@ pub struct Registry {
     #[serde(default)]
     pub ungated_facilities: Vec<String>,
     pub profiles: BTreeMap<String, Profile>,
+    /// The organisation's 规章和档案 (`Org::records`): what was done once and what it opened for
+    /// every later run, in the order they are shown.
+    #[serde(default)]
+    pub records: Vec<RecordDef>,
+}
+
+/// One entry of the 规章和档案 page: done once (a map's ending records it), kept by the
+/// organisation for good. Texts in `locales/<lang>/content.json`: `record.<id>.did` (what was
+/// done), `record.<id>.got` (what it opened).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RecordDef {
+    pub id: String,
+    #[serde(skip)]
+    pub did: String,
+    #[serde(skip)]
+    pub got: String,
 }
 
 impl Registry {
@@ -196,6 +266,9 @@ impl Registry {
     }
     pub fn profile(&self, id: &str) -> Option<&Profile> {
         self.profiles.get(id)
+    }
+    pub fn record(&self, id: &str) -> Option<&RecordDef> {
+        self.records.iter().find(|r| r.id == id)
     }
 
     /// Problems with the registry against the rest of the content.
@@ -249,6 +322,11 @@ impl Registry {
             }
             if f != HOUSING && !facility_ok(f) {
                 errs.push(format!("unlocks: unknown facility {f}"));
+            }
+        }
+        for (k, r) in self.records.iter().enumerate() {
+            if self.records[..k].iter().any(|x| x.id == r.id) {
+                errs.push(format!("record {}: duplicate id", r.id));
             }
         }
         let mut seen = std::collections::BTreeSet::new();

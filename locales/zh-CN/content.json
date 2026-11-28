@@ -598,5 +598,11 @@
   "department.personnel_office.name": "人事部门",
   "department.personnel_office.desc": "以后按条件自动招人。现在还没接上。",
   "department.defense_office.name": "守备部门",
-  "department.defense_office.desc": "以后自动反击、存守备的阵型。现在还没接上。"
+  "department.defense_office.desc": "以后自动反击、存守备的阵型。现在还没接上。",
+  "unlock.threat.name": "威胁",
+  "unlock.threat.hint": "地盘越亮，城底那个存在看得越清楚；来潮跟着它变强。",
+  "record.north_road.did": "打服变电所的窝点",
+  "record.north_road.got": "屋里挂得下一张往北的路线图：往后每次重来，都知道第一条路在哪（开放正式局）",
+  "record.glass_heart.did": "打下折光之心",
+  "record.glass_heart.got": "屋里摆得下一块碎玻璃：见过它是怎么碎的（开放玻璃族第二层和第二个族）"
 }
