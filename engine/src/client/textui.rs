@@ -1553,12 +1553,12 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
                 m.push(Item {
                     label: t!(
                         "cli.menu.claim_guard",
-                        name = op.name.render(),
+                        name = op.persona().name.render(),
                         text = p.text
                     ),
                     cmd: Command::Claim {
                         tile,
-                        garrison: Some(op.id),
+                        garrison: Some(op.id.0),
                     },
                 });
             }

@@ -300,8 +300,7 @@ mod tests {
         s.cycle.doctrines = vec!["react".into(), "plating".into()];
         let specs: Vec<_> = s
             .cycle
-            .operatives
-            .iter()
+            .operatives()
             .map(crate::mech::operative::spec)
             .collect();
         let tile = crate::kernel::geom::neighbors(crate::kernel::geom::HQ)

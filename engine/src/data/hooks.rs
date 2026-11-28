@@ -20,9 +20,10 @@ pub const HUB_DOCTRINE: &str = "react";
 pub const FALLBACK_CLASS: &str = "vanguard";
 /// The crew every cycle starts with.
 pub const START_CREW: [&str; 3] = ["vanguard", "marksman", "medic"];
-/// Skills of the HQ guard and of a district's militia unit.
-pub const HQ_GUARD_SKILLS: [&str; 2] = ["shield_bash", "guard_cover"];
-pub const MILITIA_SKILLS: [&str; 1] = ["baton_strike"];
+/// Defenders (`defenders.json`) the surge code puts in: the HQ guard at the HQ, a district's
+/// militia unit elsewhere (same id as the profession whose workers back it).
+pub const HQ_GUARD: &str = "hq_guard";
+pub const MILITIA_UNIT: &str = "militia";
 /// Automation rules (规章): each is a piece of code in `mech::sim`.
 pub const RULE_AUTO_CLAIM: &str = "auto_claim";
 pub const RULE_AUTO_RECRUIT: &str = "auto_recruit";
@@ -53,8 +54,8 @@ pub fn check(c: &Content) -> Vec<String> {
     for id in START_CREW {
         need(c.classes.contains_key(id), "class", id);
     }
-    for id in HQ_GUARD_SKILLS.iter().chain(MILITIA_SKILLS.iter()) {
-        need(c.skills.contains_key(*id), "skill", id);
+    for id in [HQ_GUARD, MILITIA_UNIT] {
+        need(c.defenders.contains_key(id), "defender", id);
     }
     for id in [RULE_AUTO_CLAIM, RULE_AUTO_RECRUIT, RULE_AUTO_COUNTER] {
         need(c.rule(id).is_some(), "rule", id);
@@ -71,12 +72,12 @@ pub fn all() -> Vec<&'static str> {
         SILVER_TONGUE,
         HUB_DOCTRINE,
         FALLBACK_CLASS,
+        HQ_GUARD,
+        MILITIA_UNIT,
         RULE_AUTO_CLAIM,
         RULE_AUTO_RECRUIT,
         RULE_AUTO_COUNTER,
     ];
     v.extend(START_CREW);
-    v.extend(HQ_GUARD_SKILLS);
-    v.extend(MILITIA_SKILLS);
     v
 }

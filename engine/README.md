@@ -16,7 +16,7 @@ Rust 写的确定性规则引擎。客户端（网页、以后的 iOS）只做�
 | 层 | 模块 | 内容 |
 | --- | --- | --- |
 | 本地化 `l10n` | `l10n` | 文字目录（`locales/`）、`t!` / `txt!`、存档里的文字 |
-| 引擎 `kernel` | `geom`, `rng`, `clock`, `save`, `hash` | 15×15 棋盘几何、种子随机、离散事件时钟（`Timeline`）、存档信封（`Saved`）、FNV 哈希 |
+| 引擎 `kernel` | `geom`, `rng`, `clock`, `save`, `hash`, `entity` | 15×15 棋盘几何、种子随机、离散事件时钟（`Timeline`）、存档信封（`Saved`）、FNV 哈希、实体表（`Store`） |
 | 数据 `data` | `data`, `data::hooks` | 内容定义和效果词汇、数值表、加载和交叉校验；`hooks` 是代码按名字认的少数内容 id |
 | 机制 `mech` | `combat` | 前后排、AP 主动（战术条件→技能→目标）、PP 反应；六种标签；因果链日志（每条带公式和全场快照） |
 | | `operative` | 队员生成、九项属性、特质、经历词条成长 |

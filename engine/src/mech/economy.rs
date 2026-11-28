@@ -268,7 +268,8 @@ pub fn calc(state: &GameState) -> EconCalc {
             factors.push(("trust.blackout", -10));
         }
         let talker = cy.garrisons().any(|(o, tile)| {
-            cy.district_of(tile) == Some(d.id) && o.traits.iter().any(|t| t == hooks::SILVER_TONGUE)
+            cy.district_of(tile) == Some(d.id)
+                && o.persona().traits.iter().any(|t| t == hooks::SILVER_TONGUE)
         });
         if talker {
             factors.push(("trust.garrison", 3));
@@ -432,7 +433,7 @@ pub fn hourly(state: &mut GameState) {
         .cycle
         .garrisons()
         .filter(|&(_, tile)| state.cycle.tiles[tile as usize].terrain == Terrain::Rift)
-        .map(|(o, _)| o.id)
+        .map(|(o, _)| o.id.0)
         .collect();
     for id in rift_garrisons {
         crate::mech::sim::bump_counter(state, id, "rift_garrison_hours", 1);
@@ -536,12 +537,14 @@ pub fn push_candidate(
     source: l10n::Text,
 ) {
     let cid = state.alloc_id();
-    let name = op.name.clone();
-    let class = l10n::name("class", &op.class);
-    let rarity = operative::RARITY_NAMES[op.rarity as usize];
+    let name = op.persona().name.clone();
+    let class = l10n::name("class", op.class());
+    let rarity = operative::RARITY_NAMES[op.persona().rarity as usize];
+    let entity = op.id;
+    state.cycle.entities.insert(op);
     state.cycle.candidates.push(Candidate {
         id: cid,
-        op,
+        entity,
         source: source.clone(),
         arrived: state.time,
     });

@@ -121,7 +121,7 @@ fn squads(st: &GameState) -> Vec<Squad> {
             let classes = specs
                 .iter()
                 .zip(&ops)
-                .map(|(u, op)| (u.key.clone(), op.class.clone()))
+                .map(|(u, op)| (u.key.clone(), op.def.clone()))
                 .collect();
             Squad {
                 specs,

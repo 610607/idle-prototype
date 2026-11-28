@@ -12,7 +12,7 @@
 //! | layer | module | what lives there | changes when |
 //! |---|---|---|---|
 //! | 本地化 | [`l10n`] (+ `locales/`) | text catalogs, `t!` / `txt!`, stored text | wording or a new language |
-//! | 引擎 | [`kernel`] | board geometry, seeded random, the discrete-event clock, save envelope, hashing | almost never: it knows no game rule |
+//! | 引擎 | [`kernel`] | board geometry, seeded random, the discrete-event clock, save envelope, hashing, the entity store | almost never: it knows no game rule |
 //! | 数据 | [`data`] (+ `content/`) | content definitions and their effect vocabulary, the balance table, loading and validation | a new entry (JSON only), or a new effect kind (schema + the mechanic that reads it) |
 //! | 机制 | [`mech`] | game state and every rule: combat, economy, defense, routes, research, the cycle | a new mechanic |
 //! | 客户端 | [`client`] | the `Engine` facade (commands, previews, views), the text client, wasm bindings | a new thing to show or preview |

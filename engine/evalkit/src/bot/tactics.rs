@@ -101,7 +101,7 @@ impl Bot {
                 let bench: Vec<&Operative> = st
                     .cycle
                     .idle_operatives()
-                    .filter(|o| o.rest_until <= st.time)
+                    .filter(|o| o.fighter().rest_until <= st.time)
                     .collect();
                 let base = score(st, &members, tiles);
                 let mut best: Option<(Score, Vec<u32>)> = None;
@@ -111,7 +111,7 @@ impl Bot {
                         trial[k] = (*b).clone();
                         let s = score(st, &trial, tiles);
                         if s > best.as_ref().map_or(base, |x| x.0) {
-                            best = Some((s, trial.iter().map(|o| o.id).collect()));
+                            best = Some((s, trial.iter().map(|o| o.id.0).collect()));
                         }
                     }
                 }
@@ -148,7 +148,7 @@ impl Bot {
                         let s = score(st, &trial, tiles);
                         let gain = (s.0 as i64 - base.0 as i64, s.1 - base.1);
                         if s > base && best.as_ref().is_none_or(|b| gain > b.0) {
-                            best = Some((gain, members[k].id, item.clone()));
+                            best = Some((gain, members[k].id.0, item.clone()));
                         }
                     }
                 }
@@ -175,15 +175,20 @@ impl Bot {
                 let found = {
                     let st = &e.state;
                     let slots = operative::tactic_slots(&members[k]);
-                    let start: Vec<Gambit> =
-                        members[k].gambits.iter().take(slots).cloned().collect();
+                    let start: Vec<Gambit> = members[k]
+                        .persona()
+                        .gambits
+                        .iter()
+                        .take(slots)
+                        .cloned()
+                        .collect();
                     let mut cur = start.clone();
                     let mut trial = members.clone();
                     let mut best = score(st, &members, tiles).0;
                     for _ in 0..TACTIC_ROUNDS {
                         let mut improved = None;
                         for cand in edits(&cur) {
-                            trial[k].gambits = cand.clone();
+                            trial[k].persona_mut().gambits = cand.clone();
                             let s = score(st, &trial, tiles).0;
                             if s > best {
                                 best = s;
@@ -199,11 +204,11 @@ impl Bot {
                 };
                 if let Some(gambits) = found {
                     let cmd = Command::SetGambits {
-                        op: members[k].id,
+                        op: members[k].id.0,
                         gambits: gambits.clone(),
                     };
                     if self.act(e, &cmd).is_ok() {
-                        members[k].gambits = gambits;
+                        members[k].persona_mut().gambits = gambits;
                     }
                 }
             }
@@ -230,10 +235,10 @@ impl Bot {
             let plain: Vec<u32> = e
                 .state
                 .cycle
-                .candidates()
+                .candidate_ops()
                 .take(window)
-                .filter(|c| c.op.rarity == 0 && c.op.special.is_none())
-                .map(|c| c.id)
+                .filter(|(_, o)| o.persona().rarity == 0 && o.persona().special.is_none())
+                .map(|(c, _)| c.id)
                 .collect();
             for candidate in plain {
                 let _ = self.act(e, &Command::Dismiss { candidate });
@@ -248,8 +253,8 @@ impl Bot {
             let st = &e.state;
             let mut best: Option<(Score, u32, u32, u32, Vec<u32>)> = None;
             let squads = squads(st);
-            for c in st.cycle.candidates().take(window) {
-                let cost = if c.op.special.is_some() {
+            for (c, op) in st.cycle.candidate_ops().take(window) {
+                let cost = if op.persona().special.is_some() {
                     0
                 } else {
                     b.hire_cost_scrap
@@ -260,16 +265,16 @@ impl Bot {
                 for (squad, members, tiles) in &squads {
                     let base = score(st, members, tiles);
                     for k in 0..members.len() {
-                        if members[k].special.is_some() || members[k].locked {
+                        if members[k].persona().special.is_some() || members[k].persona().locked {
                             continue;
                         }
                         let mut trial = members.clone();
-                        trial[k] = c.op.clone();
+                        trial[k] = op.clone();
                         let s = score(st, &trial, tiles);
                         let gain = (s.0.saturating_sub(base.0), s.1 - base.1);
                         if s.0 > base.0 && best.as_ref().is_none_or(|x| gain > x.0) {
-                            let ids = trial.iter().map(|o| o.id).collect();
-                            best = Some((gain, members[k].id, c.id, *squad, ids));
+                            let ids = trial.iter().map(|o| o.id.0).collect();
+                            best = Some((gain, members[k].id.0, c.id, *squad, ids));
                         }
                     }
                 }

@@ -56,7 +56,7 @@ fn starter(class: &str) -> UnitSpec {
         lock_trait: None,
     };
     let mut op = operative::generate(&mut Rng::new(SEED), 900, class, &origin);
-    op.rarity = op.rarity.min(1);
+    op.persona_mut().rarity = op.persona().rarity.min(1);
     operative::spec(&op)
 }
 
@@ -108,7 +108,7 @@ fn held_tile(s: &mut GameState) -> u16 {
     let tile = tile_on(s, 1, |s, i| {
         s.cycle.tile(i).terrain == Terrain::City && s.cycle.district_of(i).is_some()
     });
-    let guard = s.cycle.operatives().next().unwrap().id;
+    let guard = s.cycle.operatives().next().unwrap().id.0;
     let d = s.cycle.district_of(tile).unwrap() as usize;
     s.cycle.tiles[tile as usize].warden = balance().warden_max;
     s.cycle.districts[d].population = 40;

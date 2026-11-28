@@ -2,10 +2,11 @@
 //! No levels or XP; experience grows new traits from what they actually do.
 
 use crate::data::{content, Stat, TraitEffect};
+use crate::kernel::entity::{Entity, EntityId};
 use crate::kernel::rng::Rng;
 use crate::l10n::{self, Text};
 use crate::mech::combat::UnitSpec;
-use crate::mech::state::Operative;
+use crate::mech::state::{Fighter, Operative, Persona, State};
 use crate::txt;
 
 pub const RARITY_NAMES: [&str; 4] = ["N", "R", "SR", "SSR"];
@@ -29,7 +30,7 @@ pub fn trait_slots(rarity: u8) -> usize {
 }
 
 pub fn tactic_slots(op: &Operative) -> usize {
-    (2 + (op.stats[Stat::Int.idx()] - 30).max(0) / 20) as usize
+    (2 + (op.persona().stats[Stat::Int.idx()] - 30).max(0) / 20) as usize
 }
 
 pub fn generate(rng: &mut Rng, id: u32, class_id: &str, origin: &Origin) -> Operative {
@@ -86,10 +87,8 @@ pub fn generate(rng: &mut Rng, id: u32, class_id: &str, origin: &Origin) -> Oper
         let family = pick("names.family");
         txt!("name.person", family = family, given = pick("names.given"))
     };
-    Operative {
-        id,
+    let persona = Persona {
         name,
-        class: class_id.to_string(),
         rarity: if class.side == "special" { 3 } else { rarity },
         origin: origin.label.clone(),
         origin_district: origin.district,
@@ -98,7 +97,6 @@ pub fn generate(rng: &mut Rng, id: u32, class_id: &str, origin: &Origin) -> Oper
         traits,
         exp_traits: vec![],
         gambits: class.gambits.clone(),
-        equipment: None,
         counters: Default::default(),
         special: if class.side == "special" {
             Some(class_id.to_string())
@@ -106,23 +104,32 @@ pub fn generate(rng: &mut Rng, id: u32, class_id: &str, origin: &Origin) -> Oper
             None
         },
         locked: class.side == "special",
-        assignment: Default::default(),
-        rest_until: 0,
-    }
+    };
+    Entity::new(
+        EntityId(id),
+        class_id,
+        State {
+            persona: Some(persona),
+            fighter: Some(Fighter::default()),
+            assignment: Default::default(),
+            equipment: None,
+        },
+    )
 }
 
 /// All effects that apply to this operative (traits, grown traits, equipment), tagged with their source id.
 pub fn effects(op: &Operative) -> Vec<(String, TraitEffect)> {
     let c = content();
     let mut out = Vec::new();
-    for t in op.traits.iter().chain(op.exp_traits.iter()) {
+    let p = op.persona();
+    for t in p.traits.iter().chain(p.exp_traits.iter()) {
         if let Some(def) = c.traits.get(t) {
             for e in &def.effects {
                 out.push((t.clone(), e.clone()));
             }
         }
     }
-    if let Some(eq) = &op.equipment {
+    if let Some(eq) = &op.state.equipment {
         if let Some(def) = c.equip(eq) {
             for e in &def.effects {
                 out.push((eq.clone(), e.clone()));
@@ -145,8 +152,8 @@ pub struct Derived {
 
 pub fn derived(op: &Operative) -> Derived {
     let c = content();
-    let class = &c.classes[&op.class];
-    let s = |k: Stat| op.stats[k.idx()];
+    let class = &c.classes[op.class()];
+    let s = |k: Stat| op.persona().stats[k.idx()];
     let mut d = Derived {
         hp: class.base.hp + (s(Stat::Con) + s(Stat::Siz) - 100) / 3,
         atk: class.base.atk + (s(class.atk_stat) - 50) / 6,
@@ -179,13 +186,13 @@ pub fn derived(op: &Operative) -> Derived {
 
 pub fn spec(op: &Operative) -> UnitSpec {
     let c = content();
-    let class = &c.classes[&op.class];
+    let class = &c.classes[op.class()];
     let d = derived(op);
-    let mut gambits = op.gambits.clone();
+    let mut gambits = op.persona().gambits.clone();
     gambits.truncate(d.tactic_slots.max(1));
     UnitSpec {
-        key: format!("op:{}", op.id),
-        name: op.name.render(),
+        key: format!("op:{}", op.id.0),
+        name: op.persona().name.render(),
         icon: class.icon.clone(),
         row: class.row,
         max_hp: d.hp,
@@ -194,7 +201,7 @@ pub fn spec(op: &Operative) -> UnitSpec {
         spd: d.spd,
         ap: d.ap,
         pp: d.pp,
-        stats: op.stats,
+        stats: op.persona().stats,
         skills: class.skills.clone(),
         gambits,
         effects: effects(op)
@@ -210,7 +217,7 @@ pub fn spec(op: &Operative) -> UnitSpec {
 /// measurements (`spec` of the copy is the operative with that item). Never put back into a state.
 pub fn with_item(op: &Operative, item: Option<&str>) -> Operative {
     let mut copy = op.clone();
-    copy.equipment = item.map(str::to_string);
+    copy.state.equipment = item.map(str::to_string);
     copy
 }
 
@@ -234,6 +241,7 @@ pub fn bump(op: &mut Operative, counter: &str, by: i32) -> Vec<String> {
     if by <= 0 {
         return vec![];
     }
+    let op = op.persona_mut();
     *op.counters.entry(counter.to_string()).or_insert(0) += by;
     let have = op.counters[counter];
     let mut grown = Vec::new();
@@ -281,8 +289,8 @@ mod tests {
     fn traits_fit_slots_and_flavor_comes_first() {
         for seed in 0..30 {
             let op = generate(&mut Rng::new(seed), 1, "marksman", &origin());
-            assert!(op.traits.len() <= trait_slots(op.rarity));
-            assert_eq!(op.traits[0], "street_smart");
+            assert!(op.persona().traits.len() <= trait_slots(op.persona().rarity));
+            assert_eq!(op.persona().traits[0], "street_smart");
         }
     }
 
@@ -306,8 +314,8 @@ mod tests {
     #[test]
     fn specials_keep_fixed_traits() {
         let op = generate(&mut Rng::new(1), 7, "old_postman", &origin());
-        assert!(op.traits.contains(&"barrier_runner".to_string()));
-        assert_eq!(op.rarity, 3);
+        assert!(op.persona().traits.contains(&"barrier_runner".to_string()));
+        assert_eq!(op.persona().rarity, 3);
         assert!(has_map_effect(&op, |e| matches!(
             e,
             TraitEffect::CrossBarrier

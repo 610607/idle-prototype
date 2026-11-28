@@ -105,7 +105,7 @@ pub fn breakdown(state: &GameState) -> Vec<Item> {
             "operatives",
             "results.operatives",
             Defense,
-            cy.operatives.len() as i64 * w.operative,
+            cy.roster_size() as i64 * w.operative,
         ),
         item("items", "results.items", Defense, items * w.item),
         item(

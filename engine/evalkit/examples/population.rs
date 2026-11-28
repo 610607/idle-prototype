@@ -48,11 +48,11 @@ fn main() {
         for h in 1..=hours {
             bot.step(&mut e);
             e.advance(T0 + h * 3600);
-            for cand in e.state.cycle.candidates() {
+            for (cand, op) in e.state.cycle.candidate_ops() {
                 if seen.insert(cand.id) {
-                    *by_class.entry(cand.op.class.clone()).or_insert(0) += 1;
-                    by_rarity[cand.op.rarity as usize] += 1;
-                    let src = if cand.op.origin_district.is_some() {
+                    *by_class.entry(op.def.clone()).or_insert(0) += 1;
+                    by_rarity[op.persona().rarity as usize] += 1;
+                    let src = if op.persona().origin_district.is_some() {
                         "街区人才"
                     } else {
                         "裂隙/其他"

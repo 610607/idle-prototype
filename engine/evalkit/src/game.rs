@@ -38,7 +38,7 @@ pub fn squad_units(st: &GameState, bare: bool) -> Vec<Vec<UnitSpec>> {
                 .map(|op| {
                     if bare {
                         let mut op = operative::with_item(op, None);
-                        op.traits.clear();
+                        op.persona_mut().traits.clear();
                         operative::spec(&op)
                     } else {
                         operative::spec(op)

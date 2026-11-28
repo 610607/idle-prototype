@@ -1,6 +1,7 @@
 //! Content tables. The JSON files under `engine/content/` are embedded at compile time,
 //! parsed once, and shared by every platform. Rules code reads these; UIs only see view models.
 
+pub mod defs;
 pub mod hooks;
 
 use serde::{Deserialize, Serialize};
@@ -1278,6 +1279,12 @@ pub struct Content {
     pub doctrines: Vec<DoctrineDef>,
     pub armory: Vec<ArmoryDef>,
     pub tasks: Vec<TaskDef>,
+    /// The defenders that are not operatives (`defenders.json`): the HQ guard and the militia.
+    pub defenders: BTreeMap<String, defs::DefenderDef>,
+    /// Every kind above that is a thing in the world, as one definition table (`defs`).
+    pub defs: BTreeMap<crate::kernel::entity::DefId, defs::EntityDef>,
+    /// Ids used by two kinds (kept namespaced in `defs`; validation reports them).
+    pub def_clashes: Vec<String>,
     pub balance: Balance,
 }
 
@@ -1318,6 +1325,10 @@ impl Content {
     pub fn armory_track(&self, id: &str) -> Option<&ArmoryDef> {
         self.armory.iter().find(|a| a.id == id)
     }
+    /// A definition from the one table (`defs`).
+    pub fn def(&self, id: &str) -> Option<&defs::EntityDef> {
+        self.defs.get(id)
+    }
 }
 
 /// Every content file, embedded once: `load` parses them and `fingerprint` hashes them.
@@ -1331,6 +1342,10 @@ const FILES: &[(&str, &str)] = &[
     ),
     ("classes.json", include_str!("../../content/classes.json")),
     ("enemies.json", include_str!("../../content/enemies.json")),
+    (
+        "defenders.json",
+        include_str!("../../content/defenders.json"),
+    ),
     (
         "facilities.json",
         include_str!("../../content/facilities.json"),
@@ -1415,6 +1430,27 @@ fn load() -> Content {
     let doctrines: Vec<DoctrineDef> = parse("doctrines.json");
     let tasks: Vec<TaskDef> = parse("tasks.json");
     let armory: Vec<ArmoryDef> = parse("armory_tracks.json");
+    let defenders: Vec<defs::DefenderDef> = parse("defenders.json");
+    let table = defs::table(
+        classes
+            .iter()
+            .map(|x| ("class", defs::of_class(x)))
+            .chain(enemies.iter().map(|x| ("enemy", defs::of_enemy(x))))
+            .chain(defenders.iter().map(|x| ("defender", defs::of_defender(x))))
+            .chain(
+                facilities
+                    .iter()
+                    .map(|x| ("facility", defs::of_facility(x))),
+            )
+            .chain(world.equipment.iter().map(|x| ("equip", defs::of_equip(x))))
+            .chain(doctrines.iter().map(|x| ("doctrine", defs::of_doctrine(x))))
+            .chain(
+                world
+                    .policies
+                    .iter()
+                    .map(|x| ("policy", defs::of_policy(x))),
+            ),
+    );
     let mut c = Content {
         tags,
         tag_num,
@@ -1437,6 +1473,9 @@ fn load() -> Content {
         doctrines,
         armory,
         tasks,
+        defenders: defenders.into_iter().map(|d| (d.id.clone(), d)).collect(),
+        defs: table.by_id,
+        def_clashes: table.clashes,
         balance,
     };
     localize(&mut c);
@@ -1608,6 +1647,20 @@ pub fn validate() -> Vec<String> {
             skill(s, &e.id, &mut errs);
         }
     }
+    for d in c.defenders.values() {
+        for s in &d.skills {
+            skill(s, &d.id, &mut errs);
+        }
+        gambits(&d.gambits, &d.id, &mut errs);
+        for g in &d.gambits {
+            if let Act::Skill { skill: s } = &g.act {
+                if !d.skills.contains(s) {
+                    errs.push(format!("{}: gambit skill {s} not in its skills", d.id));
+                }
+            }
+        }
+    }
+    errs.extend(c.def_clashes.iter().cloned());
     for p in &c.professions {
         if !c.classes.contains_key(&p.class) {
             errs.push(format!("profession {}: unknown class {}", p.id, p.class));
@@ -1690,6 +1743,46 @@ mod tests {
     fn content_loads_and_references_resolve() {
         let errs = validate();
         assert!(errs.is_empty(), "content errors:\n{}", errs.join("\n"));
+    }
+
+    #[test]
+    fn every_kind_is_in_the_definition_table() {
+        let c = content();
+        let ids: Vec<&str> = c
+            .classes
+            .keys()
+            .map(|s| s.as_str())
+            .chain(c.enemies.keys().map(|s| s.as_str()))
+            .chain(c.defenders.keys().map(|s| s.as_str()))
+            .chain(c.facilities.iter().map(|x| x.id.as_str()))
+            .chain(c.equipment.iter().map(|x| x.id.as_str()))
+            .chain(c.doctrines.iter().map(|x| x.id.as_str()))
+            .chain(c.policies.iter().map(|x| x.id.as_str()))
+            .collect();
+        assert!(c.def_clashes.is_empty(), "{:?}", c.def_clashes);
+        assert_eq!(ids.len(), c.defs.len());
+        for id in ids {
+            assert_eq!(c.def(id).map(|d| d.id.as_str()), Some(id));
+        }
+        for id in c
+            .classes
+            .keys()
+            .chain(c.enemies.keys())
+            .chain(c.defenders.keys())
+        {
+            assert!(c.defs[id].fighter.is_some(), "{id} cannot fight");
+        }
+        for f in &c.facilities {
+            let d = &c.defs[&f.id];
+            assert!(d.placeable.is_some() && d.converter.is_some());
+            assert_eq!(d.fighter.is_some(), f.fixture.is_some(), "{}", f.id);
+            if let Some(x) = &d.fighter {
+                assert_eq!(x.deploy, defs::Deploy::Support);
+            }
+        }
+        for id in c.defenders.keys() {
+            assert!(c.defs[id].has_tag(defs::cat::MILITIA));
+        }
     }
 
     #[test]

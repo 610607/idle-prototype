@@ -59,7 +59,7 @@ pub fn defender_for(state: &GameState, tile: u16) -> Option<u32> {
             c.district_of(g) == Some(d)
                 && operative::has_map_effect(o, |e| matches!(e, TraitEffect::SharedGarrison))
         })
-        .map(|(o, _)| o.id)
+        .map(|(o, _)| o.id.0)
 }
 
 pub fn district_owned(c: &Cycle, d: u16) -> usize {

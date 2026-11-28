@@ -377,7 +377,7 @@ fn field_model_rows(e: &Engine, p: &crate::model::Profile) -> Vec<(crate::model:
     let st = &e.state;
     let class = |u: &UnitSpec| {
         let id: u32 = u.key.strip_prefix("op:")?.parse().ok()?;
-        st.op(id).map(|o| o.class.clone())
+        st.op(id).map(|o| o.def.clone())
     };
     let mut out = Vec::new();
     for specs in squad_units(st, false) {

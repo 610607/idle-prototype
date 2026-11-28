@@ -7,12 +7,16 @@
 //! district) is kept once, in a container. Callers ask these queries instead of reading where things
 //! are stored, so those steps only change the bodies here. Every iteration keeps today's order.
 //!
-//! Plain per-kind fields (`Tile::warden`, `Operative::stats`, `District::trust`, ...) are still
+//! Operatives and candidates are entities in the cycle's store since B2 (`Cycle::entities`, in
+//! number order; the roster's hiring order is `Cycle::roster`, a candidate names its entity).
+//!
+//! Plain per-kind fields (`Tile::warden`, `Persona::stats`, `District::trust`, ...) are still
 //! read through the structs these queries return; the relation fields (`Squad::members`,
-//! `Operative::assignment`, `Operative::equipment`, `Tile::usage`, `Tile::frozen`,
+//! `State::assignment`, `State::equipment`, `Tile::usage`, `Tile::frozen`,
 //! `Tile::district`, `Tile::owned`, `District::tiles`) and the cycle's lists are not
 //! (`tests/layers.rs` checks the clients and the evaluation kit).
 
+use crate::kernel::entity::EntityId;
 use crate::mech::state::{Assignment, Candidate, Cycle, District, Operative, Squad, Tile, TileUse};
 use serde::{Deserialize, Serialize};
 
@@ -126,20 +130,40 @@ impl Cycle {
 
     /// The roster, in hiring order.
     pub fn operatives(&self) -> impl Iterator<Item = &Operative> + '_ {
-        self.operatives.iter()
+        self.roster.iter().filter_map(|id| self.entities.get(*id))
     }
 
+    /// An operative on the roster (a candidate's entity is not one).
     pub fn operative(&self, id: u32) -> Option<&Operative> {
-        self.operatives.iter().find(|o| o.id == id)
+        let id = EntityId(id);
+        if self.roster.contains(&id) {
+            self.entities.get(id)
+        } else {
+            None
+        }
+    }
+
+    pub fn operative_mut(&mut self, id: u32) -> Option<&mut Operative> {
+        let id = EntityId(id);
+        if self.roster.contains(&id) {
+            self.entities.get_mut(id)
+        } else {
+            None
+        }
+    }
+
+    /// The roster's operative ids, in hiring order (a copy, for loops that change operatives).
+    pub fn roster_ids(&self) -> Vec<u32> {
+        self.roster.iter().map(|id| id.0).collect()
     }
 
     pub fn roster_size(&self) -> usize {
-        self.operatives.len()
+        self.roster.len()
     }
 
     /// Where an operative is posted (a candidate or a special not on the roster reads `Idle`).
     pub fn post(&self, op: &Operative) -> Post {
-        match op.assignment {
+        match op.state.assignment {
             Assignment::Idle => Post::Idle,
             Assignment::Squad { squad } => Post::Squad { squad },
             Assignment::Garrison { tile } => Post::Garrison { tile },
@@ -148,27 +172,25 @@ impl Cycle {
 
     /// The equipment an operative carries (by item id).
     pub fn equipment<'a>(&'a self, op: &'a Operative) -> Option<&'a str> {
-        op.equipment.as_deref()
+        op.state.equipment.as_deref()
     }
 
     /// Operatives neither in a squad nor on a garrison, in roster order.
     pub fn idle_operatives(&self) -> impl Iterator<Item = &Operative> + '_ {
-        self.operatives
-            .iter()
-            .filter(|o| o.assignment == Assignment::Idle)
+        self.operatives()
+            .filter(|o| o.state.assignment == Assignment::Idle)
     }
 
     /// The operative garrisoned on `tile` (the first in roster order).
     pub fn garrison_on(&self, tile: u16) -> Option<u32> {
-        self.operatives
-            .iter()
-            .find(|o| o.assignment == Assignment::Garrison { tile })
-            .map(|o| o.id)
+        self.operatives()
+            .find(|o| o.state.assignment == Assignment::Garrison { tile })
+            .map(|o| o.id.0)
     }
 
     /// Every garrisoned operative with its tile, in roster order.
     pub fn garrisons(&self) -> impl Iterator<Item = (&Operative, u16)> + '_ {
-        self.operatives.iter().filter_map(|o| match o.assignment {
+        self.operatives().filter_map(|o| match o.state.assignment {
             Assignment::Garrison { tile } => Some((o, tile)),
             _ => None,
         })
@@ -213,6 +235,23 @@ impl Cycle {
         self.candidates.iter()
     }
 
+    /// The recruit a candidate offers.
+    pub fn candidate_op(&self, c: &Candidate) -> &Operative {
+        self.entities
+            .get(c.entity)
+            .unwrap_or_else(|| panic!("candidate {} has no entity", c.id))
+    }
+
+    /// Candidates with their recruits, in `candidates` order.
+    pub fn candidate_ops(&self) -> impl Iterator<Item = (&Candidate, &Operative)> + '_ {
+        self.candidates.iter().map(|c| (c, self.candidate_op(c)))
+    }
+
+    /// The candidate with offer number `id`.
+    pub fn candidate(&self, id: u32) -> Option<&Candidate> {
+        self.candidates.iter().find(|c| c.id == id)
+    }
+
     pub fn candidate_count(&self) -> usize {
         self.candidates.len()
     }
@@ -230,9 +269,8 @@ impl Cycle {
     pub fn has_item(&self, id: &str) -> bool {
         self.inventory.iter().any(|x| x == id)
             || self
-                .operatives
-                .iter()
-                .any(|o| o.equipment.as_deref() == Some(id))
+                .operatives()
+                .any(|o| o.state.equipment.as_deref() == Some(id))
     }
 
     /// Doctrines held this cycle, in the order they were gained.
