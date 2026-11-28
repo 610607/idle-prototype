@@ -9,6 +9,8 @@
 //! - `Fights`: route battles by depth and surges by where they hit.
 //! - `Economy`: income, stock, spending rhythm, research timing, score rate and composition.
 //! - `strength::Series` (wall and breakthrough) and `payoff::Timeline` (payoff events).
+//! - `hands_off`: at `HANDS_OFF` checkpoints a copy of the game is left alone for two days
+//!   (design v2: walking away must cost little and the score must settle).
 //!
 //! A new system gets a probe here, or a reading in the probe it belongs to (docs/balance-eval.md
 //! “新系统怎么接入”).
@@ -81,6 +83,9 @@ impl Probes {
             self.pace.checkpoint(e, hour.h, self.deepest, &mut self.m);
             self.economy.checkpoint(hour.h, &mut self.m);
         }
+        if HANDS_OFF.contains(&hour.h) {
+            hands_off(e, hour.h, &mut self.m);
+        }
     }
 
     /// When the game ends after `hours` hours: every metric, and the payoff timeline.
@@ -93,6 +98,50 @@ impl Probes {
         let evs = self.timeline.finish(m, &mags, hours);
         (self.m, evs)
     }
+}
+
+/// Checkpoints where `hands_off` leaves a copy of the game alone.
+pub const HANDS_OFF: [i64; 2] = [24, 72];
+
+/// The player walks away at hour `h`: a copy of the game runs two days with no commands. Losses
+/// should stay small (routes stop at walls, so idle offense loses nothing; surges only push tiles
+/// to alert) and the score should settle (stores fill up, nothing is built or trained).
+fn hands_off(e: &Engine, h: i64, m: &mut Metrics) {
+    use idle_engine::mech::score;
+    let mut c = Engine::from_state(e.state.clone());
+    c.state.trace = Some(Vec::new());
+    let owned = |c: &Engine| c.state.cycle.tiles.iter().filter(|t| t.owned).count() as f64;
+    let (t0, owned0) = (c.state.time, owned(&c));
+    c.advance(t0 + 24 * 3600);
+    let day1 = score::total(&c.state) as f64;
+    c.advance(t0 + 48 * 3600);
+    let day2 = score::total(&c.state) as f64;
+    let (mut surges_lost, mut trips_lost) = (0.0, 0.0);
+    for tr in c.state.trace.take().unwrap_or_default() {
+        match tr {
+            Trace::Surge { held: false, .. } => surges_lost += 1.0,
+            Trace::Route { won: false, .. } => trips_lost += 1.0,
+            _ => {}
+        }
+    }
+    let alerts = c
+        .state
+        .cycle
+        .tiles
+        .iter()
+        .filter(|t| t.owned && t.alert())
+        .count();
+    m.insert(format!("handsoff.surge_lost.h{h}"), Some(surges_lost / 2.0));
+    m.insert(format!("handsoff.trip_lost.h{h}"), Some(trips_lost));
+    m.insert(
+        format!("handsoff.owned_lost.h{h}"),
+        Some((owned0 - owned(&c)).max(0.0)),
+    );
+    m.insert(format!("handsoff.alerts.h{h}"), Some(alerts as f64));
+    m.insert(
+        format!("handsoff.growth.h{h}"),
+        Some((day2 - day1) / day1.max(1.0)),
+    );
 }
 
 #[derive(Default)]

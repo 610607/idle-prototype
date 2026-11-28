@@ -8,6 +8,11 @@
 //! slot in turn: `mean` averages over slots and teams, `best` is the best slot); a doctrine applies
 //! to the whole squad as it does in play.
 //!
+//! Design v2: holding things raises the score, and the score is the threat that sets surge
+//! strength. So each 词条 also has a threat cost: the score points holding it adds (`threat`), and
+//! how much stronger surges get for it at the reference play's mid-cycle threat (`surge_pct`).
+//! Traits ride on an operative already counted, so they cost nothing extra.
+//!
 //! `eval/prices.json` keeps the last blessed card; `cargo test` (tests/eval_prices.rs) fails when
 //! content has a 词条 the card does not list, so a new one cannot land unpriced.
 use crate::synergy;
@@ -27,6 +32,29 @@ pub struct Price {
     pub mean: f64,
     /// Ring-equivalents gained in the best slot, averaged over teams.
     pub best: f64,
+    /// Score points holding it adds, which is also threat (`balance.score`).
+    #[serde(default)]
+    pub threat: i64,
+    /// How much stronger surges get for that threat, in percent, at `THREAT_REF`.
+    #[serde(default)]
+    pub surge_pct: f64,
+}
+
+/// The threat the surge cost is read at: about the reference play's score at hour 72.
+const THREAT_REF: i64 = 1100;
+
+/// The threat cost of holding one `item`.
+fn threat_cost(item: &Item) -> (i64, f64) {
+    use idle_engine::mech::pressure::{surge_strength_bp, threat_level_bp};
+    let w = &idle_engine::data::balance().score;
+    let t = match item {
+        Item::Trait(_) => 0,
+        Item::Equip(_) => w.item,
+        Item::Doctrine(_) => w.doctrine,
+    };
+    let at = |x: i64| surge_strength_bp(threat_level_bp(x)) as f64;
+    let pct = (at(THREAT_REF + t) / at(THREAT_REF) - 1.0) * 100.0;
+    (t, (pct * 100.0).round() / 100.0)
 }
 
 /// The blessed price card (`engine/eval/prices.json`).
@@ -115,10 +143,13 @@ fn price(item: &Item, base: &[f64], pool: &[Vec<synergy::Enc>]) -> Price {
         Item::Equip(_) => "equipment",
         Item::Doctrine(_) => "doctrine",
     };
+    let (threat, surge_pct) = threat_cost(item);
     Price {
         kind: kind.into(),
         mean: (mean / n * 100.0).round() / 100.0,
         best: (best / n * 100.0).round() / 100.0,
+        threat,
+        surge_pct,
     }
 }
 
@@ -212,8 +243,8 @@ pub fn print(card: &BTreeMap<String, Price>, old: &BTreeMap<String, Price>) {
                 ""
             };
             println!(
-                "price.{id:<22} mean {:+.2}  best {:+.2}  since blessed {was}{flag}",
-                p.mean, p.best
+                "price.{id:<22} mean {:+.2}  best {:+.2}  threat {:>2} (surges +{:.1}%)  since blessed {was}{flag}",
+                p.mean, p.best, p.threat, p.surge_pct
             );
         }
     }

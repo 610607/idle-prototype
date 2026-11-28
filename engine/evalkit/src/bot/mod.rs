@@ -39,6 +39,11 @@ pub struct Policy {
     /// Order a hard fight (`assault`) once at each new wall a squad stops in front of, when the
     /// preview says the squad would only fall back as planned (the explorer's scouting).
     pub assault: bool,
+    /// Sandbagging (压分): no claim or build that would lift the threat level past a budget that
+    /// starts at level 2 and rises one level every `SANDBAG_HOURS_PER_LEVEL` hours, to keep
+    /// surges weak. Design v2 wants
+    /// this to pay less than playing straight (docs/design-v2-plan.md 阶段 1).
+    pub sandbag: bool,
 }
 
 /// What a persona puts first. Each focus other than `Expand` uses commands the reference play
@@ -69,6 +74,7 @@ impl Policy {
         focus: Focus::Expand,
         tactics: false,
         assault: false,
+        sandbag: false,
     };
 
     /// `GREEDY`, with research off when the environment sets `BOT_NORESEARCH` (the switch the
@@ -182,6 +188,9 @@ impl Bot {
 
     /// Issues a command and counts it when accepted.
     pub fn act(&mut self, e: &mut Engine, cmd: &Command) -> Result<(), String> {
+        if self.over_budget(e, cmd) {
+            return Err("sandbag".into());
+        }
         let r = e.command(cmd);
         if r.is_ok() {
             *self
@@ -190,6 +199,24 @@ impl Bot {
                 .or_insert(0) += 1;
         }
         r
+    }
+
+    /// Whether the sandbagging play holds `cmd` back: a claim or a build that would put the threat
+    /// level over the budget for this hour.
+    fn over_budget(&self, e: &Engine, cmd: &Command) -> bool {
+        use idle_engine::mech::pressure;
+        if !self.policy.sandbag {
+            return false;
+        }
+        let w = &idle_engine::data::balance().score;
+        let extra = match cmd {
+            Command::Claim { .. } => w.tile,
+            Command::Build { .. } => w.facility,
+            _ => return false,
+        };
+        let h = (e.state.time - e.state.cycle.started_at) / 3600;
+        let budget = SANDBAG_START_BP + h * 10_000 / SANDBAG_HOURS_PER_LEVEL;
+        pressure::threat_level_bp(pressure::threat(&e.state) + extra) > budget
     }
 
     /// One turn.
@@ -460,6 +487,10 @@ fn build_order(focus: Focus) -> [&'static str; 8] {
 
 /// Turns in a row the defensive focus may hold its claims for a losing forecast.
 const CLAIM_WAIT: u32 = 12;
+/// The sandbagging play's threat budget starts at level 2 and rises one level this often (the
+/// reference play goes from level 1 to about 7 in its first 72 hours; this is half that pace).
+const SANDBAG_START_BP: i64 = 20_000;
+const SANDBAG_HOURS_PER_LEVEL: i64 = 24;
 /// Scrap the armory leaves for builds and hires.
 const ARM_RESERVE: i64 = 120;
 /// Most armory steps in one turn.

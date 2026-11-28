@@ -1,5 +1,5 @@
 {
-  "_doc": "设计目标（docs/balance-eval.md §评估者）。每条目标用一句话写体验，绑定几项指标的区间。kind：experience 是游戏该有的样子，selfcheck 是评估工具自己还可信。level：gate 不过就让 check / review 以退出码 1 结束；watch 只报告。gate_personas：只有这些人格（参考玩家）的结果能让门槛不过，其他人格超出区间记为观察（打法读数）；为空表示所有人格。checks 的格式同旧 bands.json：{指标 id: [{stat, min, max, personas, missing_fails, watch}]}；personas 为空表示所有人格，以 * 结尾表示前缀（如 llm:*）。2026-11-27 和设计者逐条确认过：目标是设计意图，实测不达标就改游戏，不放宽区间。",
+  "_doc": "设计目标（docs/balance-eval.md §评估者）。每条目标用一句话写体验，绑定几项指标的区间。kind：experience 是游戏该有的样子，selfcheck 是评估工具自己还可信。level：gate 不过就让 check / review 以退出码 1 结束；watch 只报告。gate_personas：只有这些人格（参考玩家）的结果能让门槛不过，其他人格超出区间记为观察（打法读数）；为空表示所有人格；单条目标可以自带 gate_personas（比如只检查压分玩家的那条）。run：读哪种跑法的结果，hours 按小时跑（默认）、plateau 跑到平台、any 都读。区间可以写 vs：拿这个人格的统计量除以 vs 人格同一统计量再比（同一次 review 里有就用，没有就读它的基线）。checks 的格式同旧 bands.json：{指标 id: [{stat, min, max, personas, missing_fails, watch}]}；personas 为空表示所有人格，以 * 结尾表示前缀（如 llm:*）。2026-11-27 和设计者逐条确认过：目标是设计意图，实测不达标就改游戏，不放宽区间。",
   "gate_personas": ["greedy"],
   "goals": [
     {
@@ -146,6 +146,46 @@
         "llm.feel.d2_3.delight": [{ "stat": "p50", "min": 0.2, "personas": ["llm:*"] }],
         "llm.feel.d4_7.delight": [{ "stat": "p50", "min": 0.2, "personas": ["llm:*"] }],
         "llm.score.growth.d4_7": [{ "stat": "p50", "min": 3, "personas": ["llm:*"] }]
+      }
+    },
+    {
+      "id": "plateau",
+      "kind": "experience",
+      "level": "gate",
+      "run": "plateau",
+      "text": "分数会停在平台上：参考玩家的本轮成果在各种子上都会停住，不会一直涨，也不会涨到一半崩掉",
+      "doc": "docs/design-v2-plan.md 阶段 1 节点 M1；docs/design-v2-outline.md 时间不是敌人",
+      "checks": {
+        "plateau.h": [{ "stat": "p90", "max": 288, "missing_fails": true, "personas": ["greedy"] }],
+        "score.drop": [{ "stat": "p90", "max": 0.05, "personas": ["greedy"] }]
+      }
+    },
+    {
+      "id": "hands_off",
+      "kind": "experience",
+      "level": "gate",
+      "run": "any",
+      "text": "放手不管不出事：离开两天，路线一仗不输、地盘一格不丢，局面慢慢停住",
+      "doc": "docs/design-v2-plan.md 阶段 1 节点 M1（收敛、挂机进攻）；docs/design-v2-combat.md 路线停下",
+      "checks": {
+        "handsoff.trip_lost.h24": [{ "stat": "p90", "max": 0 }],
+        "handsoff.trip_lost.h72": [{ "stat": "p90", "max": 0 }],
+        "handsoff.owned_lost.h24": [{ "stat": "p90", "max": 0 }],
+        "handsoff.owned_lost.h72": [{ "stat": "p90", "max": 0 }],
+        "handsoff.growth.h72": [{ "stat": "p50", "max": 0.05, "watch": true }]
+      }
+    },
+    {
+      "id": "no_sandbagging",
+      "kind": "experience",
+      "level": "gate",
+      "run": "any",
+      "gate_personas": ["sandbag"],
+      "text": "压分不占便宜：故意少占地、少盖楼来压住威胁的玩法，一周的成果低于正常玩",
+      "doc": "docs/design-v2-plan.md 阶段 1 节点 M1（压分）",
+      "checks": {
+        "score.h168": [{ "stat": "p50", "max": 0.95, "vs": "greedy", "personas": ["sandbag"] }],
+        "score.final": [{ "stat": "p50", "max": 1.0, "vs": "greedy", "personas": ["sandbag"], "watch": true }]
       }
     },
     {
