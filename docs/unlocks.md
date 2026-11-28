@@ -67,6 +67,8 @@
 | `claim` | 占领 | | 开局就开 |
 | `build` | 建造 | 废材站、诊所、住房 | 占下 3 格 |
 | `hire` | 招募和辞退、编队（`set_squad`） | | 占下 1 块曾是民居的地，在 `build` 之后（教学关里占下的城区格都自动是住房，所以不用“建住房”当条件） |
+| `healing` | 治疗（`heal`，命令组 `medicine`）；队员卡上的治疗预览 | | 建 1 座诊所，在 `build` 之后 |
+| `med_line` | 用药线（`set_med_line`，命令组 `med_line`；`set_rule auto_medicate` 也归这组） | 规章“用药线” | 建 1 座诊所，在 `healing` 之后 |
 | `routes` | 多格路线、硬闯 | | never（S5：调度部门） |
 | `rules` | 规章 | 三条规章 | never |
 | `research` | 研究、换一批、选学说、知识库 | 档案室 | never |
@@ -92,7 +94,7 @@
 - **开局**：`sim::new_game_with(seed, now, device, &Start)`、`Engine::new_with(…)`；`Start::default()` 是 `default` 档案，`Start::tutorial()` 是教学关的档案。固定地图开局时用地图的 `unlocks` 档案（见上）。新开一轮（收束以后）是全部开放，S7 再定。
 - **命令**：`Command::system()` 是一个没有兜底分支的 `match`，新命令不归类编译不过。`commands::apply` 先查 `mech::unlocks::check`（命令组，加上 `build` 的建筑、`set_rule` 的规章），没开就拒绝，错误文字是 `err.locked`，写着差哪个解锁。
 - **检查时机**：命令被接受以后（`after_command`：先记数，再查条件），时间线每个时刻处理完以后（`sim::process_instant` 的最后），按登记表的顺序查一遍，一遍就够（`after` 只指向前面的）。新开的解锁写事件 `event.unlocked`（`EventKind::Unlock`，在 `engine/eval/payoff_classes.json` 归为 `unlock`）。全部开放时这些函数直接返回，不花时间。
-- **局面数据**：没开的系统的块不出现（`view::Gated`：开着时序列化和原来的值一模一样，关着时整个键不写；Rust 这边读到的是空值）。现在挂上的块：`research`、`armory`、`tasks`、`facilities`、`candidates`、`inventory`、`sealed`、`org.rules`、街区的 `policy_options` 和 `customize`；待你决定里属于没开系统的条目也去掉。另有两个新字段，全部开放时都不写：`locked`（还锁着的命令组）和 `next`（最近的一两个没开、`after` 已满足、不是 `never` 的解锁，带条件的说法、进度、目标和一句说明）。
+- **局面数据**：没开的系统的块不出现（`view::Gated`：开着时序列化和原来的值一模一样，关着时整个键不写；Rust 这边读到的是空值）。现在挂上的块：`research`、`armory`、`tasks`、`facilities`、`candidates`、`inventory`、`sealed`、`org.rules`、`med_line`、街区的 `policy_options` 和 `customize`，队员血量里的治疗预览 `health.heal`（血量本身不挂解锁，一直显示）；待你决定里属于没开系统的条目也去掉。另有两个新字段，全部开放时都不写：`locked`（还锁着的命令组）和 `next`（最近的一两个没开、`after` 已满足、不是 `never` 的解锁，带条件的说法、进度、目标和一句说明）。
 - **文字版**：菜单只列开着的命令（`Engine::allows`），锁着的块不打印，命令参考只列开着的命令，局面最后打印“接下来能解锁”。
 - **网页**：锁着的块不画（研究页签、候选人、仓库、封存、规章、军械、见习任务、建造），“接下来能解锁”固定在地图下面、待你决定上面。按钮层面的细节（驻扎、反击等按钮）留给 S9。
 

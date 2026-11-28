@@ -14,7 +14,9 @@ use crate::{l10n, txt};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-pub const RES_KEYS: [&str; 4] = ["scrap", "parts", "intel", "crystal"];
+/// Resource keys in the order of `EconCalc::income` and `Cycle::carry`.
+pub const RES_KEYS: [&str; RES_N] = ["scrap", "parts", "intel", "crystal", "medicine"];
+pub const RES_N: usize = 5;
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct FacilityCalc {
@@ -58,7 +60,7 @@ pub struct EconCalc {
     pub districts: Vec<DistrictCalc>,
     pub facilities: Vec<FacilityCalc>,
     /// Income per hour x10000.
-    pub income: [i64; 4],
+    pub income: [i64; RES_N],
     pub rift_crystal: i64,
 }
 
@@ -331,7 +333,7 @@ pub fn settle(state: &mut GameState, hour: bool) {
     let per_hour = crate::mech::pace::of(&state.cycle).settles_per_hour();
     let whole = pay(&mut state.cycle.carry, &calc.income, per_hour);
     let mut income = crate::data::Resources::default();
-    for k in 0..4 {
+    for k in 0..RES_N {
         income.add_key(RES_KEYS[k], whole[k]);
     }
     state.gain(&income);
@@ -343,10 +345,10 @@ pub fn settle(state: &mut GameState, hour: bool) {
 /// One settlement's whole resources out of an hourly income (x10000), `per_hour` settlements to
 /// the hour. The carry is in 1/10000 of a resource times `per_hour`, so each settlement adds the
 /// full hourly rate and an hour's settlements together pay out exactly the hourly amount.
-pub fn pay(carry: &mut [i64; 4], income: &[i64; 4], per_hour: i64) -> [i64; 4] {
+pub fn pay(carry: &mut [i64; RES_N], income: &[i64; RES_N], per_hour: i64) -> [i64; RES_N] {
     let unit = 10_000 * per_hour.max(1);
-    let mut out = [0; 4];
-    for k in 0..4 {
+    let mut out = [0; RES_N];
+    for k in 0..RES_N {
         let total = carry[k] + income[k];
         out[k] = total / unit;
         carry[k] = total % unit;
@@ -608,18 +610,18 @@ mod tests {
     /// included, and one settlement per hour is the old hourly settlement.
     #[test]
     fn short_settlements_add_up_to_the_hour() {
-        let income = [37_000, 12_345, 9_999, 250_001];
+        let income = [37_000, 12_345, 9_999, 250_001, 4_321];
         for per_hour in [1, 6, 720] {
-            let (mut carry, mut hourly) = ([0; 4], [0; 4]);
-            let (mut sum, mut want) = ([0; 4], [0; 4]);
+            let (mut carry, mut hourly) = ([0; RES_N], [0; RES_N]);
+            let (mut sum, mut want) = ([0; RES_N], [0; RES_N]);
             for _ in 0..5 {
                 let w = pay(&mut hourly, &income, 1);
-                for k in 0..4 {
+                for k in 0..RES_N {
                     want[k] += w[k];
                 }
                 for _ in 0..per_hour {
                     let got = pay(&mut carry, &income, per_hour);
-                    for k in 0..4 {
+                    for k in 0..RES_N {
                         sum[k] += got[k];
                     }
                 }

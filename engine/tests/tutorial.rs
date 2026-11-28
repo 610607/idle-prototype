@@ -306,6 +306,97 @@ fn the_tutorial_opens_systems_as_chapter_one_goes() {
     let v = e.view();
     assert!(v.shows(System::Hire) && v.shows(System::Squad));
     assert!(e.allows(&Command::Hire { candidate: 1 }));
-    assert!(v.next.is_empty(), "the rest waits for chapter two (never)");
+    // Healing waits for a clinic; the rest waits for chapter two (never).
+    let next: Vec<&str> = v.next.iter().map(|n| n.id.as_str()).collect();
+    assert_eq!(next, vec!["healing"]);
     assert!(!v.shows(System::Research) && !v.shows(System::Routes));
+}
+
+/// S4: the lone vanguard wins the first fights and keeps what they cost; the forecast stops them
+/// once their HP would lose a fight they win at full health; with a clinic built, healing puts
+/// them back on the road.
+#[test]
+fn the_vanguard_carries_wounds_until_a_clinic_heals_them() {
+    use idle_engine::mech::medic;
+    let mut e = tutorial(0);
+    let sq = e.state.cycle.squads().next().unwrap().id;
+    let id = e.state.cycle.members(sq).next().unwrap();
+    let h = hq(&e.state);
+    let north = h - geom::SIZE as u16;
+    e.command(&Command::SetRoute {
+        squad: sq,
+        route: vec![north],
+    })
+    .unwrap();
+    let first = e.state.cycle.squad(sq).unwrap().trip.clone().unwrap();
+    assert_eq!(first.results[0].outcome, combat::Outcome::Victory);
+    e.advance(first.end);
+    let wounds = e.state.op(id).unwrap().fighter().damage;
+    assert!(wounds > 0, "a won fight costs HP");
+    let second = e.state.cycle.squad(sq).unwrap().trip.clone().unwrap();
+    if let Some((_, input)) = second.inputs.first() {
+        assert_eq!(
+            input.allies[0].damage, wounds,
+            "and the next fight starts there"
+        );
+    }
+    // Fight on until the forecast turns them back for lack of HP.
+    let mut t = e.state.time;
+    while !e
+        .state
+        .cycle
+        .squad(sq)
+        .unwrap()
+        .last
+        .as_ref()
+        .is_some_and(|l| l.stop_hp)
+    {
+        t += 1;
+        assert!(t < T0 + 120, "never stopped for HP");
+        e.advance(t);
+    }
+    let stopped = medic::health(&e.state, id).unwrap();
+    assert!(!stopped.down && stopped.hp < stopped.max);
+    let heal = Command::Heal { op: id, hp: None };
+    assert!(!e.allows(&heal), "healing waits for a clinic");
+    // Open what is needed by hand: building, the plot, materials, medicine.
+    idle_engine::mech::unlocks::grant(&mut e.state, "build");
+    e.state.cycle.resources.scrap += 100;
+    e.state.cycle.resources.parts += 10;
+    e.command(&Command::Claim {
+        tile: north,
+        garrison: None,
+    })
+    .unwrap();
+    e.command(&Command::Build {
+        tile: north,
+        facility: Some(hooks::CLINIC.into()),
+    })
+    .unwrap();
+    assert!(e.allows(&heal));
+    assert!(e.view().operatives[0].health.heal.is_some(), "cost preview");
+    e.state.cycle.resources.medicine = 100;
+    e.command(&heal).unwrap();
+    let healed = medic::health(&e.state, id).unwrap();
+    assert_eq!(healed.hp, healed.max);
+    assert!(e.state.cycle.resources.medicine < 100);
+    // Back on the road: the next fight is fought, not turned down.
+    let next = e
+        .state
+        .cycle
+        .tiles()
+        .find(|(i, t)| {
+            !t.owned
+                && !t.waves.is_empty()
+                && geom::neighbors(*i).any(|n| e.state.cycle.is_owned(n))
+        })
+        .map(|(i, _)| i)
+        .unwrap();
+    e.command(&Command::SetRoute {
+        squad: sq,
+        route: vec![next],
+    })
+    .unwrap();
+    let trip = e.state.cycle.squad(sq).unwrap().trip.clone().unwrap();
+    assert!(trip.stopped_at.is_none() && !trip.results.is_empty());
 }

@@ -143,6 +143,7 @@ fn route_for(deep_first: bool, e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
     for (_, t) in targets.iter().take(scan) {
         let p = e.preview_route(squad, &[*t]);
         if p.ok
+            && p.stopped.is_none()
             && p.outcome
                 .map(|o| o == idle_engine::mech::combat::Outcome::Victory)
                 .unwrap_or(false)
@@ -152,6 +153,7 @@ fn route_for(deep_first: bool, e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
         for n in geom::neighbors(*t) {
             let p = e.preview_route(squad, &[n, *t]);
             if p.ok
+                && p.stopped.is_none()
                 && p.outcome
                     .map(|o| o == idle_engine::mech::combat::Outcome::Victory)
                     .unwrap_or(false)
@@ -427,6 +429,7 @@ impl Bot {
                 break;
             }
         }
+        self.medicate(e);
         self.research(e);
         self.arm(e);
         // Counter only what the preview says wins, like the engine's auto_counter rule: a lost counter
@@ -444,6 +447,48 @@ impl Bot {
         }
     }
 }
+
+impl Bot {
+    /// Health care: the 用药线 on with its default lines as soon as it opens (it heals squads and
+    /// garrisons at home), and by hand what the rule leaves: anyone downed or below the line,
+    /// healed to full when the medicine left stays above `HEAL_RESERVE`.
+    fn medicate(&mut self, e: &mut Engine) {
+        let v = e.view();
+        if v.med_line.is_open() && !v.med_line.on {
+            let m = &*v.med_line;
+            let _ = self.act(
+                e,
+                &Command::SetMedLine {
+                    on: true,
+                    below_pct: m.below_pct,
+                    reserve: m.reserve,
+                },
+            );
+        }
+        let v = e.view();
+        let mut have = v.resources.medicine;
+        let line = v.med_line.below_pct.max(1) as i64;
+        for o in v
+            .operatives
+            .iter()
+            .filter(|o| !matches!(o.assignment, Post::Idle))
+        {
+            let (h, Some(heal)) = (&o.health, &o.health.heal) else {
+                continue;
+            };
+            let low = h.down || (h.hp as i64) * 100 < line * h.max as i64;
+            if !low || h.away || have - heal.full < HEAL_RESERVE {
+                continue;
+            }
+            if self.act(e, &Command::Heal { op: o.id, hp: None }).is_ok() {
+                have -= heal.full;
+            }
+        }
+    }
+}
+
+/// Medicine the bot keeps when healing by hand.
+const HEAL_RESERVE: i64 = 20;
 
 /// What each focus builds, in order of preference (one building a turn).
 fn build_order(focus: Focus) -> [&'static str; 8] {

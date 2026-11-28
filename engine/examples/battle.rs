@@ -21,6 +21,7 @@ fn ally(class: &str, key: &str) -> UnitSpec {
         effects: vec![],
         start_tags: vec![],
         fixture: false,
+        damage: 0,
     }
 }
 

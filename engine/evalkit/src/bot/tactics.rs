@@ -101,7 +101,7 @@ impl Bot {
                 let bench: Vec<&Operative> = st
                     .cycle
                     .idle_operatives()
-                    .filter(|o| o.fighter().rest_until <= st.time)
+                    .filter(|o| !o.fighter().down)
                     .collect();
                 let base = score(st, &members, tiles);
                 let mut best: Option<(Score, Vec<u32>)> = None;

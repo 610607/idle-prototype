@@ -47,6 +47,7 @@ fn scaled(base: &Resources, growth_bp: i32, k: i32) -> Resources {
         parts: f(base.parts),
         intel: f(base.intel),
         crystal: f(base.crystal),
+        medicine: f(base.medicine),
     }
 }
 
@@ -57,6 +58,7 @@ fn times_bp(base: &Resources, bp: i64) -> Resources {
         parts: f(base.parts),
         intel: f(base.intel),
         crystal: f(base.crystal),
+        medicine: f(base.medicine),
     }
 }
 

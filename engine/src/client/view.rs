@@ -144,6 +144,9 @@ pub struct OpView {
     pub gambits: Vec<Gambit>,
     pub assignment: Post,
     pub status: String,
+    /// Current health (`mech::medic`); shown for every operative, the heal preview only once
+    /// healing is open.
+    pub health: HealthView,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub equipment: Option<ItemView>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -151,6 +154,47 @@ pub struct OpView {
     pub locked: bool,
     pub reads: Vec<Tag>,
     pub writes: Vec<Tag>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct HealthView {
+    pub hp: i32,
+    pub max: i32,
+    pub down: bool,
+    /// Seconds until a downed operative stands up by themselves (none while still out).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub up_in: Option<i64>,
+    /// Out on a trip: `hp` is their health when it is back.
+    pub away: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub heal: Option<HealView>,
+}
+
+/// What healing this operative would cost now.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct HealView {
+    /// Medicine to heal to full.
+    pub full: i64,
+    /// HP the medicine in stock heals up to (the current HP when it heals nothing).
+    pub reach: i32,
+    /// Heals in steps of `heal_step_pct` of max HP above the current HP, then full.
+    pub steps: Vec<HealStep>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct HealStep {
+    pub hp: i32,
+    pub cost: i64,
+}
+
+/// 用药线 settings.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct MedLineView {
+    pub on: bool,
+    pub below_pct: i32,
+    pub reserve: i64,
+    /// The rule skipped a heal for lack of medicine since it last healed.
+    pub short: bool,
 }
 
 #[derive(Serialize)]
@@ -396,6 +440,9 @@ pub struct TripView {
     pub forced: bool,
     /// Only walked owned ground.
     pub patrol: bool,
+    /// Owned medical buildings passed (each healed the squad).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub healed_at: Vec<u16>,
 }
 
 #[derive(Serialize)]
@@ -405,6 +452,8 @@ pub struct StopView {
     /// How the fight there would end (the squad did not fight it).
     pub outcome: Option<crate::mech::combat::Outcome>,
     pub report: Option<u32>,
+    /// At full health the squad would win it: it stopped for lack of HP.
+    pub low_hp: bool,
 }
 
 #[derive(Serialize)]
@@ -423,7 +472,6 @@ pub struct SquadView {
     pub route: Vec<u16>,
     pub running: Option<TripView>,
     pub last: Option<TripView>,
-    pub rest_until: i64,
     pub trips: u32,
     pub deepest: i32,
     /// A hard fight is ordered for the next trip.
@@ -791,8 +839,8 @@ pub struct View {
     pub modifier: Option<(String, String, String)>,
     pub previews: Vec<PreviewView>,
     pub resources: Resources,
-    /// Income per hour x100 per resource (scrap, parts, intel, crystal).
-    pub income: [i64; 4],
+    /// Income per hour x100 per resource (scrap, parts, intel, crystal, medicine).
+    pub income: [i64; crate::mech::economy::RES_N],
     pub power: (i32, i32, i32),
     /// 威胁：来潮按统计分数变强（`mech::pressure::reading`）。
     pub threat: crate::mech::pressure::Reading,
@@ -824,6 +872,8 @@ pub struct View {
     pub armory: Gated<Vec<ArmoryView>>,
     #[serde(skip_serializing_if = "Gated::closed")]
     pub tasks: Gated<TasksView>,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub med_line: Gated<MedLineView>,
     /// Systems still locked (`mech::unlocks`); absent when everything is open.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub locked: Vec<crate::data::unlocks::System>,
@@ -1113,13 +1163,17 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
     writes.sort();
     writes.dedup();
     let post = state.cycle.post(op);
+    let health = health_view(state, op);
     let status = match post {
+        _ if health.down && !health.away => {
+            t!("view.status.down", left = health.up_in.unwrap_or_default())
+        }
+        _ if health.down => t!("view.status.down_away"),
         Post::Idle => t!("view.status.idle"),
         Post::Squad { squad } => {
             let s = state.cycle.squad(squad);
             match s {
                 Some(s) if s.trip.is_some() => t!("view.status.on_route", squad = s.name),
-                Some(s) if s.rest_until > state.time => t!("view.status.resting", squad = s.name),
                 Some(s) => t!("view.status.standby", squad = s.name),
                 None => t!("view.status.idle"),
             }
@@ -1145,11 +1199,71 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
         gambits: op.persona().gambits.clone(),
         assignment: post,
         status,
+        health,
         equipment,
         special: op.persona().special.clone(),
         locked: op.persona().locked,
         reads,
         writes,
+    }
+}
+
+/// An operative's health, with the heal preview once healing is open. A candidate (not on the
+/// roster) reads full health.
+pub fn health_view(state: &GameState, op: &Operative) -> HealthView {
+    use crate::mech::medic;
+    let Some(h) = medic::health(state, op.id.0) else {
+        let max = medic::max_hp(state, op);
+        return HealthView {
+            hp: max,
+            max,
+            down: false,
+            up_in: None,
+            away: false,
+            heal: None,
+        };
+    };
+    let open = crate::mech::unlocks::system_open(state, crate::data::unlocks::System::Medicine);
+    let heal = (open && !h.full()).then(|| {
+        let have = state.cycle.resources.medicine;
+        let step = (h.max as i64 * balance().heal_step_pct.max(1) as i64 / 100).max(1) as i32;
+        let mut steps = Vec::new();
+        let mut hp = h.hp - h.hp % step + step;
+        while hp < h.max {
+            steps.push(HealStep {
+                hp,
+                cost: medic::cost_to(&h, hp),
+            });
+            hp += step;
+        }
+        let full = medic::cost_to(&h, h.max);
+        steps.push(HealStep {
+            hp: h.max,
+            cost: full,
+        });
+        // The most HP the stock pays for (the cost rises with the target).
+        let (mut lo, mut hi) = (h.hp, h.max);
+        while lo < hi {
+            let mid = lo + (hi - lo + 1) / 2;
+            if medic::cost_to(&h, mid) <= have {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        HealView {
+            full,
+            reach: lo,
+            steps,
+        }
+    });
+    HealthView {
+        hp: h.hp,
+        max: h.max,
+        down: h.down,
+        up_in: h.up_at.map(|t| (t - state.time).max(0)),
+        away: h.away,
+        heal,
     }
 }
 
@@ -1187,9 +1301,11 @@ fn trip_view(t: &Trip) -> TripView {
             label: geom::label(tile),
             outcome: t.stop_outcome,
             report: t.stop_report,
+            low_hp: t.stop_hp,
         }),
         forced: t.forced,
         patrol: t.patrol,
+        healed_at: t.healed_at.clone(),
     }
 }
 
@@ -1373,7 +1489,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             modifier: None,
             previews,
             resources: Resources::default(),
-            income: [0; 4],
+            income: [0; crate::mech::economy::RES_N],
             power: (0, 0, 10_000),
             threat: crate::mech::pressure::reading(state),
             self_sufficient: false,
@@ -1406,6 +1522,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             research: Gated::new(open(System::Research), || research_view(state)),
             armory: Gated::new(open(System::Armory), || armory_view(state)),
             tasks: Gated::new(open(System::Tasks), || tasks_view(state)),
+            med_line: Gated::new(open(System::MedLine), || med_line_view(state)),
             locked: unlocks::locked_systems(state),
             next: next_view(state),
             bounds: None,
@@ -1577,7 +1694,6 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             route: s.route.clone(),
             running: s.trip.as_ref().map(trip_view),
             last: s.last.as_ref().map(trip_view),
-            rest_until: s.rest_until,
             trips: s.trips,
             deepest: crate::mech::pressure::deepest_of(cy, &s.route),
             force: s.force,
@@ -1848,10 +1964,25 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         research: Gated::new(open(System::Research), || research_view(state)),
         armory: Gated::new(open(System::Armory), || armory_view(state)),
         tasks: Gated::new(open(System::Tasks), || tasks_view(state)),
+        med_line: Gated::new(open(System::MedLine), || med_line_view(state)),
         locked: unlocks::locked_systems(state),
         next: next_view(state),
         bounds: fixed.map(|f| f.0),
         pace: fixed.map(|f| f.1),
+    }
+}
+
+pub fn med_line_view(state: &GameState) -> MedLineView {
+    MedLineView {
+        on: state
+            .org
+            .rules
+            .get(crate::data::hooks::RULE_AUTO_MEDICATE)
+            .copied()
+            .unwrap_or(false),
+        below_pct: state.org.med_line.below_pct,
+        reserve: state.org.med_line.reserve,
+        short: state.cycle.med_short,
     }
 }
 

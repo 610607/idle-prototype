@@ -9,7 +9,7 @@ use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SAVE_VERSION: u32 = 7;
+pub const SAVE_VERSION: u32 = 8;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -227,11 +227,37 @@ pub struct Persona {
     pub locked: bool,
 }
 
-/// 可出战数据块：休整到几点（将来放血量）。
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+/// 可出战数据块：当前血量（缺多少）和倒下的读条（`mech::medic`）。
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Fighter {
-    #[serde(default)]
-    pub rest_until: i64,
+    /// HP missing, against the max HP of a route fight (`medic::max_hp`); 0 is full health. Kept
+    /// absolute, so a fight starts at its own max HP minus this.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub damage: i32,
+    /// Downed (HP 0): fights nowhere until healed, passing a medical building, or `up_at`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub down: bool,
+    /// When a downed operative stands up by themselves; 0 while the timer has not started (still
+    /// out on the trip that downed them).
+    #[serde(default, skip_serializing_if = "is_zero_i64")]
+    pub up_at: i64,
+}
+
+fn is_zero(v: &i32) -> bool {
+    *v == 0
+}
+
+fn is_zero_i64(v: &i64) -> bool {
+    *v == 0
+}
+
+/// A trip member's health when the trip is back (`Trip::hp`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Hurt {
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub damage: i32,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub down: bool,
 }
 
 /// An entity's state, in blocks by interface (docs/design-v2-refactor.md, 目标类型): code asks
@@ -380,6 +406,16 @@ pub struct Trip {
     /// No hostile tile fought: the trip only walked owned ground (yields `patrol_scrap`).
     #[serde(default)]
     pub patrol: bool,
+    /// Who went (the members standing when it set out) and their health when it is back; written
+    /// to their fighter blocks on return (`medic::commit`). A heal while they are out changes this.
+    #[serde(default)]
+    pub hp: BTreeMap<u32, Hurt>,
+    /// The turned-down fight would be won at full health: the squad stopped for lack of HP.
+    #[serde(default)]
+    pub stop_hp: bool,
+    /// Owned medical buildings passed on the way (each healed the squad once).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub healed_at: Vec<u16>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -394,9 +430,6 @@ pub struct Squad {
     pub last: Option<Trip>,
     #[serde(default)]
     pub trips: u32,
-    /// Waiting after a defeat before the next trip.
-    #[serde(default)]
-    pub rest_until: i64,
     /// The next trip is a hard fight (`Command::Assault`); cleared when that trip is planned.
     #[serde(default)]
     pub force: bool,
@@ -496,7 +529,7 @@ pub struct Cycle {
     pub resources: Resources,
     /// Fractional production carried between hours (x10000).
     #[serde(default)]
-    pub carry: [i64; 4],
+    pub carry: [i64; crate::mech::economy::RES_N],
     pub inventory: Vec<String>,
     pub stats: CycleStats,
     /// Progress toward special operatives' visible conditions.
@@ -525,6 +558,9 @@ pub struct Cycle {
     /// 军械 levels this cycle, by track id.
     #[serde(default)]
     pub armory: BTreeMap<String, crate::mech::armory::Track>,
+    /// 用药线 skipped a heal for lack of medicine since it last healed (said once, `mech::medic`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub med_short: bool,
     /// What is unlocked (`mech::unlocks`); `None` is everything open, as in random-map games.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unlocks: Option<crate::mech::unlocks::Unlocks>,
@@ -569,6 +605,27 @@ pub struct Org {
     /// 见习任务 whose reward has been claimed.
     #[serde(default)]
     pub tasks_done: Vec<String>,
+    /// 用药线 settings (the rule itself is `rules[RULE_AUTO_MEDICATE]`).
+    #[serde(default)]
+    pub med_line: MedLine,
+}
+
+/// 用药线: heal operatives at home below `below_pct` of max HP to full, as long as medicine stays
+/// at or above `reserve`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MedLine {
+    pub below_pct: i32,
+    pub reserve: i64,
+}
+
+impl Default for MedLine {
+    fn default() -> Self {
+        let b = crate::data::balance();
+        MedLine {
+            below_pct: b.med_line_below_pct,
+            reserve: b.med_line_reserve,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -624,6 +681,18 @@ pub enum Trace {
     Command {
         t: i64,
         cmd: crate::mech::commands::Command,
+    },
+    /// Medicine spent on a heal (`mech::medic`): by the player, or by the 用药线 rule.
+    Heal {
+        t: i64,
+        cost: i64,
+        auto: bool,
+    },
+    /// An operative went down (HP 0); `wipe` when the whole trip party went down together.
+    Down {
+        t: i64,
+        op: u32,
+        wipe: bool,
     },
 }
 

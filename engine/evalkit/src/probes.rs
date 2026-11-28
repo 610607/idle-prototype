@@ -47,6 +47,7 @@ pub struct Probes {
     pace: Pace,
     fights: Fights,
     economy: Economy,
+    medic: Medic,
     series: strength::Series,
     timeline: payoff::Timeline,
     m: Metrics,
@@ -59,6 +60,7 @@ impl Probes {
             pace: Pace::default(),
             fights: Fights::default(),
             economy: Economy::default(),
+            medic: Medic::default(),
             series: strength::Series::new(),
             timeline: payoff::Timeline::new(),
             m: Metrics::new(),
@@ -70,6 +72,7 @@ impl Probes {
         self.timeline.on_step(e, t_h, traces);
         self.series.on_step(e, t_h, traces);
         self.fights.step(traces, self.deepest);
+        self.medic.step(e, t_h, traces);
         self.deepest = deepest_owned(&e.state);
         self.pace.step(t_h, self.deepest);
     }
@@ -94,6 +97,7 @@ impl Probes {
         self.economy.finish(e, hours, m);
         self.pace.finish(m);
         self.fights.finish(m);
+        self.medic.finish(m);
         let mags = self.series.finish(m, hours);
         let evs = self.timeline.finish(m, &mags, hours);
         (self.m, evs)
@@ -298,7 +302,10 @@ impl Fights {
                         self.edge.add(held);
                     }
                 }
-                Trace::Command { .. } | Trace::Event { .. } => {}
+                Trace::Command { .. }
+                | Trace::Event { .. }
+                | Trace::Heal { .. }
+                | Trace::Down { .. } => {}
             }
         }
     }
@@ -319,6 +326,60 @@ impl Fights {
             all: self.inside.all + self.edge.all,
         };
         m.insert("surge_lost.all".into(), lost(&all));
+    }
+}
+
+/// Health and medicine (`mech::medic`): where medicine went (healed by hand or by the 用药线),
+/// how often operatives went down and squads were wiped, and how long squads stood stopped in
+/// front of a fight they would win at full health.
+#[derive(Default)]
+struct Medic {
+    manual: i64,
+    auto: i64,
+    downs: i64,
+    /// Wipes, as distinct moments a whole trip party went down.
+    wipes: Vec<i64>,
+    /// Squad-hours stopped for HP, and when the last step ended.
+    stopped_h: f64,
+    last_h: f64,
+}
+
+impl Medic {
+    fn step(&mut self, e: &Engine, t_h: f64, traces: &[Trace]) {
+        for tr in traces {
+            match *tr {
+                Trace::Heal { cost, auto, .. } => {
+                    if auto {
+                        self.auto += cost;
+                    } else {
+                        self.manual += cost;
+                    }
+                }
+                Trace::Down { t, wipe, .. } => {
+                    self.downs += 1;
+                    if wipe && !self.wipes.contains(&t) {
+                        self.wipes.push(t);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let stopped = e
+            .state
+            .cycle
+            .squads()
+            .filter(|s| s.last.as_ref().is_some_and(|l| l.stop_hp))
+            .count() as f64;
+        self.stopped_h += stopped * (t_h - self.last_h).max(0.0);
+        self.last_h = t_h;
+    }
+
+    fn finish(&self, m: &mut Metrics) {
+        m.insert("medic.spent.manual".into(), Some(self.manual as f64));
+        m.insert("medic.spent.auto".into(), Some(self.auto as f64));
+        m.insert("medic.downs".into(), Some(self.downs as f64));
+        m.insert("medic.wipes".into(), Some(self.wipes.len() as f64));
+        m.insert("medic.stopped_hp_h".into(), Some(self.stopped_h));
     }
 }
 

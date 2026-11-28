@@ -8,6 +8,8 @@ export interface Resources {
   parts: number;
   intel: number;
   crystal: number;
+  /** 医疗 (absent while 0). */
+  medicine?: number;
 }
 
 export type Outcome = 'victory' | 'planned' | 'emergency' | 'wipe';
@@ -117,11 +119,31 @@ export interface OpView {
   gambits: Gambit[];
   assignment: Assignment;
   status: string;
+  health: HealthView;
   equipment?: ItemView;
   special?: string;
   locked: boolean;
   reads: Tag[];
   writes: Tag[];
+}
+
+/** engine/src/client/view.rs HealthView: current health, and the heal preview once healing is open. */
+export interface HealthView {
+  hp: number;
+  max: number;
+  down: boolean;
+  /** Seconds until a downed operative stands up by themselves. */
+  up_in?: number;
+  /** Out on a trip: `hp` is their health when it is back. */
+  away: boolean;
+  heal?: { full: number; reach: number; steps: { hp: number; cost: number }[] };
+}
+
+export interface MedLineView {
+  on: boolean;
+  below_pct: number;
+  reserve: number;
+  short: boolean;
 }
 
 export interface CandidateView {
@@ -277,9 +299,11 @@ export interface TripView {
   loot: Resources;
   drops: string[];
   /** Where the squad turned back: the next fight is not a sure win. */
-  stopped: { tile: number; label: string; outcome: Outcome | null; report: number | null } | null;
+  stopped: { tile: number; label: string; outcome: Outcome | null; report: number | null; low_hp: boolean } | null;
   forced: boolean;
   patrol: boolean;
+  /** Owned medical buildings passed (each healed the squad). */
+  healed_at?: number[];
 }
 
 export interface SquadView {
@@ -289,7 +313,6 @@ export interface SquadView {
   route: number[];
   running: TripView | null;
   last: TripView | null;
-  rest_until: number;
   trips: number;
   deepest: number;
   force: boolean;
@@ -404,7 +427,7 @@ export interface View {
   modifier: [string, string, string] | null;
   previews: PreviewView[];
   resources: Resources;
-  income: [number, number, number, number];
+  income: [number, number, number, number, number];
   power: [number, number, number];
   threat: { value: number; level_bp: number; strength_bp: number; next: number };
   self_sufficient: boolean;
@@ -429,6 +452,8 @@ export interface View {
   research?: ResearchView;
   armory?: ArmoryView[];
   tasks?: TasksView;
+  /** 用药线 (absent while locked). */
+  med_line?: MedLineView;
   /** Systems still locked (absent when everything is open: random-map games). */
   locked?: UnlockSystem[];
   /** The next one or two unlocks and how far along they are (absent when everything is open). */
@@ -442,7 +467,8 @@ export interface View {
 /** Command groups / view blocks the unlock registry gates (`data::unlocks::System`). */
 export type UnlockSystem =
   | 'dispatch' | 'routes' | 'squad' | 'claim' | 'build' | 'hire' | 'customize' | 'garrison' | 'policy' | 'priority'
-  | 'rules' | 'gambits' | 'equipment' | 'research' | 'tasks' | 'armory' | 'dial' | 'counter' | 'retire' | 'collapse';
+  | 'rules' | 'gambits' | 'equipment' | 'research' | 'tasks' | 'armory' | 'dial' | 'counter' | 'retire' | 'collapse'
+  | 'medicine' | 'med_line';
 
 export interface NextUnlock {
   id: string;
@@ -470,7 +496,7 @@ export interface Pace {
   min_trip_secs: number;
   econ_interval: number;
   output_mult: number;
-  rest_after_loss: number;
+  get_up_secs: number;
   surge_interval: number;
   surge_slots: number;
   tide_horizon: number;
@@ -736,4 +762,6 @@ export type Command =
   | { cmd: 'pick_doctrine'; doctrine: string }
   | { cmd: 'archive'; doctrine: string; on: boolean }
   | { cmd: 'upgrade'; track: string }
-  | { cmd: 'collapse' };
+  | { cmd: 'collapse' }
+  | { cmd: 'heal'; op: number; hp?: number }
+  | { cmd: 'set_med_line'; on: boolean; below_pct: number; reserve: number };

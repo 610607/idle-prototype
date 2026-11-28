@@ -11,7 +11,7 @@ use crate::data::{balance, content, Resources, TraitEffect};
 use crate::kernel::geom;
 use crate::mech::combat::{self, enemy_spec, BattleInput, BattleKind, Outcome, UnitSpec};
 use crate::mech::operative;
-use crate::mech::state::{EventKind, GameState, SpecialKind, TileResult, Trip};
+use crate::mech::state::{EventKind, GameState, Hurt, SpecialKind, TileResult, Trip};
 use crate::mech::world;
 use crate::{l10n, t, txt};
 use std::collections::BTreeMap;
@@ -149,14 +149,27 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
     if validate(state, &members, &squad.route).is_err() {
         return None;
     }
-    let specs: Vec<UnitSpec> = state
+    // Who goes: the members standing now, with their wounds (`mech::medic`). The downed stay home
+    // on their timer; a squad with nobody standing does not set out.
+    let mut party: Vec<Member> = state
         .cycle
         .member_ops(squad_id)
-        .map(operative::spec)
+        .filter(|o| !o.fighter().down)
+        .map(|o| Member {
+            id: o.id.0,
+            spec: operative::spec(o),
+            max: crate::mech::medic::max_hp(state, o),
+            hurt: Hurt {
+                damage: o.fighter().damage,
+                down: false,
+            },
+        })
         .collect();
-    if specs.is_empty() {
+    if party.is_empty() {
         return None;
     }
+    let mut healed_at = Vec::new();
+    let mut stop_hp = false;
     let mut walked = Vec::new();
     let mut results = Vec::new();
     let mut travel = 0i64;
@@ -190,19 +203,61 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
             if t.owned && world::is_border(&state.cycle, tile) {
                 patrolled += 1;
             }
+            // A medical building on the way: the downed stand up, everyone heals, once per
+            // building (a route never repeats a tile).
+            if let Some(bp) = crate::mech::medic::route_heal(&state.cycle, tile) {
+                if !healed_at.contains(&tile) {
+                    healed_at.push(tile);
+                    for m in party.iter_mut() {
+                        let gain = (m.max as i64 * bp as i64 / 10_000) as i32;
+                        let hp = crate::mech::medic::hp_of(&m.hurt, m.max);
+                        m.hurt = Hurt {
+                            damage: (m.max - (hp + gain).min(m.max)).max(0),
+                            down: false,
+                        };
+                    }
+                }
+            }
             continue;
+        }
+        let specs: Vec<UnitSpec> = party
+            .iter()
+            .filter(|m| !m.hurt.down)
+            .map(|m| UnitSpec {
+                damage: m.hurt.damage,
+                ..m.spec.clone()
+            })
+            .collect();
+        if specs.is_empty() {
+            stopped_at = Some(tile);
+            stop_hp = true;
+            break;
         }
         let input = route_battle(state, &specs, tile, false);
         let report = combat::simulate(&input);
         if !report.won() && !forced {
+            // Would the squad win it at full health? Then it stopped for lack of HP.
+            let hurt = party.iter().any(|m| m.hurt.down || m.hurt.damage > 0);
+            if hurt {
+                let full: Vec<UnitSpec> = party.iter().map(|m| m.spec.clone()).collect();
+                stop_hp = combat::simulate(&route_battle(state, &full, tile, false)).won();
+            }
             // Not a sure win: turn back in front of it (combat is deterministic, so this is the
             // fight the squad would have lost). Keep why, once per wall.
             stopped_at = Some(tile);
             stop_outcome = Some(report.outcome);
+            // The same fight as last time: same wall, nothing fought before it, same health.
+            let now_hp: BTreeMap<u32, Hurt> =
+                party.iter().map(|m| (m.id, m.hurt.clone())).collect();
             stop_report = squad
                 .last
                 .as_ref()
-                .filter(|l| l.stopped_at == Some(tile))
+                .filter(|l| {
+                    l.stopped_at == Some(tile)
+                        && results.is_empty()
+                        && l.results.is_empty()
+                        && l.hp == now_hp
+                })
                 .and_then(|l| l.stop_report)
                 .filter(|id| state.reports.iter().any(|(r, _)| r == id));
             if stop_report.is_none() {
@@ -218,6 +273,22 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
         crate::mech::doctrine::note(state, &report);
         inputs.push((tile, input.clone()));
         rounds += report.rounds;
+        for m in party.iter_mut() {
+            let key = format!("op:{}", m.id);
+            if let Some(u) = report.units.iter().find(|u| u.key == key) {
+                m.hurt = if !u.alive || u.hp <= 0 || report.outcome == Outcome::Wipe {
+                    Hurt {
+                        damage: m.max,
+                        down: true,
+                    }
+                } else {
+                    Hurt {
+                        damage: (u.max_hp - u.hp).max(0),
+                        down: false,
+                    }
+                };
+            }
+        }
         for u in &report.units {
             if let Some(id) = u
                 .key
@@ -265,6 +336,7 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
                 parts: loot.parts * y / 10_000,
                 intel: loot.intel * y / 10_000,
                 crystal: loot.crystal * y / 10_000,
+                medicine: loot.medicine * y / 10_000,
             };
             if outcome == Outcome::Wipe {
                 drops.clear();
@@ -292,7 +364,18 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
         stop_outcome,
         forced,
         patrol,
+        hp: party.into_iter().map(|m| (m.id, m.hurt)).collect(),
+        stop_hp,
+        healed_at,
     })
+}
+
+/// One operative on a trip: their battle spec at full health, max HP and health so far.
+struct Member {
+    id: u32,
+    spec: UnitSpec,
+    max: i32,
+    hurt: Hurt,
 }
 
 /// Apply a finished trip.
@@ -438,22 +521,25 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
             None,
             rid,
         );
-        if trip.outcome != Outcome::Planned || trip.forced {
-            state.cycle.squads[si].rest_until =
-                trip.end + crate::mech::pace::of(&state.cycle).rest_after_loss;
-        }
     }
+    // Health: what the trip left everyone with; the downed start their timer.
+    crate::mech::medic::commit(state, squad_id, &trip);
     // A new wall: say where the squad stopped and why (once, not every patrol).
     if let Some(at) = trip.stopped_at {
         let before = state.cycle.squads[si]
             .last
             .as_ref()
-            .and_then(|l| l.stopped_at);
-        if before != Some(at) {
+            .map(|l| (l.stopped_at, l.stop_hp));
+        if before != Some((Some(at), trip.stop_hp)) {
             let name = state.cycle.squads[si].name.clone();
+            let key = if trip.stop_hp {
+                "event.trip.stopped_hp"
+            } else {
+                "event.trip.stopped"
+            };
             state.event(
                 EventKind::Trip,
-                txt!("event.trip.stopped", squad = name, tile = geom::label(at)),
+                txt!(key, squad = name, tile = geom::label(at)),
                 Some(at),
                 None,
                 trip.stop_report,
@@ -484,11 +570,7 @@ pub fn try_start(state: &mut GameState, squad_id: u32, at: i64) -> bool {
     if state.cycle.squads[si].trip.is_some() {
         return false;
     }
-    let start = at.max(state.cycle.squads[si].rest_until);
-    if start > at {
-        return false;
-    }
-    match plan_trip(state, squad_id, start) {
+    match plan_trip(state, squad_id, at) {
         Some(trip) => {
             state.cycle.squads[si].trip = Some(trip);
             true
@@ -580,8 +662,8 @@ mod tests {
         assert_eq!(s.reports.len(), before + 1, "why it stopped, kept once");
         advance(&mut s, trip.end + 1);
         assert!(
-            s.cycle.squads[0].rest_until <= s.time,
-            "no rest after a stop"
+            s.cycle.operatives().all(|o| !o.fighter().down),
+            "nobody down after a stop"
         );
         // The next stop at the same wall keeps the same report.
         let again = s.cycle.squads[0].trip.clone().unwrap();
@@ -597,7 +679,12 @@ mod tests {
         assert_eq!(hard.results.len(), 1);
         assert_ne!(hard.outcome, Outcome::Victory);
         advance(&mut s, hard.end + 1);
-        assert!(s.cycle.squads[0].rest_until > hard.end);
+        // A wipe downs everyone who went (no squad rest any more: the get-up timer replaces it).
+        if hard.outcome == Outcome::Wipe {
+            assert!(hard.hp.values().all(|h| h.down));
+            assert!(s.cycle.operatives().all(|o| o.fighter().down));
+            assert!(s.cycle.squads[0].trip.is_none(), "nobody standing sets out");
+        }
     }
 
     #[test]

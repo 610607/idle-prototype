@@ -41,12 +41,15 @@ fn main() {
                         )
                     });
                     println!(
-                        "  h{h} {} members {:?} route {:?} last {:?} rest {}",
+                        "  h{h} {} members {:?} route {:?} last {:?} down {}",
                         s.name,
                         s.members,
                         s.route.iter().map(|t| geom::label(*t)).collect::<Vec<_>>(),
                         last,
-                        s.rest_until - e.state.time
+                        s.members
+                            .iter()
+                            .filter(|id| v.operatives.iter().any(|o| o.id == **id && o.health.down))
+                            .count()
                     );
                 }
                 let fr: Vec<_> = v

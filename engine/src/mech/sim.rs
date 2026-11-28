@@ -112,7 +112,7 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         squads: vec![],
         candidates: vec![],
         resources: Default::default(),
-        carry: [0; 4],
+        carry: [0; economy::RES_N],
         inventory: vec![],
         stats: Default::default(),
         special_progress: Default::default(),
@@ -124,6 +124,7 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         rerolls: 0,
         reactions: Default::default(),
         armory: Default::default(),
+        med_short: false,
         unlocks: None,
         map: None,
     }
@@ -155,6 +156,7 @@ pub fn new_game(seed: u64, now: i64, device: &str) -> GameState {
             known_doctrines: vec![],
             codex: Default::default(),
             tasks_done: vec![],
+            med_line: Default::default(),
         },
         cycle: empty_cycle(1, pv),
         events: vec![],
@@ -249,7 +251,6 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
             trip: None,
             last: None,
             trips: 0,
-            rest_until: 0,
             force: false,
         });
     }
@@ -347,7 +348,6 @@ pub fn start_map(state: &mut GameState, map: &str) -> Result<(), String> {
         trip: None,
         last: None,
         trips: 0,
-        rest_until: 0,
         force: false,
     }];
     state.cycle.roster = ops.iter().map(|o| o.id).collect();
@@ -490,14 +490,12 @@ impl Timeline for GameState {
         let every = pace.econ_interval;
         let mut next = (t / every + 1) * every;
         for s in &self.cycle.squads {
-            match &s.trip {
-                Some(trip) => next = next.min(trip.end.max(t + 1)),
-                None => {
-                    if !s.route.is_empty() && self.cycle.squad_size(s.id) > 0 && s.rest_until > t {
-                        next = next.min(s.rest_until);
-                    }
-                }
+            if let Some(trip) = &s.trip {
+                next = next.min(trip.end.max(t + 1));
             }
+        }
+        if let Some(up) = crate::mech::medic::next_up(&self.cycle, t) {
+            next = next.min(up);
         }
         for &i in border {
             next = next.min(defense::next_surge_after(pace, i, t));
@@ -507,10 +505,12 @@ impl Timeline for GameState {
 
     fn due(&self, (border, pace): &(Vec<u16>, Pace), t: i64) -> bool {
         t % pace.econ_interval == 0
-            || self.cycle.squads.iter().any(|s| {
-                s.trip.as_ref().is_some_and(|x| x.end == t)
-                    || (s.trip.is_none() && s.rest_until == t)
-            })
+            || self
+                .cycle
+                .squads
+                .iter()
+                .any(|s| s.trip.as_ref().is_some_and(|x| x.end == t))
+            || crate::mech::medic::next_up(&self.cycle, t - 1) == Some(t)
             || border
                 .iter()
                 .any(|i| defense::next_surge_after(pace, *i, t - 1) == t)
@@ -527,6 +527,8 @@ pub fn advance(state: &mut GameState, target: i64) {
 }
 
 fn process_instant(state: &mut GameState, border: &[u16], pace: &Pace, t: i64) {
+    // 0. Downed operatives whose timer ran out stand up.
+    crate::mech::medic::stand_up(state, t);
     // 1. Trips returning (in squad order), then start the next trip right away.
     let ids: Vec<u32> = state.cycle.squads.iter().map(|s| s.id).collect();
     for id in &ids {
@@ -618,6 +620,13 @@ fn self_sufficiency_tick(state: &mut GameState) {
 
 fn run_rules(state: &mut GameState) {
     let rules = state.org.rules.clone();
+    if rules
+        .get(hooks::RULE_AUTO_MEDICATE)
+        .copied()
+        .unwrap_or(false)
+    {
+        crate::mech::medic::med_line(state);
+    }
     if rules.get(hooks::RULE_AUTO_CLAIM).copied().unwrap_or(false) {
         for tile in actions::claimable_tiles(state) {
             let t = &state.cycle.tiles[tile as usize];

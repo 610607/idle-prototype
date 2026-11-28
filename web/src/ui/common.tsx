@@ -66,12 +66,13 @@ export function useCtx(): Ctx {
 // ---------------------------------------------------------------------------
 // Formatting
 
-export const RES_KEYS: (keyof Resources)[] = ['scrap', 'parts', 'intel', 'crystal'];
+export const RES_KEYS: (keyof Resources)[] = ['scrap', 'parts', 'intel', 'crystal', 'medicine'];
 export const RES_NAMES: Record<keyof Resources, string> = {
   scrap: t('common.res.scrap'),
   parts: t('common.res.parts'),
   intel: t('common.res.intel'),
   crystal: t('common.res.crystal'),
+  medicine: t('common.res.medicine'),
 };
 
 export function fmtIn(secs: number): string {
@@ -185,12 +186,12 @@ export function TagIO({ reads, writes }: { reads: Tag[]; writes: Tag[] }) {
 }
 
 export function Cost({ cost, have }: { cost: Resources; have?: Resources }) {
-  const parts = RES_KEYS.filter((k) => cost[k] > 0);
+  const parts = RES_KEYS.filter((k) => (cost[k] ?? 0) > 0);
   if (!parts.length) return <span className="faint">{t('common.cost.free')}</span>;
   return (
     <span className="row" style={{ gap: 8 }}>
       {parts.map((k) => (
-        <span key={k} className={'res-item ' + (have && have[k] < cost[k] ? 'bad' : '')}>
+        <span key={k} className={'res-item ' + (have && (have[k] ?? 0) < (cost[k] ?? 0) ? 'bad' : '')}>
           <Icon id={`res-${k}`} size={16} />
           <span className="num">{cost[k]}</span>
         </span>

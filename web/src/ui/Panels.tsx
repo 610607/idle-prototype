@@ -123,7 +123,7 @@ function Apprentice() {
     <Section title={t('panels.tasks.title')} icon="check" tone="hazard" hint={`${tasks.claimed}/${tasks.total}`}>
       <div className="stack" style={{ gap: 6 }}>
         {tasks.open.map((x) => {
-          const reward = RES_KEYS.filter((k) => x.reward[k] > 0).map((k) => `${RES_NAMES[k]} +${x.reward[k]}`);
+          const reward = RES_KEYS.filter((k) => (x.reward[k] ?? 0) > 0).map((k) => `${RES_NAMES[k]} +${x.reward[k]}`);
           return (
             <div key={x.id} className={'task-item' + (x.done ? ' done' : '')}>
               <div className="row">
@@ -297,8 +297,8 @@ function SquadCard({ s, color }: { s: SquadView; color: string }) {
       ? t('panels.squad.force_next')
       : trip
       ? t('panels.squad.on_route', { left: fmtIn(trip.end - now) })
-      : s.rest_until > now
-        ? t('panels.squad.resting', { left: fmtIn(s.rest_until - now) })
+      : members.every((m) => m.health.down)
+        ? t('panels.squad.all_down')
         : s.route.length
           ? t('panels.squad.ready')
           : t('panels.squad.no_route');
@@ -338,7 +338,7 @@ function SquadCard({ s, color }: { s: SquadView; color: string }) {
       ) : null}
       {stop ? (
         <div className="row wrap small warn" style={{ gap: 6, marginTop: 2 }}>
-          <span className="grow">{t('panels.squad.stopped', { tile: stop.label, outcome: stop.outcome ? OUTCOME_NAMES[stop.outcome] : '' })}</span>
+          <span className="grow">{t(stop.low_hp ? 'panels.squad.stopped_hp' : 'panels.squad.stopped', { tile: stop.label, outcome: stop.outcome ? OUTCOME_NAMES[stop.outcome] : '' })}</span>
           {stop.report !== null ? (
             <button className="btn small ghost" onClick={() => open({ kind: 'report', title: `${s.name} · ${stop.label}`, load: () => game.report(stop.report!) })}>
               {t('panels.squad.why')}
@@ -406,6 +406,28 @@ export function EventLog() {
 // ---------------------------------------------------------------------------
 // 队员 tab
 
+/** Current health as a bar: downed, out on a trip (as it will be when back), or at home. */
+export function HpBar({ o }: { o: OpView }) {
+  const h = o.health;
+  const pct = h.down ? 0 : Math.round((h.hp * 100) / Math.max(1, h.max));
+  const tone = h.down || pct < 30 ? 'var(--bad, #c0392b)' : pct < 60 ? 'var(--warn, #d68910)' : 'var(--good, #27ae60)';
+  const label = h.down
+    ? h.up_in !== undefined
+      ? t('panels.hp.down_in', { left: fmtIn(h.up_in) })
+      : t('panels.hp.down_away')
+    : h.away
+      ? t('panels.hp.back', { hp: h.hp, max: h.max })
+      : t('panels.hp.now', { hp: h.hp, max: h.max });
+  return (
+    <div className="tiny" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+      <span style={{ flex: '0 0 72px', height: 6, background: 'rgba(127,127,127,.25)', borderRadius: 3, overflow: 'hidden' }}>
+        <span style={{ display: 'block', width: `${pct}%`, height: '100%', background: tone }} />
+      </span>
+      <span className={h.down ? 'bad' : 'muted'}>{label}</span>
+    </div>
+  );
+}
+
 export function OpRow({ o, onClick, right }: { o: OpView; onClick?: () => void; right?: React.ReactNode }) {
   return (
     <button className="list-item" onClick={onClick}>
@@ -421,10 +443,43 @@ export function OpRow({ o, onClick, right }: { o: OpView; onClick?: () => void; 
         <div className="row wrap" style={{ gap: 4, marginTop: 2 }}>
           <TagIO reads={o.reads} writes={o.writes} />
         </div>
+        <HpBar o={o} />
         <div className="tiny muted">{o.status}</div>
       </div>
       {right}
     </button>
+  );
+}
+
+/** 用药线: on/off and the two lines (heal below a share of max HP; keep a reserve of medicine). */
+function MedLineRow() {
+  const { view, run } = useCtx();
+  const m = view.med_line!;
+  const set = (on: boolean, below_pct: number, reserve: number) =>
+    run({ cmd: 'set_med_line', on, below_pct, reserve }, t('panels.med_line.saved'));
+  return (
+    <div className="row wrap small" style={{ gap: 6, marginTop: 8 }}>
+      <b>{t('panels.med_line.title')}</b>
+      <span className={m.short ? 'bad' : 'muted'}>
+        {t(m.on ? 'panels.med_line.on' : 'panels.med_line.off', { pct: m.below_pct, reserve: m.reserve })}
+        {m.short ? t('panels.med_line.short') : ''}
+      </span>
+      <button className="btn small" onClick={() => set(!m.on, m.below_pct, m.reserve)}>
+        {t(m.on ? 'panels.med_line.turn_off' : 'panels.med_line.turn_on')}
+      </button>
+      <button className="btn small ghost" onClick={() => set(m.on, Math.max(10, m.below_pct - 10), m.reserve)}>
+        {t('panels.med_line.lower')}
+      </button>
+      <button className="btn small ghost" onClick={() => set(m.on, Math.min(100, m.below_pct + 10), m.reserve)}>
+        {t('panels.med_line.higher')}
+      </button>
+      <button className="btn small ghost" onClick={() => set(m.on, m.below_pct, Math.max(0, m.reserve - 10))}>
+        {t('panels.med_line.less')}
+      </button>
+      <button className="btn small ghost" onClick={() => set(m.on, m.below_pct, m.reserve + 10)}>
+        {t('panels.med_line.more')}
+      </button>
+    </div>
   );
 }
 
@@ -437,6 +492,7 @@ export function RosterPanel() {
           <OpRow key={o.id} o={o} onClick={() => open({ kind: 'op', op: o.id })} right={o.locked ? <Icon id="lock" className="faint" /> : null} />
         ))}
       </div>
+      {view.med_line ? <MedLineRow /> : null}
     </Section>
   );
   return (

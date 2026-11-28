@@ -30,6 +30,8 @@ pub const TUTORIAL_MAP: &str = "tutorial";
 pub const RULE_AUTO_CLAIM: &str = "auto_claim";
 pub const RULE_AUTO_RECRUIT: &str = "auto_recruit";
 pub const RULE_AUTO_COUNTER: &str = "auto_counter";
+/// 用药线 (`mech::medic::med_line`); `Command::SetMedLine` sets it with its two lines.
+pub const RULE_AUTO_MEDICATE: &str = "auto_medicate";
 /// Unlock profiles (`unlocks.json`, `profiles`) the start configurations name: random-map games
 /// start with everything open; the tutorial with chapter one's opening only.
 pub const PROFILE_DEFAULT: &str = "default";
@@ -63,7 +65,12 @@ pub fn check(c: &Content) -> Vec<String> {
     for id in [HQ_GUARD, MILITIA_UNIT] {
         need(c.defenders.contains_key(id), "defender", id);
     }
-    for id in [RULE_AUTO_CLAIM, RULE_AUTO_RECRUIT, RULE_AUTO_COUNTER] {
+    for id in [
+        RULE_AUTO_CLAIM,
+        RULE_AUTO_RECRUIT,
+        RULE_AUTO_COUNTER,
+        RULE_AUTO_MEDICATE,
+    ] {
         need(c.rule(id).is_some(), "rule", id);
     }
     for id in [PROFILE_DEFAULT, PROFILE_TUTORIAL] {
@@ -92,6 +99,7 @@ pub fn all() -> Vec<&'static str> {
         RULE_AUTO_CLAIM,
         RULE_AUTO_RECRUIT,
         RULE_AUTO_COUNTER,
+        RULE_AUTO_MEDICATE,
         TUTORIAL_MAP,
     ];
     v.extend(START_CREW);

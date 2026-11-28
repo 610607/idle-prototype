@@ -9,6 +9,7 @@ pub mod defense;
 pub mod doctrine;
 pub mod economy;
 pub mod mapgen;
+pub mod medic;
 pub mod operative;
 pub mod pace;
 pub mod pressure;

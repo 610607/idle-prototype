@@ -210,6 +210,7 @@ pub fn spec(op: &Operative) -> UnitSpec {
             .collect(),
         start_tags: vec![],
         fixture: false,
+        damage: 0,
     }
 }
 

@@ -16,6 +16,7 @@
     "fixture": { "atk": 16, "skills": ["mark_follow_up"] } },
   { "id": "clinic", "icon": "fac-clinic", "kind": "service", "profession": "medic", "jobs": 4, "power": 1,
     "cost": { "scrap": 45, "parts": 3 }, "trust": 4, "radius": 1,
+    "output": { "medicine": 2 }, "medical": true,
     "fixture": { "defender_effects": [{ "type": "regen", "bp": 500 }] } },
   { "id": "streetlamp", "icon": "fac-streetlamp", "kind": "service", "jobs": 0, "power": 1,
     "cost": { "scrap": 15, "parts": 2 }, "trust": 3, "enemy_tags": [["mark", 1]], "radius": 0 },

@@ -1,6 +1,7 @@
 //! Commands in: every player intent is one serialisable command. The same JSON goes through
 //! `apply` for real and through `dry_run` on a copy for previews.
 
+use crate::data::hooks;
 use crate::data::unlocks::System;
 use crate::data::Gambit;
 use crate::mech::actions;
@@ -123,6 +124,20 @@ pub enum Command {
         track: String,
     },
     Collapse,
+    /// Heal an operative with medicine to `hp` (full when absent); with too little medicine it
+    /// heals as far as the medicine goes (`mech::medic::heal`).
+    Heal {
+        op: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hp: Option<i32>,
+    },
+    /// 用药线: switch the rule and set its two lines (heal below `below_pct` of max HP, keep at
+    /// least `reserve` medicine).
+    SetMedLine {
+        on: bool,
+        below_pct: i32,
+        reserve: i64,
+    },
 }
 
 impl Command {
@@ -199,6 +214,12 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
         Command::ClaimTask { task } => crate::mech::tasks::claim(state, task),
         Command::Upgrade { track } => crate::mech::armory::upgrade(state, track),
         Command::Collapse => sim::collapse(state),
+        Command::Heal { op, hp } => crate::mech::medic::heal_command(state, *op, *hp),
+        Command::SetMedLine {
+            on,
+            below_pct,
+            reserve,
+        } => crate::mech::medic::set_med_line(state, *on, *below_pct, *reserve),
     };
     if r.is_ok() {
         state.revision += 1;
@@ -229,6 +250,10 @@ impl Command {
             }
             Command::SetPolicy { .. } => Some(System::Policy),
             Command::SetPriority { .. } => Some(System::Priority),
+            // 用药线 belongs with the other medicine controls, not the general rules.
+            Command::SetRule { rule, .. } if rule == hooks::RULE_AUTO_MEDICATE => {
+                Some(System::MedLine)
+            }
             Command::SetRule { .. } => Some(System::Rules),
             Command::SetGambits { .. } => Some(System::Gambits),
             Command::Equip { .. } => Some(System::Equipment),
@@ -239,6 +264,8 @@ impl Command {
             Command::ClaimTask { .. } => Some(System::Tasks),
             Command::Upgrade { .. } => Some(System::Armory),
             Command::Collapse => Some(System::Collapse),
+            Command::Heal { .. } => Some(System::Medicine),
+            Command::SetMedLine { .. } => Some(System::MedLine),
         }
     }
 }

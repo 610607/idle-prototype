@@ -168,6 +168,7 @@ mod tests {
             parts: 50,
             intel: 50,
             crystal: 50,
+            medicine: 50,
         });
         assert_eq!(s.cycle.resources, cap, "income past the cap is lost");
         assert_eq!(total(&s), score);

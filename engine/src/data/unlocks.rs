@@ -36,10 +36,14 @@ pub enum System {
     /// Retiring, locking operatives, sealing items.
     Retire,
     Collapse,
+    /// Healing operatives with medicine.
+    Medicine,
+    /// 用药线: the automatic heal and its two lines.
+    MedLine,
 }
 
 impl System {
-    pub const ALL: [System; 20] = [
+    pub const ALL: [System; 22] = [
         System::Dispatch,
         System::Routes,
         System::Squad,
@@ -60,6 +64,8 @@ impl System {
         System::Counter,
         System::Retire,
         System::Collapse,
+        System::Medicine,
+        System::MedLine,
     ];
 }
 

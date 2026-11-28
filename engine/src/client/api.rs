@@ -40,7 +40,7 @@ struct Ack<'a> {
 #[derive(Serialize, Clone, PartialEq)]
 pub struct Metrics {
     pub resources: Resources,
-    pub income: [i64; 4],
+    pub income: [i64; crate::mech::economy::RES_N],
     pub power: (i32, i32),
     pub border: usize,
     pub alerts: usize,
@@ -115,6 +115,13 @@ pub struct RoutePreview {
     pub seconds: Option<i64>,
     pub loot: Resources,
     pub drops: Vec<String>,
+    /// The route would turn back in front of this tile (not a sure win there), fighting nothing
+    /// past it; `outcome` then says how the turned-down fight would end.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stopped: Option<u16>,
+    /// It would turn back for lack of HP (it wins that fight at full health).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub low_hp: bool,
 }
 
 fn fmt_rate(v: i64) -> String {
@@ -292,20 +299,23 @@ impl Engine {
             t!("delta.res.parts"),
             t!("delta.res.intel"),
             t!("delta.res.crystal"),
+            t!("delta.res.medicine"),
         ];
         let ra = [
             a.resources.scrap,
             a.resources.parts,
             a.resources.intel,
             a.resources.crystal,
+            a.resources.medicine,
         ];
         let rb = [
             b.resources.scrap,
             b.resources.parts,
             b.resources.intel,
             b.resources.crystal,
+            b.resources.medicine,
         ];
-        for i in 0..4 {
+        for i in 0..names.len() {
             if ra[i] != rb[i] {
                 out.push(Delta {
                     label: names[i].clone(),
@@ -315,7 +325,7 @@ impl Engine {
                 });
             }
         }
-        for i in 0..4 {
+        for i in 0..names.len() {
             if a.income[i] != b.income[i] {
                 out.push(Delta {
                     label: t!("delta.income", res = names[i]),
@@ -647,6 +657,8 @@ impl Engine {
             seconds: None,
             loot: Resources::default(),
             drops: vec![],
+            stopped: None,
+            low_hp: false,
         };
         if let Err(e) = crate::mech::actions::set_route(&mut copy, squad, route) {
             return empty(e);
@@ -675,7 +687,10 @@ impl Engine {
             ok: true,
             error: None,
             steps,
-            outcome: Some(trip.outcome),
+            outcome: Some(match trip.stopped_at {
+                Some(_) => trip.stop_outcome.unwrap_or(trip.outcome),
+                None => trip.outcome,
+            }),
             minutes: (trip.end - trip.start + 59) / 60,
             seconds: self
                 .state
@@ -685,6 +700,8 @@ impl Engine {
                 .then_some(trip.end - trip.start),
             loot: trip.loot,
             drops: trip.drops,
+            stopped: trip.stopped_at,
+            low_hp: trip.stop_hp,
         }
     }
 

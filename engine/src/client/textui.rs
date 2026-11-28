@@ -74,6 +74,8 @@ pub fn reach(cmd: &Command) -> Reach {
         | Command::Reroll
         | Command::PickDoctrine { .. }
         | Command::Upgrade { .. }
+        | Command::Heal { .. }
+        | Command::SetMedLine { .. }
         | Command::ChooseMap { .. } => Reach::Menu,
         Command::SetSquad { .. }
         | Command::SetDial { .. }
@@ -184,6 +186,12 @@ pub fn samples() -> Vec<Command> {
             track: "arms".into(),
         },
         Command::Collapse,
+        Command::Heal { op: 2, hp: None },
+        Command::SetMedLine {
+            on: true,
+            below_pct: 50,
+            reserve: 20,
+        },
     ]
 }
 
@@ -444,6 +452,21 @@ fn gambit_line(o: &OpView, k: usize, g: &Gambit) -> String {
     )
 }
 
+/// Current health: "生命 a/b", downed with the timer, or as it will be when the trip is back.
+fn hp_text(o: &OpView) -> String {
+    let h = &o.health;
+    if h.down {
+        match h.up_in {
+            Some(s) => t!("cli.op.hp_down", max = h.max, s = s),
+            None => t!("cli.op.hp_down_away", max = h.max),
+        }
+    } else if h.away && h.hp < h.max {
+        t!("cli.op.hp_back", hp = h.hp, max = h.max)
+    } else {
+        t!("cli.op.hp", hp = h.hp, max = h.max)
+    }
+}
+
 /// Everything the web's operative page shows, one fact per line. `own` adds what only the
 /// player's operatives have (equipment, 战术); candidates show the rest, as on the web.
 fn op_line(o: &OpView, own: bool) -> String {
@@ -456,7 +479,7 @@ fn op_line(o: &OpView, own: bool) -> String {
         rarity = o.rarity_name,
         class = o.class_name,
         row = row(o.front),
-        hp = d.hp,
+        hp = hp_text(o),
         atk = d.atk,
         def = d.def,
         spd = d.spd,
@@ -535,6 +558,19 @@ fn op_line(o: &OpView, own: bool) -> String {
         })
         .collect();
     out.push(t!("cli.op.skills", list = none_or(&skills, &sep)));
+    if let Some(h) = &o.health.heal {
+        let steps: Vec<String> = h
+            .steps
+            .iter()
+            .map(|x| t!("cli.op.heal_step", hp = x.hp, cost = x.cost))
+            .collect();
+        out.push(t!(
+            "cli.op.heal",
+            full = h.full,
+            reach = h.reach,
+            steps = steps.join(&sep)
+        ));
+    }
     if own {
         if let Some(it) = &o.equipment {
             out.push(t!(
@@ -591,7 +627,7 @@ fn op_short(o: &OpView) -> String {
         rarity = o.rarity_name,
         class = o.class_name,
         row = row(o.front),
-        hp = o.derived.hp,
+        hp = hp_text(o),
         atk = o.derived.atk,
         def = o.derived.def,
         spd = o.derived.spd,
@@ -901,6 +937,37 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             ic = rate(v.income[3])
         ),
     );
+    if res.medicine > 0 || v.income[4] > 0 || v.shows(System::Medicine) {
+        line(
+            &mut o,
+            t!(
+                "cli.board.medicine",
+                n = res.medicine,
+                rate = rate(v.income[4]),
+                cap = crate::data::balance().storage_cap.medicine
+            ),
+        );
+    }
+    if v.med_line.is_open() {
+        let m = &*v.med_line;
+        line(
+            &mut o,
+            t!(
+                if m.on {
+                    "cli.board.med_line_on"
+                } else {
+                    "cli.board.med_line_off"
+                },
+                pct = m.below_pct,
+                reserve = m.reserve,
+                short = if m.short {
+                    t!("cli.board.med_line_short")
+                } else {
+                    String::new()
+                }
+            ),
+        );
+    }
     let cap = &crate::data::balance().storage_cap;
     let full = |have: i64, cap: i64| {
         if have >= cap {
@@ -1067,11 +1134,19 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
                 }
                 if let Some(st) = &trip.stopped {
                     text += &t!(
-                        "cli.board.stopped",
+                        if st.low_hp {
+                            "cli.board.stopped_hp"
+                        } else {
+                            "cli.board.stopped"
+                        },
                         tile = st.label,
                         outcome = outcome(st.outcome),
                         foes = foes_of(&v.tiles[st.tile as usize])
                     );
+                }
+                if !trip.healed_at.is_empty() {
+                    let at: Vec<String> = trip.healed_at.iter().map(|x| geom::label(*x)).collect();
+                    text += &t!("cli.board.route_healed", tiles = at.join(" "));
                 }
                 text
             })
@@ -1080,10 +1155,15 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             t!("cli.board.force_next")
         } else if s.running.is_some() {
             t!("cli.board.on_road")
-        } else if s.rest_until > v.time && v.pace.is_some() {
-            t!("cli.board.resting_secs", s = s.rest_until - v.time)
-        } else if s.rest_until > v.time {
-            t!("cli.board.resting", m = (s.rest_until - v.time) / 60)
+        } else if !s.members.is_empty()
+            && s.members.iter().all(|id| {
+                v.operatives
+                    .iter()
+                    .find(|o| o.id == *id)
+                    .is_some_and(|o| o.health.down)
+            })
+        {
+            t!("cli.board.all_down")
         } else {
             t!("cli.board.ready")
         };
@@ -1538,7 +1618,12 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
                     warden = tv.warden,
                     terrain = terrain(tv.terrain),
                     foes = foes,
-                    outcome = outcome(p.outcome),
+                    outcome = outcome(p.outcome)
+                        + &if p.low_hp {
+                            t!("cli.route.low_hp")
+                        } else {
+                            String::new()
+                        },
                     minutes = p.minutes,
                     seconds = p.seconds.unwrap_or(0)
                 ),
@@ -1817,6 +1902,65 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
                 },
             });
         }
+    }
+    // Heals: to full when the stock pays for it, else as far as it goes; the downed first.
+    let mut hurt: Vec<&OpView> = v
+        .operatives
+        .iter()
+        .filter(|o| o.health.heal.is_some())
+        .collect();
+    hurt.sort_by_key(|o| (!o.health.down, o.health.hp * 100 / o.health.max.max(1)));
+    for o in hurt {
+        let h = o.health.heal.as_ref().unwrap();
+        if h.reach <= o.health.hp && !(o.health.down && h.reach > 0) {
+            continue;
+        }
+        let have = v.resources.medicine;
+        let label = if h.full <= have {
+            t!(
+                "cli.menu.heal_full",
+                name = o.name,
+                hp = hp_text(o),
+                cost = h.full
+            )
+        } else {
+            t!(
+                "cli.menu.heal_part",
+                name = o.name,
+                hp = hp_text(o),
+                reach = h.reach,
+                max = o.health.max,
+                cost = have,
+                full = h.full
+            )
+        };
+        m.push(Item {
+            label,
+            cmd: Command::Heal { op: o.id, hp: None },
+        });
+    }
+    if v.med_line.is_open() {
+        let ml = &*v.med_line;
+        m.push(Item {
+            label: if ml.on {
+                t!(
+                    "cli.menu.med_line_off",
+                    pct = ml.below_pct,
+                    reserve = ml.reserve
+                )
+            } else {
+                t!(
+                    "cli.menu.med_line_on",
+                    pct = ml.below_pct,
+                    reserve = ml.reserve
+                )
+            },
+            cmd: Command::SetMedLine {
+                on: !ml.on,
+                below_pct: ml.below_pct,
+                reserve: ml.reserve,
+            },
+        });
     }
     for s in &v.squads {
         if s.members.is_empty() {

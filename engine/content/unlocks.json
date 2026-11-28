@@ -15,6 +15,19 @@
       "when": { "own_former": { "former": "housing", "n": 1 } },
       "after": "build"
     },
+    {
+      "id": "healing",
+      "gates": ["medicine"],
+      "when": { "built": { "facility": "clinic", "n": 1 } },
+      "after": "build"
+    },
+    {
+      "id": "med_line",
+      "gates": ["med_line"],
+      "rules": ["auto_medicate"],
+      "when": { "built": { "facility": "clinic", "n": 1 } },
+      "after": "healing"
+    },
     { "id": "routes", "gates": ["routes"], "when": "never" },
     {
       "id": "rules",

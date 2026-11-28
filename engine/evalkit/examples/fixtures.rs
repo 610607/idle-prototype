@@ -68,6 +68,7 @@ fn fixture(
         effects: effects.into_iter().map(|e| (key.to_string(), e)).collect(),
         start_tags: vec![],
         fixture: true,
+        damage: 0,
     }
 }
 

@@ -100,6 +100,9 @@ L2 指标按 id 记，每个种子一个值；`None` 表示这件事在这局没
 | `spend_gap.max_h`、`spend_hours.share` | 最长的“无事可花”间隔；有花钱的小时占比 | |
 | `research.draws`、`hired` | 研究次数、招募人数 | |
 | `armory.level.hN`、`armory.breaks.hN` | 军械三条线的等级合计、突破次数合计（`docs/prototype-v2.md`） | |
+| `medic.spent.manual`、`medic.spent.auto` | 这一局花掉的医疗：亲手治疗、用药线自动治疗（`Trace::Heal`） | 阶段 3 S4 |
+| `medic.downs`、`medic.wipes` | 队员倒下的次数（路线、守城、反击）；全灭的次数（一趟出去的人一起倒下，`Trace::Down`） | |
+| `medic.stopped_hp_h` | 小队因为血量不够停在墙前的时长，按小队累计的小时数（上一趟 `stop_hp`，按 5 分钟步长累加） | |
 
 指标按受策略影响的程度分三类，能设的区间也不同：
 

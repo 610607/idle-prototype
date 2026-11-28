@@ -605,6 +605,13 @@ pub struct Resources {
     pub intel: i64,
     #[serde(default)]
     pub crystal: i64,
+    /// 医疗: what healing operatives costs (`mech::medic`).
+    #[serde(default, skip_serializing_if = "is_zero_i64")]
+    pub medicine: i64,
+}
+
+fn is_zero_i64(v: &i64) -> bool {
+    *v == 0
 }
 
 impl Resources {
@@ -613,18 +620,21 @@ impl Resources {
             && self.parts >= cost.parts
             && self.intel >= cost.intel
             && self.crystal >= cost.crystal
+            && self.medicine >= cost.medicine
     }
     pub fn sub(&mut self, cost: &Resources) {
         self.scrap -= cost.scrap;
         self.parts -= cost.parts;
         self.intel -= cost.intel;
         self.crystal -= cost.crystal;
+        self.medicine -= cost.medicine;
     }
     pub fn add(&mut self, other: &Resources) {
         self.scrap += other.scrap;
         self.parts += other.parts;
         self.intel += other.intel;
         self.crystal += other.crystal;
+        self.medicine += other.medicine;
     }
     pub fn get(&self, key: &str) -> i64 {
         match key {
@@ -632,6 +642,7 @@ impl Resources {
             "parts" => self.parts,
             "intel" => self.intel,
             "crystal" => self.crystal,
+            "medicine" => self.medicine,
             _ => 0,
         }
     }
@@ -642,6 +653,7 @@ impl Resources {
         self.parts = f(self.parts, before.parts, cap.parts);
         self.intel = f(self.intel, before.intel, cap.intel);
         self.crystal = f(self.crystal, before.crystal, cap.crystal);
+        self.medicine = f(self.medicine, before.medicine, cap.medicine);
     }
     pub fn add_key(&mut self, key: &str, v: i64) {
         match key {
@@ -649,6 +661,7 @@ impl Resources {
             "parts" => self.parts += v,
             "intel" => self.intel += v,
             "crystal" => self.crystal += v,
+            "medicine" => self.medicine += v,
             _ => {}
         }
     }
@@ -658,9 +671,14 @@ impl Resources {
             && self.parts * 2 >= cost.parts
             && self.intel * 2 >= cost.intel
             && self.crystal * 2 >= cost.crystal
+            && self.medicine * 2 >= cost.medicine
     }
     pub fn is_zero(&self) -> bool {
-        self.scrap == 0 && self.parts == 0 && self.intel == 0 && self.crystal == 0
+        self.scrap == 0
+            && self.parts == 0
+            && self.intel == 0
+            && self.crystal == 0
+            && self.medicine == 0
     }
 }
 
@@ -707,6 +725,10 @@ pub struct FacilityDef {
     pub district_bp: BTreeMap<String, i32>,
     #[serde(default)]
     pub grounding: i32,
+    /// 医疗建筑: a squad whose route passes this building on owned ground stands its downed up and
+    /// heals everyone a share of max HP (`mech::medic::route_heal`, `route_heal_bp`).
+    #[serde(default)]
+    pub medical: bool,
     /// Stands with the defenders of surges within `radius` (one per facility kind per battle).
     #[serde(default)]
     pub fixture: Option<FixtureDef>,
@@ -976,7 +998,24 @@ pub struct Balance {
     pub travel_owned: i64,
     pub travel_unowned: i64,
     pub battle_round_secs: i64,
-    pub rest_after_loss: i64,
+    /// A downed operative stands up this long after getting home (random maps; fixed maps carry
+    /// their own pace), with `get_up_hp_bp` of max HP.
+    pub get_up_secs: i64,
+    pub get_up_hp_bp: i32,
+    /// Passing an owned medical building on a route: everyone heals this share of max HP, plus
+    /// `route_heal_level_bp` per building level above the first (levels do not exist yet).
+    pub route_heal_bp: i32,
+    pub route_heal_level_bp: i32,
+    /// Healing (`mech::medic::heal_cost`): healing from missing fraction m to full costs
+    /// `heal_full_cost` x (2^(g m) - 1) / (2^g - 1) medicine, g = `heal_growth_bp` / 10000; a partial
+    /// heal pays the difference between where it starts and where it ends.
+    pub heal_full_cost: i64,
+    pub heal_growth_bp: i32,
+    /// The view previews heals in steps of this many percent of max HP.
+    pub heal_step_pct: i32,
+    /// 用药线 defaults: heal at home below this percent of max HP, never below this much medicine.
+    pub med_line_below_pct: i32,
+    pub med_line_reserve: i64,
     /// Shortest trip, seconds (random maps; fixed maps carry their own pace).
     pub min_trip_secs: i64,
     /// Economy settlement interval, seconds (random maps).
@@ -1109,7 +1148,7 @@ impl Balance {
             min_trip_secs: self.min_trip_secs,
             econ_interval: self.econ_interval,
             output_mult: 1,
-            rest_after_loss: self.rest_after_loss,
+            get_up_secs: self.get_up_secs,
             surge_interval: self.surge_interval,
             surge_slots: self.surge_slots,
             tide_horizon: self.tide_horizon,
@@ -1209,6 +1248,7 @@ impl Default for ScoreDef {
                 parts: 10,
                 intel: 20,
                 crystal: 5,
+                medicine: 0,
             },
         }
     }

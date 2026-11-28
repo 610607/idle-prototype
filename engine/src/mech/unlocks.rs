@@ -503,7 +503,9 @@ mod tests {
         .unwrap();
         assert!(is_open(&s, "hire"));
         assert!(system_open(&s, System::Squad));
-        let names: Vec<String> = ["build", "hire"]
+        // The clinic also opens healing and, after it, the 用药线.
+        assert!(system_open(&s, System::Medicine) && system_open(&s, System::MedLine));
+        let names: Vec<String> = ["build", "hire", "healing", "med_line"]
             .iter()
             .map(|id| txt!("event.unlocked", name = l10n::name("unlock", id)).render())
             .collect();
@@ -523,7 +525,7 @@ mod tests {
         grant(&mut s, "routes");
         grant(&mut s, "routes");
         assert!(system_open(&s, System::Routes));
-        assert_eq!(unlock_events(&s).len(), 3);
+        assert_eq!(unlock_events(&s).len(), 5);
     }
 
     #[test]

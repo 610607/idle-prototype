@@ -9,7 +9,6 @@ use crate::data::{balance, content, FacilityDef, FixtureDef, Row, Tag, TraitEffe
 use crate::kernel::geom;
 use crate::mech::combat::{self, enemy_spec, BattleInput, BattleKind, BattleReport, UnitSpec};
 use crate::mech::economy::{self, EconCalc};
-use crate::mech::operative;
 use crate::mech::pressure;
 use crate::mech::state::{EventKind, GameState, Terrain, TideEntry};
 use crate::mech::world;
@@ -59,6 +58,7 @@ fn defender_unit(id: &str, name: &str, hp: i32, atk: i32, def_bonus: i32) -> Uni
         effects: vec![],
         start_tags: vec![],
         fixture: false,
+        damage: 0,
     }
 }
 
@@ -85,6 +85,7 @@ fn fixture_unit(f: &FacilityDef, fx: &FixtureDef) -> UnitSpec {
             .collect(),
         start_tags: vec![],
         fixture: true,
+        damage: 0,
     }
 }
 
@@ -191,10 +192,12 @@ pub fn surge_setup(
         Some(o) => o,
         None => world::defender_for(state, tile),
     };
+    // A downed operative stands nowhere; the rest fight with their wounds (`mech::medic`).
+    let defender = defender.filter(|id| state.op(*id).is_some_and(|o| !o.fighter().down));
     let mut allies = Vec::new();
     if let Some(id) = defender {
-        if let Some(op) = state.op(id) {
-            allies.push(operative::spec(op));
+        if let Some(spec) = state.op(id).and_then(crate::mech::medic::spec_of) {
+            allies.push(spec);
         }
     }
     allies.extend(base_defenders(state, calc, tile));
@@ -386,9 +389,10 @@ pub fn resolve_surge(state: &mut GameState, calc: &EconCalc, tile: u16) {
         });
     }
 
-    // Experience for the operative who stood here.
+    // Experience for the operative who stood here, and the wounds they keep.
     if let Some(id) = setup.defender {
         crate::mech::sim::apply_battle_counters(state, id, &report, held, "surges_held");
+        crate::mech::medic::after_battle(state, &report);
     }
     let district = state.cycle.district_of(tile);
     if held {

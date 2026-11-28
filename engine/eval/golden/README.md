@@ -16,6 +16,16 @@
 
 重记只在有意改动玩法之后做。重构期间任何一样变了，都先查原因，不重记。
 
+## 阶段 3 S4 重记（血量保留和医疗，2026-11-28）
+
+S4 有意改了正式局的玩法（血量跨战斗保留、倒下读条取代“输了全队歇 30 分钟”、新资源医疗、治疗和用药线），`SAVE_VERSION` 7 → 8。
+
+- **战斗报告**：109 场一场没变，没有重记。这些战斗都是满血开打（`UnitSpec::damage` 为 0 时不序列化，开打血量和以前一样）。
+- **局面轨迹**：六个参考玩家都重记了（`eval golden --bless`）。从第 0 小时起局面数据就不同：多了血量、医疗、用药线这些字段，小队少了 `rest_until`。
+- **文字快照**：重记了，sha256 见下面“文字快照”一节。
+- **会话重放**：下面“会话重放”表里那 5 个会话是在 S4 之前玩的，现在重放都是过期（存档对不上，或者有命令被拒绝：`没有这名队员`），`eval session` 把它们标成 `session.stale`，只保留 `llm.feel.*`、`llm.score.*`。录像原样留着，不重记。
+- **读数**：`baseline-pre-refactor/` 是重构前的玩法，S4 以后不再逐字相等，留作对照。
+
 ## 战斗报告
 
 `tests/golden.rs` 在一局固定的游戏（种子 20261128，选第 1 张地图）上用 `route_battle`、`surge_setup`、`operative::spec`、`militia_units` 造出 109 场战斗，每场带记录结算，把整份报告的 JSON 取摘要（`kernel::hash::fnv64`）。文件里一场一行：名字、结果、回合数、清掉几波、日志条数、摘要。对不上时失败信息里写场次名和两边的这一行。
@@ -82,17 +92,17 @@ cargo run -q --release --example eval -- session eval/sessions/*/*/ --bless
 | `2026-11-28/haiku-casual-s0`、`haiku-conqueror-s0`、`haiku-planner-s0` | 重放出的存档和 `save_sha` 不同 |
 | `2026-11-28/` 其余 9 个 | 重放时有命令被拒绝 |
 
-所以重构期间会话重放这一项能用的是上面 5 个。
+所以重构期间会话重放这一项能用的是上面 5 个。**阶段 3 S4 起这 5 个也过期了**（S4 之前录的，见上面“阶段 3 S4 重记”），重放只读体感和打分。
 
 ## 文字快照
 
 ```bash
 cargo run -q --release --example text_snapshot -- /tmp/snap.txt
-sha256sum /tmp/snap.txt     # 应为 af105b6901490fa0437086c5d51228d973798d9f52a3290ed5c8ede8e43c260d
+sha256sum /tmp/snap.txt     # 应为 d51e6a721f3e9f4629dcece27ee073845b949d53006c413ebe359c8a6d4f63cd（S4 重记）
 xz -dc eval/golden/text_snapshot.txt.xz | diff - /tmp/snap.txt | head     # 不同时看是哪一段
 ```
 
-输出是确定的（连跑两次逐字节相同），但有 39 MB、11606 行，所以存的是 `xz -9` 压过的（332 KB）。先比 sha256，不同再解压找是哪一段（每段以 `## ` 开头，写着种子和小时）。
+输出是确定的（连跑两次逐字节相同），但有 45 MB、12741 行，所以存的是 `xz -9` 压过的（360 KB）。S4 之前是 39 MB、11606 行，sha256 `af105b69…c260d`。先比 sha256，不同再解压找是哪一段（每段以 `## ` 开头，写着种子和小时）。
 
 ## 用时
 

@@ -300,12 +300,15 @@ function TopBar() {
       {view.phase === 'active' ? (
         <div className="res">
           {RES_KEYS.map((k, i) => {
-            const cap = game.balance.storage_cap[k];
-            const full = view.resources[k] >= cap;
+            const cap = game.balance.storage_cap[k] ?? 0;
+            const have = view.resources[k] ?? 0;
+            // Medicine shows once there is any, or a clinic makes it, or healing is open.
+            if (k === 'medicine' && !have && !view.income[i] && (view.locked ?? []).includes('medicine')) return null;
+            const full = have >= cap;
             return (
             <span key={k} className={'res-item' + (full ? ' bad' : '')} title={full ? t('app.res.full', { name: RES_NAMES[k], cap }) : RES_NAMES[k]}>
               <Icon id={`res-${k}`} />
-              <span className="num">{full ? `${view.resources[k]}/${cap}` : view.resources[k]}</span>
+              <span className="num">{full ? `${have}/${cap}` : have}</span>
               {view.income[i] ? <span className="rate">{t('delta.per_hour', { v: fmtRate(view.income[i]!) })}</span> : null}
             </span>
             );

@@ -226,6 +226,7 @@ pub fn counter(state: &mut GameState, tile: u16) -> ActResult {
         .ok_or_else(|| t!("err.no_enemy"))?;
     let report = combat::simulate(&setup.input);
     crate::mech::doctrine::note(state, &report);
+    crate::mech::medic::after_battle(state, &report);
     let mut rec = setup.input.clone();
     rec.record = true;
     let rid = state.store_report(combat::simulate(&rec));

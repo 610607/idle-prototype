@@ -3,7 +3,7 @@ import { t, tn } from '../i18n';
 import { Icon } from '../icons';
 import type { Cond, DistrictView, DryRun, Gambit, OpView, Target } from '../types';
 import { Bar, DryRunView, fmtIn, OUTCOME_NAMES, Page, Rarity, RES_KEYS, RES_NAMES, Section, SQUAD_HEX, TagIO, useCtx } from './common';
-import { OpRow, TideRows } from './Panels';
+import { HpBar, OpRow, TideRows } from './Panels';
 
 // ---------------------------------------------------------------------------
 // Gambit wording
@@ -81,6 +81,35 @@ export function OpSheet({ op, onClose }: { op: number; onClose: () => void }) {
   );
 }
 
+/** Health and the heal buttons: to full, or the steps the engine previews (each with its cost). */
+function HealBlock({ o }: { o: OpView }) {
+  const { view, run } = useCtx();
+  const h = o.health;
+  const heal = h.heal;
+  const have = view.resources.medicine ?? 0;
+  return (
+    <div style={{ margin: '6px 0' }}>
+      <HpBar o={o} />
+      {heal ? (
+        <div className="row wrap small" style={{ gap: 6, marginTop: 4 }}>
+          <span className="muted">{t('sheets.heal.title', { have })}</span>
+          {heal.steps.map((s) => (
+            <button
+              key={s.hp}
+              className="btn small"
+              disabled={have <= 0}
+              title={s.cost > have ? t('sheets.heal.short', { reach: heal.reach }) : ''}
+              onClick={() => run({ cmd: 'heal', op: o.id, hp: s.hp }, t('sheets.heal.done', { name: o.name }))}
+            >
+              {t('sheets.heal.to', { hp: s.hp, cost: s.cost })}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function OpDetail({ o }: { o: OpView }) {
   const { game } = useCtx();
   const d = o.derived;
@@ -90,6 +119,7 @@ export function OpDetail({ o }: { o: OpView }) {
         {o.origin} · {o.status}
         {o.special ? t('sheets.op.special') : ''}
       </div>
+      <HealBlock o={o} />
       <div className="stat-tiles">
         {(
           [
@@ -756,7 +786,7 @@ function TripBlock({ squad }: { squad: number }) {
       </div>
       <div className="row wrap small" style={{ gap: 10, marginTop: 6 }}>
         <span className="muted">{t('sheets.trip.loot')}</span>
-        {RES_KEYS.filter((k) => trip.loot[k] > 0).map((k) => (
+        {RES_KEYS.filter((k) => (trip.loot[k] ?? 0) > 0).map((k) => (
           <span key={k} className="res-item">
             <Icon id={`res-${k}`} size={14} />
             {RES_NAMES[k]} <span className="num">{trip.loot[k]}</span>

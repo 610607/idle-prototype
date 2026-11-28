@@ -32,6 +32,9 @@
     "event.trip.emergency": { "class": "trip", "tier": 0, "novel": false },
     "event.trip.wiped": { "class": "trip", "tier": 0, "novel": false },
     "event.trip.stopped": { "class": "trip", "tier": 0, "novel": false },
+    "event.trip.stopped_hp": { "class": "trip", "tier": 0, "novel": false },
+    "event.medic.down": { "class": "trip", "tier": 0, "novel": false },
+    "event.medic.stood_up": { "class": "trip", "tier": 0, "novel": false },
     "event.counter.lost": { "class": "counter", "tier": 0, "novel": false },
     "event.abandoned": { "class": "abandoned", "tier": 0, "novel": false },
     "event.retired.left": { "class": "retired", "tier": 0, "novel": false },
@@ -44,6 +47,7 @@
 
     "event.rule.claimed": { "class": "auto", "tier": 0 },
     "event.rule.hired": { "class": "auto", "tier": 0 },
-    "event.rule.countered": { "class": "auto", "tier": 0 }
+    "event.rule.countered": { "class": "auto", "tier": 0 },
+    "event.rule.med_short": { "class": "auto", "tier": 0 }
   }
 }

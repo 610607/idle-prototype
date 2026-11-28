@@ -25,8 +25,8 @@ pub struct Pace {
     pub econ_interval: i64,
     /// 产出倍数：一小时的产出在 `3600 / output_mult` 秒里出完。必须整除 3600。
     pub output_mult: i64,
-    /// 打输以后休整多久。
-    pub rest_after_loss: i64,
+    /// 倒下的队员回到家以后多久站起来（读条）。
+    pub get_up_secs: i64,
     /// 每格多久来一次潮；0 是不来潮。
     pub surge_interval: i64,
     /// 来潮错开成几个时段（各格的相位是 `surge_interval / surge_slots` 的整数倍）。
@@ -68,6 +68,9 @@ impl Pace {
         }
         if self.surge_interval < 0 || (self.surge_interval > 0 && self.surge_slots <= 0) {
             errs.push(format!("{ctx}: surges need slots"));
+        }
+        if self.get_up_secs < 1 {
+            errs.push(format!("{ctx}: get_up_secs must be positive"));
         }
         if self.travel_owned < 0 || self.travel_unowned < 0 || self.min_trip_secs < 1 {
             errs.push(format!("{ctx}: travel and trip times must be positive"));

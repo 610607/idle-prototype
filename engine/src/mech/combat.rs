@@ -71,6 +71,14 @@ pub struct UnitSpec {
     /// lends its rule changes to its side.
     #[serde(default)]
     pub fixture: bool,
+    /// HP missing when the battle starts (an operative's carried wounds, `mech::medic`): the unit
+    /// starts at `max_hp - damage`, at least 1. Applied after every bonus to `max_hp`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub damage: i32,
+}
+
+fn is_zero(v: &i32) -> bool {
+    *v == 0
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -296,6 +304,7 @@ pub fn enemy_spec(id: &str, ring: i32, mult_bp: i32) -> UnitSpec {
         effects: vec![],
         start_tags: e.start_tags.clone(),
         fixture: false,
+        damage: 0,
     }
 }
 
@@ -348,7 +357,7 @@ impl Unit {
             side,
             row: spec.row,
             slot,
-            hp: spec.max_hp,
+            hp: (spec.max_hp - spec.damage.max(0)).max(1),
             max_hp: spec.max_hp,
             shield: 0,
             atk: spec.atk,
@@ -2593,6 +2602,7 @@ mod tests {
             effects: vec![],
             start_tags: vec![],
             fixture: false,
+            damage: 0,
         }
     }
 

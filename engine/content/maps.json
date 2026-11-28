@@ -36,7 +36,7 @@
       "min_trip_secs": 2,
       "econ_interval": 5,
       "output_mult": 120,
-      "rest_after_loss": 15,
+      "get_up_secs": 15,
       "surge_interval": 0,
       "surge_slots": 8,
       "tide_horizon": 0

@@ -141,6 +141,7 @@ pub fn profile() -> Profile {
         effects: vec![],
         start_tags: vec![],
         fixture: false,
+        damage: 0,
     };
     for id in c.enemies.keys() {
         let e = combat::enemy_spec(id, 4, 10_000);
