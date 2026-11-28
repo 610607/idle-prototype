@@ -494,7 +494,11 @@ pub struct FacilityOption {
     pub profession: Option<String>,
     pub jobs: i32,
     pub power: i32,
+    /// What the next one costs (`mech::cost::build_price`: the base cost grows with each one
+    /// already standing).
     pub cost: Resources,
+    /// How many stand on owned tiles.
+    pub built: u32,
     pub desc: String,
     pub visible: bool,
     pub affordable: bool,
@@ -887,6 +891,9 @@ pub struct View {
     pub next: Vec<NextView>,
     /// Departments the player can see (`departments_view`).
     pub departments: Vec<DepartmentView>,
+    /// What the next claim costs (`mech::cost::claim_price`); absent between cycles.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub claim_price: Option<Resources>,
     /// The part of the board a fixed map uses; absent on random maps (the whole board).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Bounds>,
@@ -1466,6 +1473,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             locked: unlocks::locked_systems(state),
             next: next_view(state),
             departments: departments_view(state),
+            claim_price: None,
             bounds: None,
             pace: None,
         };
@@ -1666,7 +1674,13 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         c.facilities
             .iter()
             .filter(|f| unlocks::facility_open(state, &f.id))
-            .map(|f| FacilityOption {
+            .map(|f| {
+                (
+                    f,
+                    crate::mech::cost::build_price(state, &f.id).unwrap_or_default(),
+                )
+            })
+            .map(|(f, price)| FacilityOption {
                 id: f.id.clone(),
                 name: f.name.clone(),
                 icon: f.icon.clone(),
@@ -1674,10 +1688,11 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 profession: f.profession.clone(),
                 jobs: f.jobs,
                 power: f.power,
-                cost: f.cost.clone(),
+                affordable: cy.resources.covers(&price),
+                cost: price,
+                built: crate::mech::cost::built(cy, &f.id),
                 desc: f.desc.clone(),
                 visible: cy.seen_facilities.contains(&f.id) || cy.resources.half_covers(&f.cost),
-                affordable: cy.resources.covers(&f.cost),
             })
             .collect()
     });
@@ -1910,6 +1925,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         locked: unlocks::locked_systems(state),
         next: next_view(state),
         departments: departments_view(state),
+        claim_price: Some(crate::mech::cost::claim_price(state)),
         bounds: fixed.map(|f| f.0),
         pace: fixed.map(|f| f.1),
     }

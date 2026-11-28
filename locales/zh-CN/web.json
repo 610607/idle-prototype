@@ -492,5 +492,6 @@
   "panels.dept.title": "部门",
   "panels.dept.founded": "已成立",
   "panels.dept.found": "成立",
-  "panels.dept.done": "成立了{name}"
+  "panels.dept.done": "成立了{name}",
+  "tile.claim.price": "占领花费（每占一格都更贵）："
 }

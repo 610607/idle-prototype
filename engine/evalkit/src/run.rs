@@ -208,6 +208,7 @@ impl Persona {
             Style::Explorer => Policy {
                 deep_first: true,
                 assault: true,
+                dispatch: true,
                 ..base
             },
             Style::Builder => Policy {

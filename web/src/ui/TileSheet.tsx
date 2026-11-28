@@ -126,6 +126,11 @@ function ClaimBlock({ t }: { t: TileView }) {
     <div className="card striped good">
       <Section title={t.terrain === 'rift' ? tr('tile.claim.title_rift') : tr('tile.claim.title')} icon="check" tone="good" hint={tr('tile.claim.hint')}>
         {line && <p className="small" style={{ margin: '0 0 6px' }}>{line.text}</p>}
+        {view.claim_price ? (
+          <p className="small" style={{ margin: '0 0 6px' }}>
+            {tr('tile.claim.price')} <Cost cost={view.claim_price} have={view.resources} />
+          </p>
+        ) : null}
         <DryRunView dry={dry} />
         <div className="row" style={{ marginTop: 8, gap: 6 }}>
           {guard && <ClaimButton tile={t.i} ok={dry.ok} guard={guard.id} label={tr('tile.claim.button_guard', { name: guard.name })} />}

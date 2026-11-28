@@ -237,18 +237,45 @@ fn the_gate_needs_a_second_operative() {
     }
 }
 
-/// Win the fight on `tile` with the first squad (a manual dispatch), then claim it.
-fn win_and_claim(e: &mut Engine, tile: u16) {
+/// One manual dispatch of the first squad to `tile`, to its return: it stands by afterwards.
+fn sortie(e: &mut Engine, tile: u16) {
     let sq = e.state.cycle.squads().next().unwrap().id;
     e.command(&Command::Dispatch { squad: sq, tile }).unwrap();
     let t = e.state.time;
     e.advance(t + 6);
+    let s = e.state.cycle.squad(sq).unwrap();
+    assert!(
+        s.trip.is_none() && s.route.is_empty(),
+        "back and standing by"
+    );
+}
+
+/// Win the fight on `tile` with manual dispatches, again until the claim is affordable (every
+/// win brings loot), then claim it at the price the view shows.
+fn win_and_claim(e: &mut Engine, tile: u16) {
+    sortie(e, tile);
     assert!(e.state.cycle.is_claimable(tile), "{}", geom::label(tile));
+    let price = e.view().claim_price.unwrap();
+    while !e.state.cycle.resources.covers(&price) {
+        sortie(e, tile);
+    }
+    let before = e.state.cycle.resources.scrap;
     e.command(&Command::Claim {
         tile,
         garrison: None,
     })
     .unwrap();
+    assert_eq!(before - e.state.cycle.resources.scrap, price.scrap);
+}
+
+fn dispatched(e: &Engine) -> i32 {
+    use idle_engine::data::unlocks::Action;
+    e.state
+        .cycle
+        .done
+        .get(&Action::Dispatch)
+        .copied()
+        .unwrap_or(0) as i32
 }
 
 /// The tutorial map starts with the tutorial unlock profile: only dispatching and claiming;
@@ -338,20 +365,27 @@ fn chapter_one_opening_dispatches_founds_the_dispatch_office_and_sets_a_route() 
         1,
         "only the dispatch office in chapter one"
     );
-    for (k, tile) in [at(0, -1), at(-1, -1), at(-2, -1), at(1, -1), at(-2, -2)]
-        .into_iter()
-        .enumerate()
-    {
+    // Claims get dearer: 10, 14, 19 scrap for the first three (balance.json costs).
+    let mut prices = vec![];
+    for tile in [at(0, -1), at(-1, -1), at(-2, -1)] {
+        prices.push(e.view().claim_price.unwrap().scrap);
         let d = dept(&mut e);
-        assert_eq!((d.have, d.need, d.ready), (k as i32, 5, false));
-        assert!(e.command(&found).is_err());
+        assert_eq!((d.have, d.need), (dispatched(&e).min(5), 5));
         win_and_claim(&mut e, tile);
-        let s = e.state.cycle.squad(sq).unwrap();
-        assert!(
-            s.trip.is_none() && s.route.is_empty(),
-            "back and standing by"
-        );
-        assert_eq!(s.trips, k as u32 + 1);
+    }
+    assert_eq!(prices, [10, 14, 19]);
+    while dispatched(&e) < 5 {
+        assert!(e.command(&found).is_err());
+        sortie(&mut e, at(1, -1));
+    }
+    let cost = content()
+        .departments
+        .get("dispatch_office")
+        .unwrap()
+        .cost
+        .clone();
+    while !e.state.cycle.resources.covers(&cost) {
+        sortie(&mut e, at(1, -1));
     }
     let d = dept(&mut e);
     assert!(d.ready && d.can_found, "{:?}", e.state.cycle.resources);

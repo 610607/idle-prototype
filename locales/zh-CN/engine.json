@@ -212,5 +212,6 @@
   "err.squad_empty": "小队里没有人",
   "err.no_department": "没有这个部门",
   "err.department_founded": "{name}已经成立了",
-  "err.department_not_ready": "还没到成立的条件（{have}/{need}）"
+  "err.department_not_ready": "还没到成立的条件（{have}/{need}）",
+  "err.claim_cost": "废材不够：占下这一格要{scrap}废材"
 }

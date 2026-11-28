@@ -1072,6 +1072,8 @@ pub struct Balance {
     pub org_perks: OrgPerks,
     /// Surge forecast (tide table, pending warnings, previews), seconds ahead.
     pub tide_horizon: i64,
+    /// Claim and building prices (`mech::cost`); a fixed map may bring its own.
+    pub costs: maps::Costs,
     /// Full warden: a tile can be claimed, counter-attacks restore towards it.
     pub warden_max: i32,
     /// Talent gain per retired instructor of that profession in the district, x10000.

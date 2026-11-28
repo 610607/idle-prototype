@@ -321,7 +321,10 @@ export interface FacilityOption {
   profession: string | null;
   jobs: number;
   power: number;
+  /** What the next one costs (grows with each one already standing). */
   cost: Resources;
+  /** How many stand on owned tiles. */
+  built: number;
   desc: string;
   visible: boolean;
   affordable: boolean;
@@ -453,6 +456,8 @@ export interface View {
   next?: NextUnlock[];
   /** Departments the player can see. */
   departments: DepartmentView[];
+  /** What the next claim costs (grows with every tile claimed this cycle); absent between cycles. */
+  claim_price?: Resources;
   /** The part of the board a fixed map uses (absent: the whole board). */
   bounds?: Bounds;
   /** A fixed map's pace (absent on random maps). */

@@ -44,6 +44,10 @@ pub struct Policy {
     /// surges weak. Design v2 wants
     /// this to pay less than playing straight (docs/design-v2-plan.md 阶段 1).
     pub sandbag: bool,
+    /// Opening by hand: a squad's first sorties of a cycle are manual dispatches (`dispatch`,
+    /// one fight and back) until the dispatch office could be founded, then routes as usual (the
+    /// explorer's style; the reference play routes from the start).
+    pub dispatch: bool,
 }
 
 /// What a persona puts first. Each focus other than `Expand` uses commands the reference play
@@ -75,6 +79,7 @@ impl Policy {
         tactics: false,
         assault: false,
         sandbag: false,
+        dispatch: false,
     };
 
     /// `GREEDY`, with research off when the environment sets `BOT_NORESEARCH` (the switch the
@@ -164,6 +169,29 @@ fn route_for(deep_first: bool, e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
     targets.first().map(|(_, t)| vec![*t])
 }
 
+/// The nearest tile next to the territory a one-fight dispatch wins (none: route as usual).
+fn dispatch_for(e: &mut Engine, squad: u32) -> Option<u16> {
+    let v = e.view();
+    let mut targets: Vec<(i32, u16)> = v
+        .tiles
+        .iter()
+        .filter(|t| {
+            t.revealed
+                && !t.owned
+                && t.terrain != "barrier"
+                && !t.enemies.is_empty()
+                && geom::neighbors(t.i).any(|n| v.tiles[n as usize].owned)
+        })
+        .map(|t| (t.claimable as i32 * 100 + t.ring, t.i))
+        .collect();
+    targets.sort();
+    targets.into_iter().map(|(_, t)| t).find(|t| {
+        let p = e.preview_route(squad, &[*t]);
+        p.ok && p.steps.first().is_some_and(|s| s.fought)
+            && p.outcome == Some(idle_engine::mech::combat::Outcome::Victory)
+    })
+}
+
 impl Bot {
     pub fn new(policy: Policy) -> Bot {
         Bot {
@@ -239,6 +267,12 @@ impl Bot {
                 .map(|t| t.i)
                 .collect::<Vec<_>>()
             {
+                // Claims cost more each time (`balance.costs`): keep enough for a build.
+                let price = idle_engine::mech::cost::claim_price(&e.state);
+                let have = &e.state.cycle.resources;
+                if have.scrap - price.scrap < CLAIM_RESERVE || !have.covers(&price) {
+                    break;
+                }
                 let _ = self.act(
                     e,
                     &Command::Claim {
@@ -248,6 +282,7 @@ impl Bot {
                 );
             }
         }
+        self.found(e);
         self.districts(e);
         if self.policy.tactics {
             self.queue(e);
@@ -338,7 +373,16 @@ impl Bot {
             let wall = sq.last.as_ref().and_then(|l| l.stopped.as_ref());
             if !sq.members.is_empty() && (stale || wall.is_some()) {
                 if let Some(r) = route_for(self.policy.deep_first, e, s.id) {
-                    if r != sq.route {
+                    let hand = if self.by_hand(e) && sq.running.is_none() {
+                        dispatch_for(e, s.id)
+                    } else {
+                        None
+                    };
+                    if let Some(tile) = hand {
+                        let _ = self.act(e, &Command::Dispatch { squad: s.id, tile });
+                    } else if self.by_hand(e) && sq.running.is_some() {
+                        // Out on a dispatch: the next one when it is back.
+                    } else if r != sq.route {
                         let _ = self.act(
                             e,
                             &Command::SetRoute {
@@ -505,6 +549,13 @@ const ARM_STEPS: usize = 6;
 /// Scrap the bot keeps after hiring.
 const HIRE_RESERVE: i64 = 40;
 
+/// Scrap the bot keeps after a claim (claims grow in price; this leaves a base-price build).
+const CLAIM_RESERVE: i64 = 60;
+
+/// Manual dispatches the opening-by-hand play makes before it routes (the dispatch office's
+/// condition in `departments.json`).
+const HAND_DISPATCHES: u32 = 5;
+
 /// The research focus swaps a draw whose best offer wires into fewer held doctrines than this.
 const REROLL_LINKS: usize = 2;
 
@@ -521,6 +572,38 @@ fn lost_in(tide: &[TideView]) -> usize {
 }
 
 impl Bot {
+    /// Whether this turn's sorties go by hand (`Policy::dispatch`).
+    fn by_hand(&self, e: &Engine) -> bool {
+        use idle_engine::data::unlocks::Action;
+        let done = e
+            .state
+            .cycle
+            .done
+            .get(&Action::Dispatch)
+            .copied()
+            .unwrap_or(0);
+        (self.policy.dispatch && done < HAND_DISPATCHES)
+            || !e.allows(&Command::SetRoute {
+                squad: 0,
+                route: vec![0],
+            })
+    }
+
+    /// Found every department that can be founded now (cheap: they cost a little scrap, and in a
+    /// game with everything open they change nothing else).
+    fn found(&mut self, e: &mut Engine) {
+        let ready: Vec<String> = e
+            .view()
+            .departments
+            .iter()
+            .filter(|d| d.can_found)
+            .map(|d| d.id.clone())
+            .collect();
+        for department in ready {
+            let _ = self.act(e, &Command::FoundDepartment { department });
+        }
+    }
+
     /// Defense pass, played off the forecast the way a careful player does once the free fix (an idle
     /// operative guarding a threatened tile, earlier in `Bot::step`) is used up:
     /// 1. Guard moves: while the forecast loses surges, dry-run garrisons of the threatened tiles by

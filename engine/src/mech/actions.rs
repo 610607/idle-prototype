@@ -41,6 +41,11 @@ pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
     let first = !t.ever_owned;
     let deepest_before = crate::mech::pressure::research_level(&state.cycle);
     let frozen = t.frozen.clone();
+    let price = crate::mech::cost::claim_price(state);
+    if !state.cycle.resources.covers(&price) {
+        return Err(t!("err.claim_cost", scrap = price.scrap));
+    }
+    state.cycle.resources.sub(&price);
     {
         let t = &mut state.cycle.tiles[i];
         t.owned = true;
@@ -190,10 +195,11 @@ pub fn build(state: &mut GameState, tile: u16, facility: Option<&str>) -> ActRes
             if state.cycle.tiles[i].usage.facility() == Some(id) {
                 return Err(t!("err.same_facility"));
             }
-            if !state.cycle.resources.covers(&f.cost) {
+            let price = crate::mech::cost::build_price(state, id).unwrap_or_default();
+            if !state.cycle.resources.covers(&price) {
                 return Err(t!("err.not_enough_materials"));
             }
-            state.cycle.resources.sub(&f.cost);
+            state.cycle.resources.sub(&price);
             state.cycle.tiles[i].usage = TileUse::Facility { id: id.to_string() };
             // Turning homes into military posts costs goodwill right away.
             if was_housing && f.kind == FacilityKind::Defense {

@@ -623,10 +623,18 @@ fn self_sufficiency_tick(state: &mut GameState) {
     }
 }
 
-fn run_rules(state: &mut GameState) {
+pub(crate) fn run_rules(state: &mut GameState) {
     let rules = state.org.rules.clone();
     if rules.get(hooks::RULE_AUTO_CLAIM).copied().unwrap_or(false) {
         for tile in actions::claimable_tiles(state) {
+            // Claims cost (`mech::cost`): nothing to weigh while the next one is unaffordable.
+            if !state
+                .cycle
+                .resources
+                .covers(&crate::mech::cost::claim_price(state))
+            {
+                break;
+            }
             let t = &state.cycle.tiles[tile as usize];
             if t.terrain != Terrain::City {
                 continue;

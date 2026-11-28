@@ -49,6 +49,8 @@
 
 - 阶段 3 S5（亲手派遣、部门）：局面数据多了 `departments` 一块，六条轨迹的 `view` 摘要从第 0 小时起都变了，重记。去掉这一块再比，六条轨迹逐小时相同（`view` 和 `events` 都相同）；greedy 3 个种子 72 小时 `compare --exact` 也相同。所以 S5 没改正式局的玩法。另外修了一处存档前后不一致：路线停在同一面墙前时复用停下原因的战报编号，原来只在战报还在内存里时复用（战报不存档，读档以后会另取一个编号），现在一律复用，内存里没有就按原编号放回去。
 
+- 阶段 3 S6（越占越贵）：改正式局玩法，六条轨迹重记。战斗对照没变（`tests/golden.rs` 的 `held_tile` 占格以后把废材补回 10000：库存算进威胁，不补回来守城战会变）。
+
 ## 读数
 
 ```bash
@@ -88,15 +90,17 @@ cargo run -q --release --example eval -- session eval/sessions/*/*/ --bless
 
 所以重构期间会话重放这一项能用的是上面 5 个。
 
+**这 5 个都是 S6 以前的录像**（阶段 3 S5 起局面数据多了 `departments`、`SAVE_VERSION` 8；S6 起占格和建筑要钱，玩法变了），现在重放全部报 stale（`eval session` 只给警告、只留 `llm.feel.*` 和 `llm.score.*`，不算失败），录像原样留着，不重记。`cargo test` 里没有重放这几个目录的测试（`tests/session.rs` 只用当场生成的会话），所以不用改测试。
+
 ## 文字快照
 
 ```bash
 cargo run -q --release --example text_snapshot -- /tmp/snap.txt
-sha256sum /tmp/snap.txt     # 应为 af105b6901490fa0437086c5d51228d973798d9f52a3290ed5c8ede8e43c260d
+sha256sum /tmp/snap.txt     # 应为 7b5af52a74fce63ff24513b9c88de5e1979067fe23f152f8e2461f90321436c9（阶段 3 S6 重新生成）
 xz -dc eval/golden/text_snapshot.txt.xz | diff - /tmp/snap.txt | head     # 不同时看是哪一段
 ```
 
-输出是确定的（连跑两次逐字节相同），但有 39 MB、11606 行，所以存的是 `xz -9` 压过的（332 KB）。先比 sha256，不同再解压找是哪一段（每段以 `## ` 开头，写着种子和小时）。
+输出是确定的（连跑两次逐字节相同），但有 21 MB、9921 行，所以存的是 `xz -9` 压过的（178 KB）。阶段 3 S6 重新生成过：S5 加了“[部门]”和派遣菜单，S6 起占格要钱，随机地图的局占的格子少了很多，所以快照变小。先比 sha256，不同再解压找是哪一段（每段以 `## ` 开头，写着种子和小时）。
 
 ## 用时
 

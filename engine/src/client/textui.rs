@@ -972,6 +972,19 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             }
         ),
     );
+    if let (Some(p), true) = (&v.claim_price, v.shows(System::Claim)) {
+        line(
+            &mut o,
+            t!(
+                if v.resources.covers(p) {
+                    "cli.board.claim_price"
+                } else {
+                    "cli.board.claim_price_short"
+                },
+                cost = cost_text(p)
+            ),
+        );
+    }
     let lost: Vec<String> = v
         .tide
         .iter()
@@ -1608,26 +1621,28 @@ fn route_options(e: &mut Engine, squad: u32) -> Vec<(Vec<u16>, String)> {
 /// One-tile targets a squad standing by can be dispatched to, nearest first, with the preview.
 fn dispatch_options(e: &mut Engine, squad: u32) -> Vec<(u16, String)> {
     let v = e.view();
-    let mut targets: Vec<_> = v
-        .tiles
-        .iter()
-        .filter(|x| {
-            x.revealed
-                && !x.owned
-                && !x.claimable
-                && x.terrain != "barrier"
-                && !x.enemies.is_empty()
-                && geom::neighbors(x.i).any(|n| v.tiles[n as usize].owned)
-        })
-        .map(|x| (x.ring, x.i))
-        .collect();
-    targets.sort();
-    let mut out = vec![];
-    for (ring, tile) in targets.into_iter().take(DISPATCH_SHOWN) {
-        let p = e.preview_route(squad, &[tile]);
+    // Tiles next to the territory with enemies: the ones not claimable yet first, then claimable
+    // ones (fighting there again still brings loot, which pays for the next claim), and walls
+    // (a fight the squad would turn down) last.
+    let mut targets: Vec<(bool, bool, i32, u16)> = vec![];
+    for x in v.tiles.iter().filter(|x| {
+        x.revealed
+            && !x.owned
+            && x.terrain != "barrier"
+            && !x.enemies.is_empty()
+            && geom::neighbors(x.i).any(|n| v.tiles[n as usize].owned)
+    }) {
+        let p = e.preview_route(squad, &[x.i]);
         if !p.ok {
             continue;
         }
+        let wall = !p.steps.first().is_some_and(|s| s.fought);
+        targets.push((wall, x.claimable, x.ring, x.i));
+    }
+    targets.sort();
+    let mut out = vec![];
+    for (wall, _, ring, tile) in targets.into_iter().take(DISPATCH_SHOWN) {
+        let p = e.preview_route(squad, &[tile]);
         let tv = &v.tiles[tile as usize];
         let key = if p.seconds.is_some() {
             "cli.dispatch.option_secs"
@@ -1644,7 +1659,11 @@ fn dispatch_options(e: &mut Engine, squad: u32) -> Vec<(u16, String)> {
                 warden = tv.warden,
                 terrain = terrain(tv.terrain),
                 foes = foes_of(tv),
-                outcome = outcome(p.outcome),
+                outcome = if wall {
+                    t!("cli.dispatch.wall")
+                } else {
+                    outcome(p.outcome)
+                },
                 minutes = p.minutes,
                 seconds = p.seconds.unwrap_or(0)
             ),
@@ -1730,16 +1749,22 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
             },
         });
     }
-    // Claims the auto rule leaves to the player.
+    // Claims the auto rule leaves to the player, while the next claim is affordable.
     // When nobody stationed would hold the tile, the claim line names who would: offer that first.
-    for p in v.pending.iter().filter(|p| p.kind == "claim") {
+    let claim_ok = v
+        .claim_price
+        .as_ref()
+        .is_some_and(|p| v.resources.covers(p));
+    let claim_cost = v.claim_price.as_ref().map(cost_text).unwrap_or_default();
+    for p in v.pending.iter().filter(|p| p.kind == "claim" && claim_ok) {
         if let Some(tile) = p.tile {
             if let Some(op) = p.op.and_then(|id| e.state.op(id)) {
                 m.push(Item {
                     label: t!(
                         "cli.menu.claim_guard",
                         name = op.persona().name.render(),
-                        text = p.text
+                        text = p.text,
+                        cost = claim_cost
                     ),
                     cmd: Command::Claim {
                         tile,
@@ -1748,7 +1773,7 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
                 });
             }
             m.push(Item {
-                label: t!("cli.menu.claim", text = p.text),
+                label: t!("cli.menu.claim", text = p.text, cost = claim_cost),
                 cmd: Command::Claim {
                     tile,
                     garrison: None,

@@ -86,6 +86,7 @@
     "start_bonus_bp": 5000
   },
   "tide_horizon": 43200,
+  "costs": { "claim_base": { "scrap": 10 }, "claim_mult_bp": 13500, "build_mult_bp": 15000 },
   "warden_max": 100,
   "instructor_talent_bp": 2000,
   "cache_scrap": 80,

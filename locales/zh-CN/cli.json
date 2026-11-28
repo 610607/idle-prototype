@@ -189,8 +189,6 @@
   "cli.menu.links": "（接得上：{links}）",
   "cli.menu.pick": "要条令「{name}」{links}：{desc}",
   "cli.menu.reroll": "换一批条令（{cost} 废材）",
-  "cli.menu.claim": "占领：{text}",
-  "cli.menu.claim_guard": "占领并派{name}驻扎：{text}",
   "cli.menu.counter": "反击告急格 {tile}（第{ring}圈；预演能赢，恢复镇守度）",
   "cli.menu.abandon": "（告急格 {tiles} 现在反击打不赢；可以放弃其中一格：选这项放弃 {tile}）",
   "cli.menu.garrison": "驻扎 {tile} ← {name}（预演守得住，剩{hp}%生命{busy}{replace}）",
@@ -284,5 +282,10 @@
   "cli.board.dept_ready": "  {name}：可以成立（花费：{cost}）。{desc}",
   "cli.board.dept_ready_short": "  {name}：条件够了，材料还不够（花费：{cost}）。{desc}",
   "cli.board.dept_progress": "  {name}：{cond}（{have}/{need}），成立花费：{cost}。{desc}",
-  "cli.board.dept_free": "无"
+  "cli.board.dept_free": "无",
+  "cli.menu.claim": "占领（花费：{cost}）：{text}",
+  "cli.menu.claim_guard": "占领并派{name}驻扎（花费：{cost}）：{text}",
+  "cli.board.claim_price": "下一次占领花费：{cost}（每占一格都更贵）",
+  "cli.board.claim_price_short": "下一次占领花费：{cost}，现在不够（每占一格都更贵）",
+  "cli.dispatch.wall": "打不过，会停在前面不打"
 }
