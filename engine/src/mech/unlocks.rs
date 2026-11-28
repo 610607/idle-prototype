@@ -244,6 +244,13 @@ pub fn progress(state: &GameState, u: &Unlocks, c: &Condition) -> Option<(i32, i
                 .count() as i32,
             *n,
         ),
+        Condition::OwnFormer { former, n } => (
+            cy.tiles
+                .iter()
+                .filter(|t| t.owned && t.former.as_deref() == Some(former.as_str()))
+                .count() as i32,
+            *n,
+        ),
         Condition::Done { action, n } => (done(state, u, *action), *n),
         Condition::WonTile { tile } => flag(u.won.contains(tile)),
         Condition::Department { id } => flag(u.departments.contains(id)),
@@ -473,12 +480,24 @@ mod tests {
         assert!(!is_open(&s, "hire"));
         let n = next(&s, 2);
         assert_eq!((n[0].id.as_str(), n[0].have, n[0].need), ("hire", 0, 1));
-        // Housing is now buildable; building it opens hiring (checked after the command).
+        // Housing is now buildable; building it does not open hiring, owning a former-housing
+        // plot does (checked after the next command).
         apply(
             &mut s,
             &Command::Build {
                 tile: tiles[0],
                 facility: None,
+            },
+        )
+        .unwrap();
+        assert!(!is_open(&s, "hire"));
+        s.cycle.tiles[tiles[3] as usize].former = Some(HOUSING.into());
+        own(&mut s, tiles[3]);
+        apply(
+            &mut s,
+            &Command::Build {
+                tile: tiles[1],
+                facility: Some(hooks::CLINIC.into()),
             },
         )
         .unwrap();
@@ -526,6 +545,13 @@ mod tests {
             n: 2,
         };
         assert_eq!(p(&s, built), Some((1, 2)));
+        let former = Condition::OwnFormer {
+            former: HOUSING.into(),
+            n: 1,
+        };
+        assert_eq!(p(&s, former.clone()), Some((0, 1)));
+        s.cycle.tiles[tiles[0] as usize].former = Some(HOUSING.into());
+        assert_eq!(p(&s, former), Some((1, 1)));
         let done = |a| Condition::Done { action: a, n: 3 };
         bump(&mut s, Action::Dispatch);
         bump(&mut s, Action::Dispatch);

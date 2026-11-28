@@ -12,7 +12,7 @@
   "gates": ["hire", "squad"],
   "facilities": [],
   "rules": [],
-  "when": { "built": { "facility": "housing", "n": 1 } },
+  "when": { "own_former": { "former": "housing", "n": 1 } },
   "after": "build"
 }
 ```
@@ -35,6 +35,7 @@
 | `{"own_tile": {"tile": 112}}` | 这一格（棋盘下标）是自己的 | 0/1 |
 | `{"own_tiles": {"n": 3}}` | 自己的格子不少于 n（总部不算） | 有几格/n |
 | `{"built": {"facility": "clinic", "n": 1}}` | 自己的地上这种建筑不少于 n 座（`housing` 是住房） | 有几座/n |
+| `{"own_former": {"former": "housing", "n": 1}}` | 自己的格子里“曾经的用途”（`Tile::former`，固定地图才有）是它的不少于 n 格（设施 id，或 `housing` 民居）；`n` 不写是 1 | 有几格/n |
 | `{"done": {"action": "dispatch", "n": 5}}` | 这一轮做过这件事不少于 n 次 | 几次/n |
 | `{"won_tile": {"tile": 112}}` | 在这一格打赢过一场路线战斗 | 0/1 |
 | `{"department": {"id": "…"}}` | 这个部门成立了（S5 加部门；现在没有东西会成立部门） | 0/1 |
@@ -50,7 +51,9 @@
 | 档案 | 内容 |
 |---|---|
 | `default` | `"all": true`：全部开放。随机地图的局（`Engine::new`、`sim::new_game`）用它，这时不存任何解锁状态 |
-| `tutorial` | 只开 `dispatch`、`claim`（第一章 0:00 只能派人打隔壁一格、占领），其余按条件开 |
+| `tutorial` | 只开 `dispatch`、`claim`（第一章 0:00 只能派人打隔壁一格、占领），其余按条件开。教学关地图用它 |
+
+固定地图在 `maps.json` 里用 `"unlocks": "<档案 id>"` 写开局用哪个档案，不写是 `default`；`sim::start_map`（`sim::new_map_game`、`Engine::new_map`、文字版 `--map`、网页 `?map=`）按它设解锁状态。校验要求档案存在。
 
 档案还可以有 `when`：`{解锁 id: 条件}`，这个档案里换掉登记表的条件（给 S7 正式局的壳用：那里第二章以后的系统写 `never`）。
 
@@ -63,7 +66,7 @@
 | `dispatch` | 派一格（`set_route` 一格，S5 换成手动派遣） | | 开局就开 |
 | `claim` | 占领 | | 开局就开 |
 | `build` | 建造 | 废材站、诊所、住房 | 占下 3 格 |
-| `hire` | 招募和辞退、编队（`set_squad`） | | 建 1 座住房，在 `build` 之后 |
+| `hire` | 招募和辞退、编队（`set_squad`） | | 占下 1 块曾是民居的地，在 `build` 之后（教学关里占下的城区格都自动是住房，所以不用“建住房”当条件） |
 | `routes` | 多格路线、硬闯 | | never（S5：调度部门） |
 | `rules` | 规章 | 三条规章 | never |
 | `research` | 研究、换一批、选学说、知识库 | 档案室 | never |
@@ -86,7 +89,7 @@
 ## 代码
 
 - **状态**：`Cycle::unlocks: Option<mech::unlocks::Unlocks>`。`None` 就是全部开放，不写进存档，所以随机地图的局存档和以前一样，`SAVE_VERSION` 不用动。有状态时存：档案 id、已开的 id、`done` 的计数、打赢过的格子、成立的部门。
-- **开局**：`sim::new_game_with(seed, now, device, &Start)`、`Engine::new_with(…)`；`Start::default()` 是 `default` 档案，`Start::tutorial()` 是教学关。新开一轮（收束以后）是全部开放，S7 再定。
+- **开局**：`sim::new_game_with(seed, now, device, &Start)`、`Engine::new_with(…)`；`Start::default()` 是 `default` 档案，`Start::tutorial()` 是教学关的档案。固定地图开局时用地图的 `unlocks` 档案（见上）。新开一轮（收束以后）是全部开放，S7 再定。
 - **命令**：`Command::system()` 是一个没有兜底分支的 `match`，新命令不归类编译不过。`commands::apply` 先查 `mech::unlocks::check`（命令组，加上 `build` 的建筑、`set_rule` 的规章），没开就拒绝，错误文字是 `err.locked`，写着差哪个解锁。
 - **检查时机**：命令被接受以后（`after_command`：先记数，再查条件），时间线每个时刻处理完以后（`sim::process_instant` 的最后），按登记表的顺序查一遍，一遍就够（`after` 只指向前面的）。新开的解锁写事件 `event.unlocked`（`EventKind::Unlock`，在 `engine/eval/payoff_classes.json` 归为 `unlock`）。全部开放时这些函数直接返回，不花时间。
 - **局面数据**：没开的系统的块不出现（`view::Gated`：开着时序列化和原来的值一模一样，关着时整个键不写；Rust 这边读到的是空值）。现在挂上的块：`research`、`armory`、`tasks`、`facilities`、`candidates`、`inventory`、`sealed`、`org.rules`、街区的 `policy_options` 和 `customize`；待你决定里属于没开系统的条目也去掉。另有两个新字段，全部开放时都不写：`locked`（还锁着的命令组）和 `next`（最近的一两个没开、`after` 已满足、不是 `never` 的解锁，带条件的说法、进度、目标和一句说明）。

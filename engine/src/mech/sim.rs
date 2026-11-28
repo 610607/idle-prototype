@@ -304,6 +304,7 @@ pub fn start_map(state: &mut GameState, map: &str) -> Result<(), String> {
     cy.seed = 0;
     cy.modifier = String::new();
     cy.map = Some(m.id.clone());
+    cy.unlocks = crate::mech::unlocks::start(&m.unlocks);
     cy.started_at = state.time;
     cy.tiles = g.tiles;
     cy.districts = g.districts;

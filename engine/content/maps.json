@@ -26,6 +26,7 @@
     "warden": 66,
     "districts": [{ "name": 0, "flavor": "street_smart" }],
     "crew": ["vanguard"],
+    "unlocks": "tutorial",
     "resources": { "scrap": 20, "parts": 0, "intel": 0, "crystal": 0 },
     "pace": {
       "travel_owned": 1,

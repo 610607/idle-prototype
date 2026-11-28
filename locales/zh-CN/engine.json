@@ -196,6 +196,8 @@
   "unlock.cond.own_tiles": "占下 {n} 格",
   "unlock.cond.built": "建 {n} 座{name}",
   "unlock.cond.housing": "住房",
+  "unlock.cond.own_former": "占下 {n} 块曾是{name}的地",
+  "unlock.cond.former_housing": "民居",
   "unlock.cond.done.dispatch": "亲手派遣 {n} 次",
   "unlock.cond.done.route": "设 {n} 条路线",
   "unlock.cond.done.claim": "占领 {n} 次",

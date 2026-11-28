@@ -865,6 +865,17 @@ fn cond_text(c: &crate::data::unlocks::Condition) -> String {
             };
             t!("unlock.cond.built", n = n, name = name)
         }
+        Condition::OwnFormer { former, n } => {
+            let name = if former == HOUSING {
+                t!("unlock.cond.former_housing")
+            } else {
+                content()
+                    .facility(former)
+                    .map(|f| f.name.clone())
+                    .unwrap_or_else(|| former.clone())
+            };
+            t!("unlock.cond.own_former", n = n, name = name)
+        }
         Condition::Done { action, n } => t!(
             match action {
                 Action::Dispatch => "unlock.cond.done.dispatch",

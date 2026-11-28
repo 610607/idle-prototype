@@ -146,8 +146,15 @@ pub struct MapDef {
     pub crew: Vec<String>,
     pub resources: super::Resources,
     pub pace: Pace,
+    /// The unlock profile a game on this map starts with (`unlocks.json`, `profiles`).
+    #[serde(default = "default_profile")]
+    pub unlocks: String,
     #[serde(skip)]
     pub name: String,
+}
+
+fn default_profile() -> String {
+    super::hooks::PROFILE_DEFAULT.to_string()
 }
 
 impl MapDef {
@@ -244,6 +251,9 @@ impl MapDef {
             if !c.classes.contains_key(cl) {
                 errs.push(format!("{ctx}: unknown class {cl}"));
             }
+        }
+        if c.unlocks.profile(&self.unlocks).is_none() {
+            errs.push(format!("{ctx}: unknown unlock profile {}", self.unlocks));
         }
         if self.crew.is_empty() {
             errs.push(format!("{ctx}: needs a crew"));

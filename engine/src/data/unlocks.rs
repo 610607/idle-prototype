@@ -104,6 +104,13 @@ pub enum Condition {
         #[serde(default = "one")]
         n: i32,
     },
+    /// At least `n` owned tiles used to be this (`Tile::former`: `housing` or a facility id;
+    /// only fixed maps have former uses).
+    OwnFormer {
+        former: String,
+        #[serde(default = "one")]
+        n: i32,
+    },
     /// The action was done at least `n` times this cycle.
     Done { action: Action, n: i32 },
     /// A route fight on this tile (board index) was won.
@@ -214,14 +221,7 @@ impl Registry {
                     errs.push(format!("unlock {}: unknown rule {r}", u.id));
                 }
             }
-            if let Condition::Built { facility, .. } = &u.when {
-                if facility != HOUSING && !facility_ok(facility) {
-                    errs.push(format!(
-                        "unlock {}: condition on unknown facility {facility}",
-                        u.id
-                    ));
-                }
-            }
+            check_condition(&mut errs, &u.id, &u.when, &facility_ok);
         }
         for s in System::ALL {
             let n = self.unlocks.iter().filter(|u| u.gates.contains(&s)).count();
@@ -257,7 +257,27 @@ impl Registry {
                     errs.push(format!("unlock profile {pid}: unknown unlock {id}"));
                 }
             }
+            for (id, c) in &p.when {
+                check_condition(&mut errs, &format!("{id} (profile {pid})"), c, &facility_ok);
+            }
         }
         errs
+    }
+}
+
+/// A condition that names a building or former use must name a known one.
+fn check_condition(
+    errs: &mut Vec<String>,
+    ctx: &str,
+    c: &Condition,
+    facility_ok: &impl Fn(&str) -> bool,
+) {
+    let f = match c {
+        Condition::Built { facility, .. } => facility,
+        Condition::OwnFormer { former, .. } => former,
+        _ => return,
+    };
+    if f != HOUSING && !facility_ok(f) {
+        errs.push(format!("unlock {ctx}: condition on unknown facility {f}"));
     }
 }

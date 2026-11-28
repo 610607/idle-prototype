@@ -236,3 +236,76 @@ fn the_gate_needs_a_second_operative() {
         }
     }
 }
+
+/// Win the fight on `tile` with the first squad (a one-tile route), then claim it.
+fn win_and_claim(e: &mut Engine, tile: u16) {
+    let sq = e.state.cycle.squads().next().unwrap().id;
+    e.command(&Command::SetRoute {
+        squad: sq,
+        route: vec![tile],
+    })
+    .unwrap();
+    let t = e.state.time;
+    e.advance(t + 6);
+    assert!(e.state.cycle.is_claimable(tile), "{}", geom::label(tile));
+    e.command(&Command::Claim {
+        tile,
+        garrison: None,
+    })
+    .unwrap();
+}
+
+/// The tutorial map starts with the tutorial unlock profile: only dispatching and claiming;
+/// three tiles open building, the former-housing plot opens hiring (docs/design-v2-tutorial.md
+/// chapter one, docs/unlocks.md).
+#[test]
+fn the_tutorial_opens_systems_as_chapter_one_goes() {
+    use idle_engine::data::unlocks::System;
+    let mut e = tutorial(0);
+    let v = e.view();
+    let open: Vec<System> = System::ALL.into_iter().filter(|s| v.shows(*s)).collect();
+    assert_eq!(open, vec![System::Dispatch, System::Claim]);
+    assert_eq!(v.next.len(), 1);
+    assert_eq!(
+        (v.next[0].id.as_str(), v.next[0].have, v.next[0].need),
+        ("build", 0, 3)
+    );
+    let h = hq(&e.state);
+    let (x, y) = geom::xy(h);
+    let at = |dx: i32, dy: i32| geom::idx(x + dx, y + dy).unwrap();
+    // North of the HQ, then west twice: three tiles. The plot north of the last is the
+    // former housing.
+    let (h9, g9, f9, f8) = (at(0, -1), at(-1, -1), at(-2, -1), at(-2, -2));
+    assert_eq!(e.state.cycle.tile(f8).former.as_deref(), Some("housing"));
+    let build = Command::Build {
+        tile: h9,
+        facility: None,
+    };
+    for tile in [h9, g9] {
+        win_and_claim(&mut e, tile);
+        assert!(!e.allows(&build));
+    }
+    assert!(e.command(&build).is_err());
+    win_and_claim(&mut e, f9);
+    assert!(e.allows(&build));
+    let v = e.view();
+    assert!(v.shows(System::Build) && !v.shows(System::Hire));
+    assert_eq!(
+        (v.next[0].id.as_str(), v.next[0].have, v.next[0].need),
+        ("hire", 0, 1)
+    );
+    assert!(!e.allows(&Command::Hire { candidate: 1 }));
+    // Every claimed city tile is housing already; that alone does not open hiring.
+    assert!(e
+        .state
+        .cycle
+        .owned_tiles()
+        .filter(|i| *i != h)
+        .all(|i| e.state.cycle.tile(i).usage == TileUse::Housing));
+    win_and_claim(&mut e, f8);
+    let v = e.view();
+    assert!(v.shows(System::Hire) && v.shows(System::Squad));
+    assert!(e.allows(&Command::Hire { candidate: 1 }));
+    assert!(v.next.is_empty(), "the rest waits for chapter two (never)");
+    assert!(!v.shows(System::Research) && !v.shows(System::Routes));
+}

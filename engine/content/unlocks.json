@@ -12,7 +12,7 @@
     {
       "id": "hire",
       "gates": ["hire", "squad"],
-      "when": { "built": { "facility": "housing", "n": 1 } },
+      "when": { "own_former": { "former": "housing", "n": 1 } },
       "after": "build"
     },
     { "id": "routes", "gates": ["routes"], "when": "never" },
