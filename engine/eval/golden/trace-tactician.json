@@ -1,0 +1,33 @@
+{
+  "persona": "tactician",
+  "seed": 0,
+  "hours": 24,
+  "lang": "zh-CN",
+  "trace": [
+    {"h":0,"view":"5728191fd1352ec9","events":"a8093131074a9ec2","n":1},
+    {"h":1,"view":"eed79037b9808a8e","events":"f1b2098e46ceada9","n":4},
+    {"h":2,"view":"ec60e3793aa43ff5","events":"48ff99db639ed27f","n":5},
+    {"h":3,"view":"19307bfb0e742547","events":"a40661f073056261","n":4},
+    {"h":4,"view":"a19fcdbe8113e567","events":"4473695eb52d935d","n":5},
+    {"h":5,"view":"2d4dae3fcf613172","events":"5033fd20e18001b0","n":5},
+    {"h":6,"view":"7c5fed51c6233c47","events":"c30700011cd6ed72","n":9},
+    {"h":7,"view":"7bd3ffb82dc73f1e","events":"68b2c859a63b3551","n":2},
+    {"h":8,"view":"430c2ab14ff6b5d4","events":"adef897b886b5982","n":4},
+    {"h":9,"view":"189a937859087bab","events":"aea902a082dec02f","n":8},
+    {"h":10,"view":"9994e2ed44d8fff9","events":"3e8e024df5120111","n":6},
+    {"h":11,"view":"13f143aa99c947ae","events":"20d57d72551cef37","n":3},
+    {"h":12,"view":"950518b78dd6ca36","events":"e345cbe6134a6e12","n":4},
+    {"h":13,"view":"3e6d2c436c0065ff","events":"bb6f38b4135fdb1b","n":7},
+    {"h":14,"view":"e5d3cc059337670f","events":"1cddf322bafc6de8","n":5},
+    {"h":15,"view":"44186fb00af3fb57","events":"2fea8b3a92af1de3","n":6},
+    {"h":16,"view":"e37cbb306f19ff3c","events":"5b8c708c1b7c7d96","n":4},
+    {"h":17,"view":"f08eba62ee42ffa4","events":"8c7302c3e0452c46","n":4},
+    {"h":18,"view":"a65ec42776f5b36b","events":"ac4fb4a69b9b4b75","n":4},
+    {"h":19,"view":"1d4f80b6cc6d3374","events":"216d9d9e247f5287","n":7},
+    {"h":20,"view":"ddeedd3090101c1c","events":"2386644c36d99348","n":9},
+    {"h":21,"view":"ac36dd78e51df92b","events":"4093e8533930f839","n":5},
+    {"h":22,"view":"32cd4a314e5610e9","events":"cfd18c64e23c18da","n":5},
+    {"h":23,"view":"1c970497bf7fccc7","events":"3d4005d45eec5a0f","n":5},
+    {"h":24,"view":"13ab7656f3a9ffc2","events":"6556ddd768898b21","n":6}
+  ]
+}

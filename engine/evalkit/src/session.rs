@@ -7,10 +7,16 @@
 //!   `run::measure` — the same 5-minute steps and hooks as `eval run`, so the same metric ids — and
 //!   adds the `llm.*` feedback metrics from visits.jsonl (`llm_metrics`).
 //!
-//! A session is stale when the engine refuses one of its journal commands or the replayed final
-//! save differs from final.json's `save_sha`: the game changed since it was played. Its game
-//! metrics would describe some other game, so only `llm.feel.*` and `llm.score.*` are kept.
-//! Every replayed session also gets `session.stale` (1 stale, 0 replayed).
+//! A session is stale when the engine refuses one of its journal commands, the replayed final
+//! save differs from final.json's `save_sha`, or the replayed final view differs from its
+//! `view_sha` (when it has one): the game changed since it was played. Its game metrics would
+//! describe some other game, so only `llm.feel.*` and `llm.score.*` are kept. Every replayed
+//! session also gets `session.stale` (1 stale, 0 replayed).
+//!
+//! `eval session DIR… --bless` (`bless_dirs`) re-records one digest on the strength of the other:
+//! it adds a missing `view_sha` to a session whose save still matches, and re-records `save_sha`
+//! (and save.json) of a session whose view still matches after the save's structure changed
+//! (docs/design-v2-refactor.md §对照物). Anything else it leaves alone and lists.
 use crate::payoff::Ev;
 use crate::run::{self, Driver, Game, Metrics, Persona, Replay, RunFile, SeedResult, T0};
 use idle_engine::client::textui::session::{self as proto, Entry, Final, Manifest, VisitLog};
@@ -73,6 +79,7 @@ pub fn write_bot(
         t: hours * 3600,
         summary: proto::summarize(&mut g.e),
         save_sha: proto::save_digest(&save),
+        view_sha: Some(proto::view_digest(&mut g.e)),
     };
     write(&dir.join(proto::MANIFEST), &pretty(&m))?;
     write(&dir.join(proto::JOURNAL), &json_lines(&g.journal))?;
@@ -142,6 +149,34 @@ pub struct Replayed {
     pub commands: BTreeMap<String, u32>,
     /// `save_digest` of the replayed final save.
     pub digest: String,
+    /// `view_digest` of the replayed final game.
+    pub view: String,
+}
+
+/// Why a replayed ending is not the recorded one (`None`: it is). The save is compared always,
+/// the view when final.json has a `view_sha`.
+fn ending_differs(fin: &Final, digest: &str, view: &str) -> Option<String> {
+    let view_ok = fin.view_sha.as_deref().map(|v| v == view);
+    if digest != fin.save_sha {
+        let note = match view_ok {
+            Some(true) => {
+                "; the view still matches view_sha, so the save format changed, not the game \
+                 (`eval session DIR… --bless` re-records save_sha)"
+            }
+            _ => "",
+        };
+        Some(format!(
+            "replayed save {digest} differs from final.json save_sha {}{note}",
+            fin.save_sha
+        ))
+    } else if view_ok == Some(false) {
+        Some(format!(
+            "replayed view {view} differs from final.json view_sha {}",
+            fin.view_sha.as_deref().unwrap_or_default()
+        ))
+    } else {
+        None
+    }
 }
 
 /// Replays a session to final.json's `t`: the measured hours, then the entries up to the end
@@ -156,19 +191,15 @@ pub fn replay(s: &Session) -> Replayed {
     };
     r.finish(&mut g.e, T0 + end);
     let digest = proto::save_digest(&g.e.save());
+    let view = proto::view_digest(&mut g.e);
     let stale = if let Some((i, err)) = r.refused.first() {
         Some(format!(
             "{} journal command(s) refused, first line {}: {err}",
             r.refused.len(),
             i + 1
         ))
-    } else if digest != s.fin.save_sha {
-        Some(format!(
-            "replayed save {digest} differs from final.json save_sha {}",
-            s.fin.save_sha
-        ))
     } else {
-        None
+        ending_differs(&s.fin, &digest, &view)
     };
     let mut metrics = if stale.is_none() {
         g.metrics
@@ -193,7 +224,82 @@ pub fn replay(s: &Session) -> Replayed {
         stale,
         commands,
         digest,
+        view,
     }
+}
+
+/// What `bless` did with one session directory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Blessed {
+    /// Both digests already match.
+    Unchanged,
+    /// The save matched and final.json had no `view_sha`: added.
+    ViewAdded,
+    /// The view matched and the save did not: `save_sha` and save.json re-recorded.
+    SaveRerecorded,
+    /// Left untouched, and why.
+    Refused(String),
+}
+
+/// Re-records one digest of a finished session on the strength of the other (see the module
+/// text). Replays with `textui::session::replay`, the plain replay the protocol defines.
+pub fn bless(dir: &Path) -> Result<Blessed, String> {
+    let Some(s) = load(dir)? else {
+        return Ok(Blessed::Refused(format!(
+            "unfinished (no {})",
+            proto::FINAL
+        )));
+    };
+    let mut e = match proto::replay(s.manifest.seed, &s.journal, s.fin.t) {
+        Ok(e) => e,
+        Err(err) => return Ok(Blessed::Refused(err)),
+    };
+    let save = e.save();
+    let (digest, view) = (proto::save_digest(&save), proto::view_digest(&mut e));
+    let save_ok = digest == s.fin.save_sha;
+    let view_ok = s.fin.view_sha.as_deref().map(|v| v == view);
+    let mut fin = s.fin.clone();
+    let done = match (save_ok, view_ok) {
+        (true, Some(true)) => return Ok(Blessed::Unchanged),
+        (true, None) => {
+            fin.view_sha = Some(view);
+            Blessed::ViewAdded
+        }
+        (false, Some(true)) => {
+            fin.save_sha = digest;
+            write(&dir.join(proto::SAVE), &save)?;
+            Blessed::SaveRerecorded
+        }
+        _ => {
+            let why = ending_differs(&s.fin, &digest, &view).unwrap_or_default();
+            return Ok(Blessed::Refused(why));
+        }
+    };
+    write(&dir.join(proto::FINAL), &pretty(&fin))?;
+    Ok(done)
+}
+
+/// `eval session DIR… --bless`: `bless` for every directory, on `threads` threads, in the order
+/// given.
+pub fn bless_dirs(dirs: &[PathBuf], threads: usize) -> Vec<(PathBuf, Result<Blessed, String>)> {
+    let threads = threads.clamp(1, dirs.len().max(1));
+    let mut done: Vec<(usize, Result<Blessed, String>)> = std::thread::scope(|sc| {
+        let hs: Vec<_> = (0..threads)
+            .map(|k| {
+                sc.spawn(move || {
+                    (k..dirs.len())
+                        .step_by(threads)
+                        .map(|i| (i, bless(&dirs[i])))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
+    });
+    done.sort_by_key(|(i, _)| *i);
+    done.into_iter()
+        .map(|(i, r)| (dirs[i].clone(), r))
+        .collect()
 }
 
 /// The `llm.*` metrics of one session (docs/eval-interface.md §评估会话); nothing without visits
@@ -294,6 +400,8 @@ pub struct Outcome {
     pub seed: u64,
     pub stale: Option<String>,
     pub digest: String,
+    /// `view_digest` of the replayed final game.
+    pub view: String,
 }
 
 /// `eval session DIR…`: loads every directory (an unfinished one is skipped with a warning),
@@ -383,6 +491,7 @@ pub fn replay_dirs(dirs: &[PathBuf], threads: usize) -> Result<(RunFile, Vec<Out
             seed: r.seed,
             stale: r.stale,
             digest: r.digest,
+            view: r.view,
         });
         results.push((r.seed, r.metrics, r.commands));
     }
@@ -431,6 +540,7 @@ mod tests {
         let (mut f, out) = replay_dirs(std::slice::from_ref(&dir), 1).unwrap();
         assert!(out[0].stale.is_none(), "{:?}", out[0].stale);
         assert_eq!(out[0].digest, proto::save_digest(&g.e.save()));
+        assert_eq!(out[0].view, proto::view_digest(&mut g.e));
         assert_eq!(f.persona, "greedy");
         assert_eq!(f.hours, hours);
         assert_eq!(f.build, Some(idle_engine::mech::fingerprint()));
@@ -559,6 +669,71 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    fn read_final(dir: &Path) -> Final {
+        serde_json::from_str(&fs::read_to_string(dir.join(proto::FINAL)).unwrap()).unwrap()
+    }
+
+    /// `view_sha` is written at the end, checked when present, and each digest can be re-recorded
+    /// only while the other still matches.
+    #[test]
+    fn view_sha_is_checked_and_blessed() {
+        let dir = tmp("view");
+        let setup = Setup {
+            seed: 3,
+            schedule: Schedule::Every(3),
+            hours: 6,
+            player: "scripted".into(),
+            ..Setup::default()
+        };
+        play_scripted(&dir, &setup);
+        let path = dir.join(proto::FINAL);
+        let played = read_final(&dir);
+        let view = played
+            .view_sha
+            .clone()
+            .expect("a finished session records view_sha");
+        let one = std::slice::from_ref(&dir);
+        let (_, out) = replay_dirs(one, 1).unwrap();
+        assert!(out[0].stale.is_none(), "{:?}", out[0].stale);
+        assert_eq!(out[0].view, view);
+        assert_eq!(bless(&dir).unwrap(), Blessed::Unchanged);
+
+        // A recording from before the field existed: replays, and bless adds exactly the field.
+        let mut old = played.clone();
+        old.view_sha = None;
+        fs::write(&path, pretty(&old)).unwrap();
+        assert!(!fs::read_to_string(&path).unwrap().contains("view_sha"));
+        assert!(replay_dirs(one, 1).unwrap().1[0].stale.is_none());
+        assert_eq!(bless(&dir).unwrap(), Blessed::ViewAdded);
+        assert_eq!(fs::read_to_string(&path).unwrap(), pretty(&played));
+
+        // A wrong view_sha is stale even though the save matches, and bless leaves it alone.
+        let mut wrong = played.clone();
+        wrong.view_sha = Some("0000000000000000".into());
+        fs::write(&path, pretty(&wrong)).unwrap();
+        let why = replay_dirs(one, 1).unwrap().1[0].stale.clone().unwrap();
+        assert!(why.contains("view_sha"), "{why}");
+        assert!(matches!(bless(&dir).unwrap(), Blessed::Refused(_)));
+        assert_eq!(fs::read_to_string(&path).unwrap(), pretty(&wrong));
+
+        // The save changed its shape but the view matches: stale until blessed, then recorded anew.
+        let mut moved = played.clone();
+        moved.save_sha = "0000000000000000".into();
+        fs::write(&path, pretty(&moved)).unwrap();
+        let why = replay_dirs(one, 1).unwrap().1[0].stale.clone().unwrap();
+        assert!(why.contains("the view still matches"), "{why}");
+        assert_eq!(bless(&dir).unwrap(), Blessed::SaveRerecorded);
+        assert_eq!(fs::read_to_string(&path).unwrap(), pretty(&played));
+
+        // Neither digest to stand on: nothing is re-recorded.
+        let mut lost = old.clone();
+        lost.save_sha = "0000000000000000".into();
+        fs::write(&path, pretty(&lost)).unwrap();
+        assert!(matches!(bless(&dir).unwrap(), Blessed::Refused(_)));
+        assert_eq!(fs::read_to_string(&path).unwrap(), pretty(&lost));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     /// A finished-looking directory without playing: manifest, empty journal, final.json.
     fn fake(dir: &Path, protocol: u32, player: &str, seed: u64, finished: bool) {
         fs::create_dir_all(dir).unwrap();
@@ -582,6 +757,7 @@ mod tests {
                 t: 6 * 3600,
                 summary: proto::summarize(&mut e),
                 save_sha: String::new(),
+                view_sha: None,
             };
             fs::write(dir.join(proto::FINAL), pretty(&fin)).unwrap();
         }

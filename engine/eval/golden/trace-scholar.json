@@ -1,0 +1,33 @@
+{
+  "persona": "scholar",
+  "seed": 0,
+  "hours": 24,
+  "lang": "zh-CN",
+  "trace": [
+    {"h":0,"view":"5728191fd1352ec9","events":"a8093131074a9ec2","n":1},
+    {"h":1,"view":"fda07969bd047d28","events":"f1b2098e46ceada9","n":4},
+    {"h":2,"view":"8670e5e9c2738fdc","events":"48ff99db639ed27f","n":5},
+    {"h":3,"view":"8489576c3b8282a1","events":"a155e7c858ab5906","n":5},
+    {"h":4,"view":"29cfd31fb656d067","events":"5a320b70894f6e95","n":4},
+    {"h":5,"view":"31c9989f579f9682","events":"27b3b5199372706d","n":5},
+    {"h":6,"view":"471835b8b41aa386","events":"e3ad09ceb36c7b3c","n":5},
+    {"h":7,"view":"5a729b6ddcdd37d0","events":"ec6fbb2effa9a3c5","n":2},
+    {"h":8,"view":"61c72aa27101fcd7","events":"29c1fc5cc14e7be8","n":2},
+    {"h":9,"view":"1c98c66b82d8f9e6","events":"2da195d1e949ceaa","n":8},
+    {"h":10,"view":"85006412d0665bfe","events":"5eb2917bbf804071","n":5},
+    {"h":11,"view":"0d7f4f066706cab1","events":"998325fdf7ef8b40","n":2},
+    {"h":12,"view":"a9e40cbdb75d60bf","events":"f3a812aca3fde8f8","n":4},
+    {"h":13,"view":"bd4a17fec3ad5b1e","events":"fcbf144d80bc7878","n":6},
+    {"h":14,"view":"755deeada845f970","events":"e119a60f58829e90","n":6},
+    {"h":15,"view":"ef46bfe9ffafc334","events":"181b7d7763e8fe27","n":6},
+    {"h":16,"view":"adcdc65f3248cee5","events":"6dd51e90237bf5aa","n":6},
+    {"h":17,"view":"96fb16bdc93be2f8","events":"2fd59108dc015eb5","n":5},
+    {"h":18,"view":"211800c1107d6164","events":"b332695f47931ae7","n":5},
+    {"h":19,"view":"1c72e114723d37b8","events":"a0a025b73d28ab03","n":8},
+    {"h":20,"view":"bd017fc8ce62ee26","events":"a31ea1ccce13fee7","n":14},
+    {"h":21,"view":"088f4345c1e47e54","events":"91350b0a5a081d55","n":6},
+    {"h":22,"view":"af751b7d42d311fa","events":"b2d0fe7b2da49c71","n":6},
+    {"h":23,"view":"277cfd7319f9fb3e","events":"9b2f762098b2975f","n":2},
+    {"h":24,"view":"d32f38ab4710cd55","events":"4aa8d01804cfe0b5","n":6}
+  ]
+}

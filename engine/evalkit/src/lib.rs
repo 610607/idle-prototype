@@ -1,7 +1,8 @@
 //! Evaluation kit for the idle prototype (docs/balance-eval.md, docs/eval-interface.md): the
 //! reference bot (`bot`), measured runs (`run`), the payoff timeline (`payoff`), strength
 //! yardsticks (`strength`), the combat and pacing models (`model`, `calib`, `power`, `price`,
-//! `synergy`), play-session replay (`session`) and the evaluator (`registry`, `review`, `stats`).
+//! `synergy`), play-session replay (`session`), the evaluator (`registry`, `review`, `stats`) and
+//! the byte-exact trajectory check for refactors (`golden`).
 //!
 //! The `eval` program (`examples/eval.rs`) is its command line; the other programs in `examples/`
 //! use the bot or the combat lab. The committed data the kit reads and writes (metric registry,
@@ -11,6 +12,7 @@ use std::path::{Path, PathBuf};
 pub mod bot;
 pub mod calib;
 pub mod game;
+pub mod golden;
 pub mod model;
 pub mod payoff;
 pub mod power;

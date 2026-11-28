@@ -149,7 +149,7 @@ fn mock_player_plays_a_week_and_the_journal_replays() {
     }
     let fin_v: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(dir.join(FINAL)).unwrap()).unwrap();
-    assert_eq!(keys(&fin_v), ["save_sha", "summary", "t"]);
+    assert_eq!(keys(&fin_v), ["save_sha", "summary", "t", "view_sha"]);
     let fin: Final = serde_json::from_value(fin_v).unwrap();
     assert_eq!(fin.t, 168 * 3600);
 
@@ -168,6 +168,7 @@ fn mock_player_plays_a_week_and_the_journal_replays() {
     let mut e = session::replay(m.seed, &journal, fin.t).unwrap();
     let save = e.save();
     assert_eq!(session::save_digest(&save), fin.save_sha);
+    assert_eq!(Some(session::view_digest(&mut e)), fin.view_sha);
     assert_eq!(save, fs::read_to_string(dir.join(SAVE)).unwrap());
     assert_eq!(session::summarize(&mut e), fin.summary);
     let _ = fs::remove_dir_all(&dir);

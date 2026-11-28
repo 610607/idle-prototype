@@ -4,7 +4,7 @@
 //! ```text
 //! DIR/manifest.json  session settings      DIR/journal.jsonl  every accepted command {"t", "cmd"}
 //! DIR/save.json      current save          DIR/visits.jsonl   one line per visit, after acting
-//! DIR/final.json     {"t", "summary", "save_sha"} once the last visit is scored
+//! DIR/final.json     {"t", "summary", "save_sha", "view_sha"} once the last visit is scored
 //! ```
 //!
 //! Every call reads the directory and writes it back, so the command line (`agent_cli session
@@ -12,7 +12,8 @@
 //! Journal times are seconds since the cycle started (`textui::T0`, when the map is chosen); the
 //! journal comes from the engine's `Trace::Command` hook, so setup commands, menu picks, raw
 //! commands and auto-claimed tasks all land in it. [`replay`] rebuilds the final save from the seed
-//! and the journal; [`save_digest`] is the `save_sha` of final.json.
+//! and the journal; [`save_digest`] is the `save_sha` of final.json and [`view_digest`] its
+//! `view_sha`.
 use super::{
     board, claim_tasks, cmd_name, line, menu, reach, run, setup, summary, Item, Options, Reach,
     DEVICE, T0,
@@ -146,12 +147,15 @@ pub struct VisitLog {
     pub summary: Summary,
 }
 
-/// final.json. `save_sha` is [`save_digest`] of the final `Engine::save()`.
+/// final.json. `save_sha` is [`save_digest`] of the final `Engine::save()`; `view_sha` is
+/// [`view_digest`] of the final game (optional: sessions recorded before it existed have none).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Final {
     pub t: i64,
     pub summary: Summary,
     pub save_sha: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view_sha: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +312,13 @@ fn stage_name(id: &str) -> String {
 /// tell "same final save" from "different".
 pub fn save_digest(save: &str) -> String {
     crate::kernel::hash::fnv64(save.as_bytes())
+}
+
+/// The `view_sha` of final.json: the same hash of `Engine::view_json()`, the view the web client
+/// gets. Unlike `save_sha` it does not move when only the save's structure changes, so it tells
+/// "same game" across save versions (docs/eval-interface.md).
+pub fn view_digest(e: &mut Engine) -> String {
+    crate::kernel::hash::fnv64(e.view_json().as_bytes())
 }
 
 /// Menu ids: the first digits of the hash of each command's JSON, so an id stays with its
@@ -607,6 +618,7 @@ pub fn act(dir: &Path, action: &Action) -> Result<Observation, String> {
             t: visit.t,
             summary: visit.summary.clone(),
             save_sha: save_digest(&save),
+            view_sha: Some(view_digest(&mut s.e)),
         };
         write(
             &dir.join(FINAL),

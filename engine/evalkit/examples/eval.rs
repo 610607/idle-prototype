@@ -4,9 +4,12 @@
 //! ```text
 //! cargo run --release --example eval -- run [persona] [--seeds N] [--hours H] [--until hours|plateau[:W[:tol]]] [--patch JSON] [--out FILE] [--sessions OUTDIR]
 //! cargo run --release --example eval -- session DIR… [--out FILE]   # replay play sessions (docs/eval-interface.md)
+//! cargo run --release --example eval -- session DIR… --bless        # add a missing view_sha / re-record save_sha
 //! cargo run --release --example eval -- check FILE [GOALS]       # goal checks (eval/goals.json)
 //! cargo run --release --example eval -- review RUN… [--base FILE] [--out REPORT.md] [--bless]   # the evaluator
 //! cargo run --release --example eval -- compare A B              # paired by seed, 90% bootstrap CI
+//! cargo run --release --example eval -- compare A B --exact      # every metric and command count equal, or exit 1
+//! cargo run --release --example eval -- golden [--bless]         # byte-exact hourly traces (eval/golden/)
 //! cargo run --release --example eval -- numbers                  # L0: encounter curve D(r)
 //! cargo run --release --example eval -- calibrate [lab|field] [persona] [--seeds N]   # L1
 //! cargo run --release --example eval -- model [--seeds N]        # combat model vs simulation
@@ -23,7 +26,7 @@
 //! `--patch` overrides balance.json fields for this process (`data::patch_balance`).
 use evalkit::run::{self, Persona, RunFile};
 use evalkit::{
-    calib, fmt, model, payoff, price, read_run, registry, review, session, stats, synergy,
+    calib, fmt, golden, model, payoff, price, read_run, registry, review, session, stats, synergy,
 };
 
 fn arg(args: &[String], name: &str) -> Option<String> {
@@ -161,24 +164,44 @@ fn main() {
             }
         }
         Some("session") => {
-            // Every argument but `--out FILE` is a session directory.
+            // Every argument but `--out FILE` and `--bless` is a session directory.
             let mut dirs = Vec::new();
             let mut rest = args.iter().skip(1);
             while let Some(a) = rest.next() {
                 if a == "--out" {
                     rest.next();
-                } else {
+                } else if a != "--bless" {
                     dirs.push(std::path::PathBuf::from(a));
                 }
             }
             let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+            if args.iter().any(|a| a == "--bless") {
+                let mut refused = 0;
+                for (dir, r) in session::bless_dirs(&dirs, threads) {
+                    let what = match r {
+                        Ok(session::Blessed::Unchanged) => "unchanged".to_string(),
+                        Ok(session::Blessed::ViewAdded) => "view_sha added".to_string(),
+                        Ok(session::Blessed::SaveRerecorded) => "save_sha re-recorded".to_string(),
+                        Ok(session::Blessed::Refused(why)) | Err(why) => {
+                            refused += 1;
+                            format!("left untouched: {why}")
+                        }
+                    };
+                    println!("# session {} · {what}", dir.display());
+                }
+                if refused > 0 {
+                    println!("{refused} session(s) left untouched");
+                    std::process::exit(1);
+                }
+                return;
+            }
             let (f, outcomes) = session::replay_dirs(&dirs, threads).unwrap_or_else(|e| {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             });
             for o in &outcomes {
                 println!(
-                    "# session {} · seed {} · {} · save {}",
+                    "# session {} · seed {} · {} · save {} · view {}",
                     o.dir.display(),
                     o.seed,
                     if o.stale.is_some() {
@@ -186,7 +209,8 @@ fn main() {
                     } else {
                         "replayed"
                     },
-                    o.digest
+                    o.digest,
+                    o.view
                 );
             }
             print_summary(&f);
@@ -232,9 +256,36 @@ fn main() {
             }
         }
         Some("compare") => {
-            let a = read_run(args.get(1).expect("run file A"));
-            let b = read_run(args.get(2).expect("run file B"));
+            let files: Vec<&String> = args[1..].iter().filter(|a| !a.starts_with("--")).collect();
+            let a = read_run(files.first().expect("run file A"));
+            let b = read_run(files.get(1).expect("run file B"));
+            if args.iter().any(|a| a == "--exact") {
+                // The same games, key for key (refactors): no statistics.
+                let diff = a.exact_diff(&b);
+                println!(
+                    "# compare --exact {} → {} · {} metrics · {} commands",
+                    files[0],
+                    files[1],
+                    a.metrics.len(),
+                    a.commands.len()
+                );
+                for d in &diff {
+                    println!("{d}");
+                }
+                if diff.is_empty() {
+                    println!("exact: equal");
+                } else {
+                    println!("exact: {} keys differ", diff.len());
+                    std::process::exit(1);
+                }
+                return;
+            }
             compare(&a, &b);
+        }
+        Some("golden") => {
+            if !golden::check(args.iter().any(|a| a == "--bless")) {
+                std::process::exit(1);
+            }
         }
         Some("numbers") => calib::numbers(),
         Some("pace") => {
@@ -330,7 +381,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: eval run|session|check|review|compare|numbers|calibrate … (see the top of engine/evalkit/examples/eval.rs)"
+                "usage: eval run|session|check|review|compare|golden|numbers|calibrate … (see the top of engine/evalkit/examples/eval.rs)"
             );
             std::process::exit(2);
         }
