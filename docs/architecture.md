@@ -1,5 +1,7 @@
 # 引擎分层
 
+> 设计 v2 要把引擎搬到一套新的类型上（实体、容器、效果句式），见 [design-v2-engine-model.md](design-v2-engine-model.md) 和 [design-v2-refactor.md](design-v2-refactor.md)。本文写的是**现在的**代码；重构每做完一步，对应的小节跟着改。
+
 规则引擎（`engine/src/`）分五层。每层只能用排在它前面的层，`engine/tests/layers.rs` 会拦往上引用的代码（测试模块除外）：
 
 ```
