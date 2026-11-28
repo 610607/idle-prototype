@@ -598,5 +598,7 @@
   "department.personnel_office.name": "人事部门",
   "department.personnel_office.desc": "以后按条件自动招人。现在还没接上。",
   "department.defense_office.name": "守备部门",
-  "department.defense_office.desc": "以后自动反击、存守备的阵型。现在还没接上。"
+  "department.defense_office.desc": "以后自动反击、存守备的阵型。现在还没接上。",
+  "unlock.threat.name": "威胁",
+  "unlock.threat.hint": "地盘越亮，城底那个存在看得越清楚；来潮跟着它变强。"
 }

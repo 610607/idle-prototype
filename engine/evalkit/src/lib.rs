@@ -26,6 +26,7 @@ pub mod session;
 pub mod stats;
 pub mod strength;
 pub mod synergy;
+pub mod tutorial;
 
 /// `engine/`, the workspace root.
 pub fn engine_dir() -> &'static Path {

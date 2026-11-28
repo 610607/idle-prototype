@@ -81,6 +81,10 @@
     { "pattern": "llm.delight_given_none", "class": "llm", "missing": "skip", "doc": "回访窗口里没有可感爽点时记“惊喜”的比例；会话过期时不输出" },
     { "pattern": "llm.delight_lift", "class": "llm", "missing": "skip", "doc": "有可感爽点的回访比没有的回访多出的惊喜率（delight_given_felt − delight_given_none）；越大说明爽点分级越贴近玩家感觉；会话过期时不输出" },
     { "pattern": "session.stale", "class": "llm", "missing": "skip", "doc": "会话重放后存档指纹对不上（游戏在会话之后改过）：1 是，0 否" },
-    { "pattern": "llm.invalid", "class": "llm", "missing": "skip", "doc": "行动里失败项的占比（失败项 ÷ 全部行动项）；会话过期时不输出" }
+    { "pattern": "llm.invalid", "class": "llm", "missing": "skip", "doc": "行动里失败项的占比（失败项 ÷ 全部行动项）；会话过期时不输出" },
+    { "pattern": "tutorial.secs.{x}", "class": "result", "missing": "late", "doc": "教学关标准走法（evalkit/src/tutorial.rs）从开局到里程碑 x 的秒数（first_win、scrapyard、clinic、dispatch_office、striker、gate_stop、gate_won 等）；没到就是没发生" },
+    { "pattern": "tutorial.commands", "class": "result", "missing": "skip", "doc": "教学关标准走法打完第一章用了几条命令" },
+    { "pattern": "tutorial.longest_idle", "class": "result", "missing": "skip", "doc": "教学关标准走法里两次操作之间最长隔了几秒（玩家无事可做的最长一段）" },
+    { "pattern": "tutorial.first_short", "class": "result", "missing": "late", "doc": "教学关标准走法第几场仗之前第一次因为血量不够停下" }
   ]
 }

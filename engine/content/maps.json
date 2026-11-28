@@ -14,11 +14,11 @@
     "legend": {
       "X": { "terrain": "barrier" },
       "H": { "terrain": "hq", "revealed": true },
-      "g": { "terrain": "city", "district": 0, "waves": [["grey_hound"]] },
+      "g": { "terrain": "city", "district": 0, "danger_bp": 9000, "waves": [["grey_hound"]] },
       "l": { "terrain": "city", "district": 0, "waves": [["lamp_ghoul"]] },
       "w": { "terrain": "city", "district": 0, "waves": [["grey_hound", "lamp_ghoul"]] },
-      "c": { "terrain": "city", "district": 0, "former": "clinic", "waves": [["grey_hound"]] },
-      "s": { "terrain": "city", "district": 0, "former": "scrapyard", "waves": [["grey_hound"]] },
+      "c": { "terrain": "city", "district": 0, "former": "clinic", "danger_bp": 9000, "waves": [["grey_hound"]] },
+      "s": { "terrain": "city", "district": 0, "former": "scrapyard", "danger_bp": 9000, "waves": [["grey_hound"]] },
       "h": { "terrain": "city", "district": 0, "former": "housing", "natives": 4, "waves": [["lamp_ghoul"]] },
       "G": { "terrain": "city", "district": 0, "revealed": true, "level": 2, "danger_bp": 10000, "waves": [["substation_beast"]] }
     },
@@ -27,8 +27,48 @@
     "districts": [{ "name": 0, "flavor": "street_smart" }],
     "crew": ["vanguard"],
     "unlocks": "tutorial",
-    "costs": { "claim_base": { "scrap": 10 }, "claim_mult_bp": 13500, "build_mult_bp": 15000 },
-    "resources": { "scrap": 20, "parts": 0, "intel": 0, "crystal": 0 },
+    "costs": { "claim_base": { "scrap": 10 }, "claim_mult_bp": 13000, "build_mult_bp": 15000 },
+    "resources": { "scrap": 20, "parts": 0, "intel": 0, "crystal": 0, "medicine": 10 },
+    "talent": false,
+    "pass_claimable": true,
+    "offline_cap_secs": 28800,
+    "med_reserve": 5,
+    "script": [
+      { "id": "opening", "when": "always", "hint": true },
+      { "id": "first_win", "when": { "done": { "action": "route_win", "n": 1 } }, "hint": true },
+      { "id": "first_claim", "when": { "own_tiles": { "n": 1 } }, "hint": true },
+      {
+        "id": "scrapyard",
+        "when": { "own_tile": { "tile": "I10" } },
+        "give": { "tile": "I10", "facility": "scrapyard", "staff": 6 },
+        "hint": true
+      },
+      {
+        "id": "clinic",
+        "when": { "own_tile": { "tile": "G10" } },
+        "give": { "tile": "G10", "facility": "clinic", "staff": 4 },
+        "hint": true
+      },
+      { "id": "low_hp", "when": { "low_hp": { "pct": 50 } }, "hint": true },
+      { "id": "healed", "when": { "done": { "action": "heal", "n": 1 } }, "hint": true },
+      { "id": "med_line", "when": { "done": { "action": "heal", "n": 3 } }, "after": "healed", "hint": true },
+      {
+        "id": "residents",
+        "when": { "own_tile": { "tile": "F8" } },
+        "give": { "tile": "F8", "residents": 12 },
+        "hint": true
+      },
+      {
+        "id": "striker",
+        "when": { "own_tiles": { "n": 7 } },
+        "give": { "candidate": { "class": "striker", "free": true, "joins": true } },
+        "hint": true
+      },
+      { "id": "dispatch_office", "when": { "done": { "action": "dispatch", "n": 5 } }, "hint": true },
+      { "id": "routes", "when": { "department": { "id": "dispatch_office" } }, "hint": true },
+      { "id": "gate_stop", "when": { "stopped_at": { "tile": "H7" } }, "hint": true },
+      { "id": "gate_won", "when": { "won_tile": { "tile": "H7" } }, "hint": true }
+    ],
     "pace": {
       "travel_owned": 1,
       "travel_unowned": 1,
@@ -38,6 +78,7 @@
       "econ_interval": 5,
       "output_mult": 120,
       "get_up_secs": 15,
+      "rest_bp": 500,
       "surge_interval": 0,
       "surge_slots": 8,
       "tide_horizon": 0

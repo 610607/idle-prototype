@@ -9,7 +9,7 @@ use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SAVE_VERSION: u32 = 9;
+pub const SAVE_VERSION: u32 = 10;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -129,6 +129,10 @@ pub struct Tile {
     /// 曾经的用途 of a fixed map's plot: the facility id (or `housing`) it suits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub former: Option<String>,
+    /// Workers who came with a scripted building (`mech::script`): they fill its jobs before the
+    /// district's residents do and live on site (no housing). None on random maps.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub staff: i32,
 }
 
 impl Tile {
@@ -326,6 +330,12 @@ pub struct Candidate {
     pub entity: EntityId,
     pub source: Text,
     pub arrived: i64,
+    /// Hired for nothing (a scripted walk-in, `mech::script`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub free: bool,
+    /// Joins the first squad with room when hired.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub joins: bool,
 }
 
 /// A special operative kept across cycles (`Org::specials`): its number, definition and persona.
@@ -458,6 +468,8 @@ pub enum EventKind {
     Info,
     /// A system opened (`mech::unlocks`).
     Unlock,
+    /// A fixed map's scripted hint line (`mech::script`).
+    Hint,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -575,6 +587,10 @@ pub struct Cycle {
     /// not the game has unlock state, so departments can be founded in every game.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub done: BTreeMap<crate::data::unlocks::Action, u32>,
+    /// A fixed map's script (`mech::script`): which entries fired, the hint shown now. None on
+    /// random maps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub script: Option<crate::mech::script::Script>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -619,6 +635,9 @@ pub struct Org {
     /// Departments founded (`departments.json`): they stay, and every cycle starts with them.
     #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
     pub departments: std::collections::BTreeSet<String>,
+    /// 规章和档案 (`unlocks.json`, `records`): what the organisation has done once, for good.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub records: std::collections::BTreeSet<String>,
 }
 
 /// 用药线: heal operatives at home below `below_pct` of max HP to full, as long as medicine stays

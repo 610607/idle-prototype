@@ -27,6 +27,15 @@ pub fn squad_effect(
         .any(|o| operative::has_map_effect(o, f))
 }
 
+/// Whether this map's routes walk through tiles that are claimable but not claimed yet
+/// (`MapDef::pass_claimable`) instead of fighting them again.
+pub fn passes_claimable(cy: &crate::mech::state::Cycle) -> bool {
+    cy.map
+        .as_deref()
+        .and_then(|m| content().map(m))
+        .is_some_and(|m| m.pass_claimable)
+}
+
 pub fn validate(state: &GameState, members: &[u32], route: &[u16]) -> Result<(), String> {
     let b = balance();
     let cy = &state.cycle;
@@ -190,6 +199,7 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
         }
     }
 
+    let pass = passes_claimable(&state.cycle);
     for &tile in &squad.route {
         let t = state.cycle.tiles[tile as usize].clone();
         let step = if t.owned {
@@ -197,6 +207,12 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
         } else {
             pace.travel_unowned
         };
+        if pass && t.claimable() {
+            // Already won over: walk through, the claim is the player's to make.
+            walked.push(tile);
+            travel += step;
+            continue;
+        }
         if t.owned || !t.passable() || (t.special == Some(SpecialKind::Core) && t.special_done) {
             walked.push(tile);
             travel += step;

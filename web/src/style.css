@@ -279,6 +279,9 @@ h1, h2, h3, h4 { font-family: var(--font-head); margin: 0; font-weight: 400; let
 }
 
 /* ---------------------------------------------------------------- plates (sections) */
+/* A fixed map's one-line hint (S7): a handover note, never in the way. */
+.hint-line { border-left: 3px solid var(--hazard); padding: 6px 10px; margin: 0 0 8px; background: var(--panel-2, transparent); color: var(--ink-2); }
+
 .section {
   --tone: var(--steel-lt);
   background: var(--panel); border: 1px solid var(--line); border-top-color: var(--line-2);

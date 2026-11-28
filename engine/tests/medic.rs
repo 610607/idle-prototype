@@ -421,17 +421,23 @@ fn a_squad_stops_for_hp_and_says_so() {
 /// reserve, then the squad stops for HP and nothing changes any more.
 #[test]
 fn hands_off_the_medicine_settles_and_the_squad_stops() {
-    let mut e = Engine::new_map(0, 1_700_000_000, "test", hooks::TUTORIAL_MAP).unwrap();
+    // A random map (no clinic, so no medicine comes in; its routes fight a won tile again, where
+    // the tutorial's walk through it), the vanguard alone on the nearest tile.
+    let mut e = started(0);
     let sq = squad(&e.state);
     let north = fronts(&e.state)[0];
+    let lone = members(&e.state)[0];
+    e.command(&Command::SetSquad {
+        squad: sq,
+        members: vec![lone],
+    })
+    .unwrap();
     e.state.cycle.resources.medicine = 60;
     e.state
         .org
         .rules
         .insert(hooks::RULE_AUTO_MEDICATE.into(), true);
     e.state.org.med_line.reserve = 20;
-    // A route that keeps going out (routes wait for the dispatch office in the tutorial).
-    idle_engine::mech::unlocks::grant(&mut e.state, "routes");
     e.command(&Command::SetRoute {
         squad: sq,
         route: vec![north],
@@ -447,9 +453,9 @@ fn hands_off_the_medicine_settles_and_the_squad_stops() {
         )
     };
     let t = e.state.time;
-    e.advance(t + 600);
+    e.advance(t + 24 * 3600);
     let a = snap(&e);
-    e.advance(t + 1200);
+    e.advance(t + 30 * 3600);
     let b = snap(&e);
     assert_eq!(a, b, "settled");
     assert!(a.0 >= 20 && a.0 < 60, "medicine {}", a.0);

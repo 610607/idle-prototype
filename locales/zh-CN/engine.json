@@ -220,5 +220,10 @@
   "err.no_department": "没有这个部门",
   "err.department_founded": "{name}已经成立了",
   "err.department_not_ready": "还没到成立的条件（{have}/{need}）",
-  "err.claim_cost": "废材不够：占下这一格要{scrap}废材"
+  "err.claim_cost": "废材不够：占下这一格要{scrap}废材",
+  "unlock.cond.low_hp": "有人血量低于 {pct}%",
+  "unlock.cond.stopped_at": "路线停在 {tile} 前面",
+  "unlock.cond.done.heal": "亲手治疗 {n} 次",
+  "view.pending.claim_quiet": "{tile} 可占领",
+  "err.dispatch_claimable": "{tile} 已经可以占领了：占下它就行，不用再打"
 }

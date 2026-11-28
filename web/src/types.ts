@@ -406,7 +406,8 @@ export interface OrgView {
   /** Absent while the rules system is locked. */
   rules?: { id: string; name: string; desc: string; on: boolean }[];
   specials: SpecialView[];
-  perks: { level: number; text: string; unlocked: boolean }[];
+  /** Absent while the organisation level is locked (`org_level`). */
+  perks?: { level: number; text: string; unlocked: boolean }[];
   history: {
     number: number;
     modifier: string;
@@ -449,8 +450,10 @@ export interface View {
   previews: PreviewView[];
   resources: Resources;
   income: [number, number, number, number, number];
-  power: [number, number, number];
-  threat: { value: number; level_bp: number; strength_bp: number; next: number };
+  /** Absent while `power` is locked. */
+  power?: [number, number, number];
+  /** Absent while `threat` is locked. */
+  threat?: { value: number; level_bp: number; strength_bp: number; next: number };
   self_sufficient: boolean;
   border_count: number;
   tiles: TileView[];
@@ -464,11 +467,13 @@ export interface View {
   inventory?: ItemView[];
   sealed?: ItemView[];
   facilities?: FacilityOption[];
+  /** The 来潮 forecast. Absent in the engine's JSON while `threat` is locked; the client fills []. */
   tide: TideView[];
   pending: PendingView[];
   events: GameEvent[];
   org: OrgView;
-  results: CycleResults;
+  /** 本轮成果; absent while `score` is locked. */
+  results?: CycleResults;
   hire_cost: number;
   research?: ResearchView;
   armory?: ArmoryView[];
@@ -487,13 +492,21 @@ export interface View {
   bounds?: Bounds;
   /** A fixed map's pace (absent on random maps). */
   pace?: Pace;
+  /** A fixed map's current one-line hint (`mech::script`); absent when there is none. */
+  hint?: HintView;
+}
+
+/** The scripted hint shown now and when it came up. */
+export interface HintView {
+  text: string;
+  t: number;
 }
 
 /** Command groups / view blocks the unlock registry gates (`data::unlocks::System`). */
 export type UnlockSystem =
   | 'dispatch' | 'routes' | 'squad' | 'claim' | 'build' | 'hire' | 'customize' | 'garrison' | 'policy' | 'priority'
   | 'rules' | 'gambits' | 'equipment' | 'research' | 'tasks' | 'armory' | 'dial' | 'counter' | 'retire' | 'collapse'
-  | 'medicine' | 'med_line';
+  | 'medicine' | 'med_line' | 'threat' | 'score' | 'power' | 'org_level';
 
 export interface NextUnlock {
   id: string;
@@ -522,6 +535,8 @@ export interface Pace {
   econ_interval: number;
   output_mult: number;
   get_up_secs: number;
+  /** HP back per hour of the pace at home, in basis points of max (0: none). */
+  rest_bp: number;
   surge_interval: number;
   surge_slots: number;
   tide_horizon: number;

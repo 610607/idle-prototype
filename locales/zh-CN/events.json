@@ -51,5 +51,20 @@
   "event.surge.lost_warden": "{tile} 来潮{lost}，镇守度 {before} → {after}",
   "district.unnamed": "无名街区 {n}",
   "name.person": "{family}{given}",
-  "event.department_founded": "成立了{name}"
+  "event.department_founded": "成立了{name}",
+  "origin.walk_in": "自己找上门来的",
+  "event.hint.tutorial.opening": "隔壁街口有东西在晃，看样子想收这条街的过路费。去看看；东边那块地以前是废材站。",
+  "event.hint.tutorial.first_win": "清干净了，对方连收据都没留。花点废材占下它：有人守着，它就是公所的。",
+  "event.hint.tutorial.first_claim": "这格归公所了。往外每多占一格，都比上一格贵一点：地价这东西，崩落了也照样涨。",
+  "event.hint.tutorial.scrapyard": "这里以前是废材站。架子还在，几个老师傅端着搪瓷缸子回来上工了。",
+  "event.hint.tutorial.clinic": "这里以前是诊所。门一开，排队拿膏药的街坊就到了。伤从此能治。",
+  "event.hint.tutorial.low_hp": "他撑不了几场了，账上先记一笔工伤。伤不会自己好：小伤治起来便宜，重伤贵。",
+  "event.hint.tutorial.healed": "缝好了。别等人快倒下才想起来治，那时候最贵。",
+  "event.hint.tutorial.med_line": "每次都亲手治太费事。设一条用药线：回到家血量低于线，就自动治满。",
+  "event.hint.tutorial.residents": "这片以前是公寓，人一直没走，晾衣绳都还挂着。有了人手，可以再开一座废材站。",
+  "event.hint.tutorial.striker": "隔壁公寓来了个巷战突击手，说楼道里闷得慌，想跟你们干。收下他，他会跟着小队走。",
+  "event.hint.tutorial.dispatch_office": "这条路你们已经亲手走了好几趟。该有人专门管排班了。",
+  "event.hint.tutorial.routes": "调度部门排好了班。画一条路线，小队会自己一趟趟跑；往北那条通到变电所门口。",
+  "event.hint.tutorial.gate_stop": "变电所里蹲着一伙帮派，还养了只看门兽，自称此路是他们开的。照现在这样打不过：多一个人会不一样。",
+  "event.hint.tutorial.gate_won": "窝点打服了，小头目连夜搬了家。往北、往东、往西的路都通了。"
 }

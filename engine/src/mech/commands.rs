@@ -236,6 +236,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
     if r.is_ok() {
         state.revision += 1;
         crate::mech::unlocks::after_command(state, cmd);
+        crate::mech::script::refresh(state);
     }
     r
 }

@@ -128,6 +128,7 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         unlocks: None,
         map: None,
         done: Default::default(),
+        script: None,
     }
 }
 
@@ -159,6 +160,7 @@ pub fn new_game(seed: u64, now: i64, device: &str) -> GameState {
             tasks_done: vec![],
             med_line: Default::default(),
             departments: Default::default(),
+            records: Default::default(),
         },
         cycle: empty_cycle(1, pv),
         events: vec![],
@@ -310,12 +312,18 @@ pub fn start_map(state: &mut GameState, map: &str) -> Result<(), String> {
     cy.modifier = String::new();
     cy.map = Some(m.id.clone());
     cy.unlocks = crate::mech::unlocks::start(&m.unlocks);
+    cy.script = crate::mech::script::start(m);
     crate::mech::unlocks::seat_departments(state);
     let cy = &mut state.cycle;
     cy.started_at = state.time;
     cy.tiles = g.tiles;
     cy.districts = g.districts;
     cy.resources = m.resources.clone();
+    // A small map keeps a small medicine stock: its 用药线 starts with a reserve to match.
+    if let Some(r) = m.med_reserve {
+        state.org.med_line.reserve = r;
+    }
+    let cy = &mut state.cycle;
     world::reveal_frontier(cy);
 
     // The map's crew, all in the first squad; specials kept from earlier cycles join the roster.
@@ -375,10 +383,12 @@ pub fn start_map(state: &mut GameState, map: &str) -> Result<(), String> {
         None,
         None,
     );
+    // What the script gives at once (its opening hint).
+    crate::mech::script::refresh(state);
     Ok(())
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct CycleResults {
     pub management: i64,
     pub defense: i64,
@@ -528,9 +538,49 @@ impl Timeline for GameState {
     }
 }
 
-/// Advance the simulation to `target` (the clock loop over this game's timeline).
+/// Advance the simulation to `target` (the clock loop over this game's timeline). A fixed map
+/// may bound how much absence one catch-up simulates (`MapDef::offline_cap_secs`): the first
+/// `cap` seconds are played out in full, the rest is skipped as if the game had been paused
+/// (every pending timer moves on by the skipped time), so nothing due is lost or doubled.
 pub fn advance(state: &mut GameState, target: i64) {
+    let cap = state
+        .cycle
+        .map
+        .as_deref()
+        .and_then(|m| content().map(m))
+        .map_or(0, |m| m.offline_cap_secs);
+    if cap > 0 && state.cycle.phase == Phase::Active && target - state.time > cap {
+        let played = state.time + cap;
+        clock::advance(state, played);
+        skip(state, target - played);
+    }
     clock::advance(state, target);
+}
+
+/// Move the clock on by `gap` seconds without playing them: trips under way and get-up timers
+/// keep the time they had left, and the economy's settlement grid stays where it was.
+fn skip(state: &mut GameState, gap: i64) {
+    // Whole settlement intervals only, so the settlement times stay on their grid.
+    let every = crate::mech::pace::of(&state.cycle).hour_secs();
+    let gap = gap / every * every;
+    if gap <= 0 {
+        return;
+    }
+    state.time += gap;
+    for s in state.cycle.squads.iter_mut() {
+        if let Some(t) = s.trip.as_mut() {
+            t.start += gap;
+            t.end += gap;
+        }
+    }
+    for id in state.cycle.roster_ids() {
+        if let Some(op) = state.op_mut(id) {
+            let f = op.fighter_mut();
+            if f.up_at > 0 {
+                f.up_at += gap;
+            }
+        }
+    }
 }
 
 fn process_instant(state: &mut GameState, border: &[u16], pace: &Pace, t: i64) {
@@ -563,6 +613,7 @@ fn process_instant(state: &mut GameState, border: &[u16], pace: &Pace, t: i64) {
         economy::settle(state, hour);
         if hour {
             self_sufficiency_tick(state);
+            crate::mech::medic::rest(state);
         }
     }
     // 4. Rules and special operatives react.
@@ -572,6 +623,7 @@ fn process_instant(state: &mut GameState, border: &[u16], pace: &Pace, t: i64) {
         routes::try_start(state, *id, t);
     }
     crate::mech::unlocks::refresh(state);
+    crate::mech::script::refresh(state);
 }
 
 /// Patrol gain per surge interval on each owned border tile, from current routes.
@@ -803,6 +855,8 @@ fn check_specials(state: &mut GameState) {
                 entity,
                 source: origin.label.clone(),
                 arrived: state.time,
+                free: false,
+                joins: false,
             },
         );
         state.event(

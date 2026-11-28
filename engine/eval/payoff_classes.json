@@ -1,5 +1,5 @@
 {
-  "_doc": "爽点时间轴的事件分类（docs/balance-eval.md §爽点时间轴）。locales/zh-CN/events.json 里每个 event.* key 都要在这里：class 是时间轴上的类别，tier 0 涓流、1 小、2 大、3 巨大；novel: false 表示它第一次出现也不算新奇（挫折、来潮、轮回记账）。规章代做（EventKind::Rule）不看这张表，一律是 auto。新事件不归类，cargo test 失败。",
+  "_doc": "爽点时间轴的事件分类（event.hint.<地图>.<条目> 是固定地图编排的提示：送东西的那几条算小爽点，其余是涓流）（docs/balance-eval.md §爽点时间轴）。locales/zh-CN/events.json 里每个 event.* key 都要在这里：class 是时间轴上的类别，tier 0 涓流、1 小、2 大、3 巨大；novel: false 表示它第一次出现也不算新奇（挫折、来潮、轮回记账）。规章代做（EventKind::Rule）不看这张表，一律是 auto。新事件不归类，cargo test 失败。",
   "keys": {
     "event.research.new": { "class": "research", "tier": 1 },
     "event.unlocked": { "class": "unlock", "tier": 1 },
@@ -49,6 +49,21 @@
     "event.rule.claimed": { "class": "auto", "tier": 0 },
     "event.rule.hired": { "class": "auto", "tier": 0 },
     "event.rule.countered": { "class": "auto", "tier": 0 },
-    "event.rule.med_short": { "class": "auto", "tier": 0 }
+    "event.rule.med_short": { "class": "auto", "tier": 0 },
+
+    "event.hint.tutorial.opening": { "class": "hint", "tier": 0, "novel": false },
+    "event.hint.tutorial.first_win": { "class": "hint", "tier": 0, "novel": false },
+    "event.hint.tutorial.first_claim": { "class": "hint", "tier": 0, "novel": false },
+    "event.hint.tutorial.scrapyard": { "class": "hint", "tier": 1 },
+    "event.hint.tutorial.clinic": { "class": "hint", "tier": 1 },
+    "event.hint.tutorial.low_hp": { "class": "hint", "tier": 0, "novel": false },
+    "event.hint.tutorial.healed": { "class": "hint", "tier": 0, "novel": false },
+    "event.hint.tutorial.med_line": { "class": "hint", "tier": 0, "novel": false },
+    "event.hint.tutorial.residents": { "class": "hint", "tier": 1 },
+    "event.hint.tutorial.striker": { "class": "hint", "tier": 0, "novel": false },
+    "event.hint.tutorial.dispatch_office": { "class": "hint", "tier": 0, "novel": false },
+    "event.hint.tutorial.routes": { "class": "hint", "tier": 0, "novel": false },
+    "event.hint.tutorial.gate_stop": { "class": "hint", "tier": 0, "novel": false },
+    "event.hint.tutorial.gate_won": { "class": "hint", "tier": 2 }
   }
 }

@@ -175,6 +175,7 @@ fn action_of(cmd: &Command) -> Option<Action> {
         Command::Build { .. } => Some(Action::Build),
         Command::Hire { .. } => Some(Action::Hire),
         Command::Research => Some(Action::Research),
+        Command::Heal { .. } => Some(Action::Heal),
         _ => None,
     }
 }
@@ -246,6 +247,15 @@ pub fn progress(state: &GameState, c: &Condition) -> Option<(i32, i32)> {
             flag(cy.unlocks.as_ref().is_some_and(|u| u.won.contains(tile)))
         }
         Condition::Department { id } => flag(state.org.departments.contains(id)),
+        Condition::LowHp { pct } => flag(cy.operatives().any(|o| {
+            crate::mech::medic::health(state, o.id.0)
+                .is_some_and(|h| h.down || h.hp * 100 < pct * h.max)
+        })),
+        Condition::StoppedAt { tile } => flag(
+            cy.squads
+                .iter()
+                .any(|s| s.last.as_ref().is_some_and(|l| l.stopped_at == Some(*tile))),
+        ),
     };
     Some((have.min(need), need))
 }
@@ -534,7 +544,8 @@ mod tests {
         let n = next(&s, 2);
         assert_eq!(n.len(), 2, "hire waits for build, the rest for grants");
         assert_eq!((n[0].id.as_str(), n[0].have, n[0].need), ("build", 0, 3));
-        assert_eq!((n[1].id.as_str(), n[1].have, n[1].need), ("routes", 0, 1));
+        // The tutorial profile's own condition: a former clinic plot.
+        assert_eq!((n[1].id.as_str(), n[1].have, n[1].need), ("healing", 0, 1));
         own(&mut s, tiles[0]);
         own(&mut s, tiles[1]);
         refresh(&mut s);
@@ -547,9 +558,9 @@ mod tests {
         assert!(is_open(&s, "build"));
         assert!(!is_open(&s, "hire"));
         let n = next(&s, 2);
-        assert_eq!((n[0].id.as_str(), n[0].have, n[0].need), ("hire", 0, 1));
-        // Housing is now buildable; building it does not open hiring, owning a former-housing
-        // plot does (checked after the next command).
+        assert_eq!((n[0].id.as_str(), n[0].have, n[0].need), ("hire", 3, 7));
+        // Housing is now buildable; building it does not open hiring, seven tiles do (checked
+        // after the next command). A former clinic plot opens healing.
         apply(
             &mut s,
             &Command::Build {
@@ -559,8 +570,10 @@ mod tests {
         )
         .unwrap();
         assert!(!is_open(&s, "hire"));
-        s.cycle.tiles[tiles[3] as usize].former = Some(HOUSING.into());
-        own(&mut s, tiles[3]);
+        s.cycle.tiles[tiles[3] as usize].former = Some(hooks::CLINIC.into());
+        for t in &tiles[3..7] {
+            own(&mut s, *t);
+        }
         apply(
             &mut s,
             &Command::Build {
@@ -571,8 +584,14 @@ mod tests {
         .unwrap();
         assert!(is_open(&s, "hire"));
         assert!(system_open(&s, System::Squad));
-        // The clinic also opens healing and, after it, the 用药线.
-        assert!(system_open(&s, System::Medicine) && system_open(&s, System::MedLine));
+        assert!(system_open(&s, System::Medicine));
+        // The 用药线 waits for three heals by hand.
+        assert!(!system_open(&s, System::MedLine));
+        for _ in 0..3 {
+            bump(&mut s, Action::Heal);
+        }
+        refresh(&mut s);
+        assert!(system_open(&s, System::MedLine));
         let names: Vec<String> = ["build", "hire", "healing", "med_line"]
             .iter()
             .map(|id| txt!("event.unlocked", name = l10n::name("unlock", id)).render())

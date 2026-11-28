@@ -12,14 +12,13 @@
     {
       "id": "hire",
       "gates": ["hire", "squad"],
-      "when": { "own_former": { "former": "housing", "n": 1 } },
+      "when": { "own_tiles": { "n": 7 } },
       "after": "build"
     },
     {
       "id": "healing",
       "gates": ["medicine"],
-      "when": { "built": { "facility": "clinic", "n": 1 } },
-      "after": "build"
+      "when": { "built": { "facility": "clinic", "n": 1 } }
     },
     {
       "id": "med_line",
@@ -40,6 +39,7 @@
     { "id": "gambits", "gates": ["gambits"], "when": "never" },
     {
       "id": "industry",
+      "gates": ["power"],
       "facilities": ["workshop", "generator", "market", "training_ground"],
       "when": "never"
     },
@@ -57,11 +57,18 @@
     { "id": "arsenal", "gates": ["armory"], "when": "never" },
     { "id": "tasks", "gates": ["tasks"], "when": "never" },
     { "id": "retire", "gates": ["retire"], "when": "never" },
-    { "id": "collapse", "gates": ["collapse"], "when": "never" }
+    { "id": "threat", "gates": ["threat"], "when": "never" },
+    { "id": "collapse", "gates": ["collapse", "score", "org_level"], "when": "never" }
   ],
   "ungated_facilities": [],
   "profiles": {
     "default": { "all": true },
-    "tutorial": { "open": ["dispatch", "claim"] }
+    "tutorial": {
+      "open": ["dispatch", "claim"],
+      "when": {
+        "healing": { "own_former": { "former": "clinic" } },
+        "med_line": { "done": { "action": "heal", "n": 3 } }
+      }
+    }
   }
 }

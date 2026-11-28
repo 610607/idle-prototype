@@ -18,6 +18,7 @@
 //! cargo run --release --example eval -- timeline SEED [persona] [--hours H] [--patch JSON]
 //! cargo run --release --example eval -- payoff SEED [persona] [--hours H] [--patch JSON]   # 爽点时间轴
 //! cargo run --release --example eval -- metrics [RUN.json]      # metric registry (eval/metrics.json)
+//! cargo run --release --example eval -- tutorial [--think S] [--seeds N]   # chapter-one walkthrough, seconds to each milestone
 //! ```
 //!
 //! Personas: `greedy` (the reference bot: nearest ring first), `explorer` (deepest winnable target
@@ -286,6 +287,11 @@ fn main() {
             if !golden::check(args.iter().any(|a| a == "--bless")) {
                 std::process::exit(1);
             }
+        }
+        Some("tutorial") => {
+            let think: i64 = arg(&args, "--think").map_or(1, |s| s.parse().unwrap());
+            let seeds: u64 = arg(&args, "--seeds").map_or(4, |s| s.parse().unwrap());
+            evalkit::tutorial::print(think, seeds);
         }
         Some("numbers") => calib::numbers(),
         Some("pace") => {

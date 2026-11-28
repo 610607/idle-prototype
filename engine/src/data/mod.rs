@@ -1151,6 +1151,7 @@ impl Balance {
             econ_interval: self.econ_interval,
             output_mult: 1,
             get_up_secs: self.get_up_secs,
+            rest_bp: 0,
             surge_interval: self.surge_interval,
             surge_slots: self.surge_slots,
             tide_horizon: self.tide_horizon,
@@ -1660,6 +1661,10 @@ fn localize(c: &mut Content) {
     for u in &mut c.unlocks.unlocks {
         u.name = text("unlock", &u.id, "name");
         u.hint = text("unlock", &u.id, "hint");
+    }
+    for r in &mut c.unlocks.records {
+        r.did = text("record", &r.id, "did");
+        r.got = text("record", &r.id, "got");
     }
     for d in &mut c.departments.departments {
         d.name = text("department", &d.id, "name");

@@ -44,6 +44,7 @@ fn blank_tile(terrain: Terrain) -> Tile {
         last_surge: None,
         level: None,
         former: None,
+        staff: 0,
     }
 }
 

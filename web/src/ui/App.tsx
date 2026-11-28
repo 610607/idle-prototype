@@ -6,7 +6,7 @@ import type { Bounds, Command, View } from '../types';
 import { ReportSheet } from './BattleReport';
 import { Board, WASH } from './Board';
 import { ConfirmDialog, fmtClock, fmtRate, GameCtx, OUTCOME_NAMES, RES_KEYS, RES_NAMES, SQUAD_HEX, useCtx, type ConfirmAsk, type Ctx, type RouteEdit, type Sheet } from './common';
-import { CommandPanel, Departments, DistrictsPanel, HQPanel, NextUnlocks, PendingList, RosterPanel, TideStrip } from './Panels';
+import { CommandPanel, Departments, DistrictsPanel, HintLine, HQPanel, NextUnlocks, PendingList, RosterPanel, TideStrip } from './Panels';
 import { Archive, ResearchPanel } from './Research';
 import { CandidateSheet, DistrictSheet, OpSheet, SquadSheet, TideSheet } from './Sheets';
 import { TileSheet } from './TileSheet';
@@ -214,9 +214,10 @@ export function App({ game }: { game: Game }) {
         ) : (
           <div className="main" data-mv={mobileView}>
             <div className="map-col">
+              <HintLine />
               <Board />
               {routeEdit ? <RouteEditor /> : null}
-              <TideStrip />
+              {view.threat ? <TideStrip /> : null}
               <NextUnlocks />
               <Departments />
               <PendingList />
@@ -314,12 +315,14 @@ function TopBar() {
             </span>
             );
           })}
-          <span className={'res-item ' + (view.power[0] < view.power[1] ? 'bad' : '')} title={t('app.res.power')}>
-            <Icon id="power" />
-            <span className="num">
-              {view.power[0]}/{view.power[1]}
+          {view.power ? (
+            <span className={'res-item ' + (view.power[0] < view.power[1] ? 'bad' : '')} title={t('app.res.power')}>
+              <Icon id="power" />
+              <span className="num">
+                {view.power[0]}/{view.power[1]}
+              </span>
             </span>
-          </span>
+          ) : null}
           {view.self_sufficient ? (
             <span className="chip good" title={t('app.res.self_sufficient_hint')}>
               {t('app.res.self_sufficient')}
