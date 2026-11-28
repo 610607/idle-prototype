@@ -39,6 +39,7 @@
 - [research/open-source-implementations.md](research/open-source-implementations.md)：开源挂机游戏的实现做法（大数、主循环、离线收益、存档、许可证）。原文档：[开源挂机游戏实现调研](https://claude.ai/artifact/MDLAUDcQATRL8DD9FdooW4)
 - [research/commercial-design.md](research/commercial-design.md)：商业挂机游戏的设计与爽点。原文档：[商业挂机游戏调研：设计与爽点](https://claude.ai/artifact/JfdF2fb3JqAx4s52vScEii)
 - [research/opening-pacing.md](research/opening-pacing.md)：开局节奏调研——Evolve 为主，对照 Trimps、Kittens Game、Universal Paperclips、Melvor Idle：开局的揭示链、从手动到自动的分层、建筑倍率和科技价格两条曲线、重置怎么压缩开局；读源码得到的公式和数字，分钟级的实测时间线没查到。本仓库直接写成。
+- [research/evolve-opening-timeline.md](research/evolve-opening-timeline.md)：Evolve 开局实测——浏览器脚本以每秒约 3.5 次操作玩了一遍 15 分钟，记下每样新东西出现的秒数；脚本买法不像真人，15 分钟内没走完演化阶段，头一分钟以后的时刻只能当下限参考。原始记录在 `research/data/`。本仓库直接写成。
 - [research/prestige-design.md](research/prestige-design.md)：轮回（prestige）重置与保留的设计。原文档：[轮回设计调研](https://claude.ai/artifact/6HNysvA7QmhUMKHvZViEKU)
 
 原文档导出日期：2026-11-26；“本仓库直接写成”的文件随代码一起更新。
