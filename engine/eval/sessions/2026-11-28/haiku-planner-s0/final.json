@@ -1,0 +1,20 @@
+{
+  "t": 604800,
+  "summary": {
+    "owned": 10,
+    "ring": 2,
+    "score": 263,
+    "held": 245,
+    "lost": 4,
+    "alerts": 0,
+    "ops": 8,
+    "doctrines": 5,
+    "reactions": 794,
+    "lit": 1,
+    "scrap": 1975,
+    "parts": 15,
+    "intel": 50,
+    "crystal": 0
+  },
+  "save_sha": "0b3ee0ff347c26a0"
+}
