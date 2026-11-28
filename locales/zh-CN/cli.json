@@ -75,7 +75,7 @@
   "cli.board.trip_none": "上一趟：{outcome}（这趟没有打仗）",
   "cli.board.trip_patrol": "上一趟：巡逻（没打仗，带回废材{scrap}）",
   "cli.board.trip_forced": "（硬打）",
-  "cli.board.stopped": "；停在 {tile} 前：那一仗会{outcome}，所以没打（要打下令硬打）",
+  "cli.board.stopped": "；停在 {tile} 前：预演那一仗会{outcome}（敌人：{foes}），所以没打，转去巡逻。想过去：补强队伍或换条路线；也可以在菜单里选“硬打”，输了全队回去休整",
   "cli.board.force_next": "下一趟硬打",
   "cli.board.never": "还没出过门",
   "cli.board.on_road": "路上",
