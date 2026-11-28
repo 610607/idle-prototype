@@ -30,6 +30,90 @@ pub const T0: i64 = textui::T0;
 const STEP: i64 = 300;
 pub const CHECKPOINTS: [i64; 7] = [6, 12, 24, 48, 72, 120, 168];
 
+/// Default plateau test: the score counts as flat once it rose by at most `PLATEAU_TOL` of itself
+/// over `PLATEAU_WINDOW_H` hours.
+pub const PLATEAU_WINDOW_H: i64 = 48;
+pub const PLATEAU_TOL: f64 = 0.02;
+
+/// How long a run plays (docs/design-v2-plan.md 阶段 0): a fixed number of hours, or until the
+/// score stops rising (the player decides when a cycle ends, so v2 judges the plateau), at most
+/// `max_hours` either way.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Stop {
+    pub max_hours: i64,
+    /// Stop at the first plateau (`plateau_start`).
+    pub at_plateau: bool,
+    pub window_h: i64,
+    pub tol: f64,
+}
+
+impl Stop {
+    pub fn hours(h: i64) -> Stop {
+        Stop {
+            max_hours: h,
+            at_plateau: false,
+            window_h: PLATEAU_WINDOW_H,
+            tol: PLATEAU_TOL,
+        }
+    }
+
+    /// `hours` or `plateau[:W[:tol]]` (window in hours, tolerance as a fraction).
+    pub fn parse(until: &str, max_hours: i64) -> Option<Stop> {
+        let mut s = Stop::hours(max_hours);
+        let mut parts = until.split(':');
+        match parts.next()? {
+            "hours" => {}
+            "plateau" => s.at_plateau = true,
+            _ => return None,
+        }
+        if let Some(w) = parts.next() {
+            s.window_h = w.parse().ok().filter(|w| *w > 0)?;
+        }
+        if let Some(t) = parts.next() {
+            s.tol = t.parse().ok().filter(|t: &f64| *t >= 0.0)?;
+        }
+        Some(s)
+    }
+
+    /// The `until` a run file records (`None` for a plain hours run).
+    pub fn label(&self) -> Option<String> {
+        self.at_plateau
+            .then(|| format!("plateau:{}:{}", self.window_h, self.tol))
+    }
+}
+
+/// The first hour `h0` whose next `window` hours raised the score by at most `tol` of the score
+/// at their end. `scores[h]` is the score at the end of hour `h` (`scores[0]` at the start).
+pub fn plateau_start(scores: &[f64], window: i64, tol: f64) -> Option<i64> {
+    let w = window as usize;
+    (w..scores.len())
+        .find(|&h| scores[h] - scores[h - w] <= tol * scores[h].max(1.0))
+        .map(|h| (h - w) as i64)
+}
+
+/// Plateau readings from the hourly score (docs/design-v2-plan.md 阶段 0、1).
+fn plateau_metrics(scores: &[f64], stop: &Stop, played: i64, m: &mut Metrics) {
+    let last = scores.last().copied().unwrap_or(0.0);
+    let peak = scores.iter().copied().fold(0.0, f64::max);
+    m.insert("stop.h".into(), Some(played as f64));
+    m.insert("score.final".into(), Some(last));
+    m.insert("score.peak".into(), Some(peak));
+    m.insert(
+        "score.drop".into(),
+        Some(if peak > 0.0 {
+            (peak - last) / peak
+        } else {
+            0.0
+        }),
+    );
+    let start = plateau_start(scores, stop.window_h, stop.tol);
+    m.insert("plateau.h".into(), start.map(|h| h as f64));
+    m.insert(
+        "plateau.score".into(),
+        start.map(|h| scores[(h + stop.window_h) as usize]),
+    );
+}
+
 /// Metric values of one seed by id (`None` = never happened).
 pub type Metrics = BTreeMap<String, Option<f64>>;
 
@@ -141,6 +225,9 @@ impl Persona {
 pub struct RunFile {
     pub persona: String,
     pub hours: i64,
+    /// How the run stopped (`Stop::label`); absent for a fixed-hours run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<String>,
     pub patch: Option<String>,
     pub seeds: Vec<u64>,
     pub metrics: BTreeMap<String, Vec<Option<f64>>>,
@@ -334,16 +421,16 @@ impl Driver<'_> {
 
 /// `play`, also returning the payoff timeline (docs/balance-eval.md §爽点时间轴).
 pub fn play_full(seed: u64, persona: Persona, hours: i64) -> (Metrics, Vec<crate::payoff::Ev>) {
-    let (g, _) = play_bot(seed, persona, hours);
+    let (g, _) = play_bot(seed, persona, Stop::hours(hours));
     (g.metrics, g.evs)
 }
 
 /// One bot game, and the commands the engine accepted from the bot by name (setup included); its
 /// journal starts with the setup commands, like a play session's.
-pub fn play_bot(seed: u64, persona: Persona, hours: i64) -> (Game, BTreeMap<String, u32>) {
+pub fn play_bot(seed: u64, persona: Persona, stop: Stop) -> (Game, BTreeMap<String, u32>) {
     let (e, bot) = new_game(seed, persona);
     let mut driver = Driver::Bot(persona, bot);
-    let mut g = measure(e, &mut driver, hours);
+    let mut g = measure_until(e, &mut driver, stop);
     let Driver::Bot(_, bot) = driver else {
         unreachable!()
     };
@@ -364,17 +451,26 @@ pub struct Game {
     pub e: Engine,
     /// Commands accepted while measuring, as journal entries (seconds since `T0`).
     pub journal: Vec<Entry>,
+    /// Hours played (less than asked when the run stopped at a plateau).
+    pub hours: i64,
 }
 
 /// Plays `hours` hours from `e` (a fresh game after its setup commands) with `driver` acting,
 /// in 5-minute steps, and measures every metric. The driver acts at the start of each hour (the
 /// bot's turn, or the journal's commands due then) and, for a journal, also inside a step at each
 /// command's own moment; the commands accepted in an hour are that hour's `issued` commands.
-pub fn measure(mut e: Engine, driver: &mut Driver, hours: i64) -> Game {
+pub fn measure(e: Engine, driver: &mut Driver, hours: i64) -> Game {
+    measure_until(e, driver, Stop::hours(hours))
+}
+
+/// `measure` until `stop`: its hours, or the first plateau.
+pub fn measure_until(mut e: Engine, driver: &mut Driver, stop: Stop) -> Game {
     e.state.trace = Some(Vec::new());
     let mut journal: Vec<Entry> = Vec::new();
     let mut probes = Probes::new(&e);
-    for h in 1..=hours {
+    let mut scores = vec![idle_engine::mech::score::total(&e.state) as f64];
+    let mut played = stop.max_hours;
+    for h in 1..=stop.max_hours {
         let start = spendable(&e.state);
         let draws_before = e.state.cycle.research_count;
         let mut issued = driver.open(&mut e, h);
@@ -401,13 +497,20 @@ pub fn measure(mut e: Engine, driver: &mut Driver, hours: i64) -> Game {
             draws_before,
         };
         probes.hour(&e, &hour);
+        scores.push(idle_engine::mech::score::total(&e.state) as f64);
+        if stop.at_plateau && plateau_start(&scores, stop.window_h, stop.tol).is_some() {
+            played = h;
+            break;
+        }
     }
-    let (metrics, evs) = probes.finish(&e, hours);
+    let (mut metrics, evs) = probes.finish(&e, played);
+    plateau_metrics(&scores, &stop, played, &mut metrics);
     Game {
         metrics,
         evs,
         e,
         journal,
+        hours: played,
     }
 }
 
@@ -419,7 +522,7 @@ pub type SeedResult = (u64, Metrics, BTreeMap<String, u32>);
 pub fn run(
     persona: Persona,
     seeds: &[u64],
-    hours: i64,
+    stop: Stop,
     threads: usize,
     sessions: Option<&Path>,
 ) -> RunFile {
@@ -434,9 +537,10 @@ pub fn run(
                     chunk
                         .into_iter()
                         .map(|seed| {
-                            let (mut g, used) = play_bot(seed, persona, hours);
+                            let (mut g, used) = play_bot(seed, persona, stop);
                             if let Some(out) = sessions {
                                 let dir = out.join(format!("{}-s{seed}", persona.name()));
+                                let hours = g.hours;
                                 crate::session::write_bot(&dir, seed, persona, hours, &mut g)
                                     .unwrap_or_else(|e| panic!("{e}"));
                             }
@@ -448,7 +552,9 @@ pub fn run(
             .collect();
         hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
     });
-    RunFile::collect(persona.name(), hours, results)
+    let mut f = RunFile::collect(persona.name(), stop.max_hours, results);
+    f.until = stop.label();
+    f
 }
 
 impl RunFile {
@@ -507,5 +613,48 @@ pub fn timeline(seed: u64, persona: Persona, hours: i64) {
             cy.tiles.iter().filter(|t| t.claimable()).count(),
             warden
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plateau_is_the_first_flat_window() {
+        // Rises for 4 hours, then flat: with a 2-hour window the plateau starts at hour 4.
+        let s = [0.0, 10.0, 20.0, 30.0, 40.0, 40.0, 40.5, 40.5];
+        assert_eq!(plateau_start(&s, 2, 0.02), Some(4));
+        assert_eq!(plateau_start(&s[..6], 2, 0.02), None);
+        // A score that never moves is flat from the start.
+        assert_eq!(plateau_start(&[0.0; 5], 3, 0.02), Some(0));
+        // A drop counts as flat (the score stopped rising).
+        assert_eq!(plateau_start(&[0.0, 50.0, 30.0, 20.0], 1, 0.02), Some(1));
+    }
+
+    #[test]
+    fn stop_parses_until() {
+        assert_eq!(Stop::parse("hours", 72), Some(Stop::hours(72)));
+        let p = Stop::parse("plateau:24:0.05", 336).unwrap();
+        assert!(p.at_plateau && p.window_h == 24 && p.tol == 0.05 && p.max_hours == 336);
+        assert_eq!(p.label().as_deref(), Some("plateau:24:0.05"));
+        assert!(Stop::parse("plateau:0", 10).is_none());
+        assert!(Stop::parse("forever", 10).is_none());
+        assert_eq!(Stop::hours(5).label(), None);
+    }
+
+    #[test]
+    fn plateau_run_stops_early_and_records_it() {
+        // Two hours with a one-hour window and a huge tolerance: flat after the first hour.
+        let stop = Stop {
+            max_hours: 6,
+            at_plateau: true,
+            window_h: 1,
+            tol: 1e9,
+        };
+        let (g, _) = play_bot(0, Persona::REFERENCE, stop);
+        assert_eq!(g.hours, 1);
+        assert_eq!(g.metrics["stop.h"], Some(1.0));
+        assert_eq!(g.metrics["plateau.h"], Some(0.0));
     }
 }
