@@ -73,3 +73,6 @@
 {"t":403200,"cmd":{"cmd":"set_route","squad":4,"route":[67,52]}}
 {"t":432000,"cmd":{"cmd":"garrison","op":1,"tile":112}}
 {"t":432000,"cmd":{"cmd":"hire","candidate":303}}
+{"t":460800,"cmd":{"cmd":"set_route","squad":4,"route":[126]}}
+{"t":460800,"cmd":{"cmd":"set_squad","squad":4,"members":[2,111,302]}}
+{"t":489600,"cmd":{"cmd":"set_route","squad":4,"route":[69]}}
