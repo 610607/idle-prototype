@@ -1,0 +1,14 @@
+[
+  { "id": "hq_guard", "icon": "class-vanguard", "tags": ["militia"], "row": "front",
+    "base": { "hp": 0, "atk": 0, "def": 8, "spd": 11, "ap": 1, "pp": 1 },
+    "skills": ["shield_bash", "guard_cover"],
+    "gambits": [
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "shield_bash" }, "target": "front_lowest" }
+    ] },
+  { "id": "militia", "icon": "prof-militia", "tags": ["militia"], "row": "front",
+    "base": { "hp": 0, "atk": 0, "def": 4, "spd": 10, "ap": 1, "pp": 1 },
+    "skills": ["baton_strike"],
+    "gambits": [
+      { "if": { "t": "always" }, "do": { "t": "skill", "skill": "baton_strike" }, "target": "front_lowest" }
+    ] }
+]

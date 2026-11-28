@@ -3,6 +3,7 @@
 //! clock through [`clock::Timeline`] and into the save envelope through [`save::Saved`].
 
 pub mod clock;
+pub mod entity;
 pub mod geom;
 pub mod hash;
 pub mod rng;

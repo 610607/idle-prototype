@@ -2,10 +2,9 @@
 //! Holding keeps wardenship; losing costs 25. At 0 the tile is on alert: it stops producing but
 //! never drops further and is never lost without the player.
 
+use crate::data::defs::Orders;
 use crate::data::hooks;
-use crate::data::{
-    balance, content, Act, Cond, FacilityDef, FixtureDef, Gambit, Row, Tag, Target, TraitEffect,
-};
+use crate::data::{balance, content, FacilityDef, FixtureDef, Row, Tag, TraitEffect};
 use crate::kernel::geom;
 use crate::mech::combat::{self, enemy_spec, BattleInput, BattleKind, BattleReport, UnitSpec};
 use crate::mech::economy::{self, EconCalc};
@@ -28,43 +27,31 @@ pub fn next_surge_after(i: u16, t: i64) -> i64 {
     phase + k * b.surge_interval
 }
 
-fn simple_unit(
-    key: &str,
-    name: &str,
-    icon: &str,
-    row: Row,
-    hp: i32,
-    atk: i32,
-    def: i32,
-    spd: i32,
-    skills: &[&str],
-) -> UnitSpec {
-    let gambits = skills
-        .iter()
-        .filter(|s| content().skills[**s].kind == crate::data::SkillKind::Active)
-        .map(|s| Gambit {
-            cond: Cond::Always,
-            cond2: None,
-            act: Act::Skill {
-                skill: s.to_string(),
-            },
-            target: Target::FrontLowest,
-            on: true,
-        })
-        .collect();
+/// A defender that is not an operative (the HQ guard, a militia unit), from its definition
+/// (`defenders.json`): row, skills, default orders, defence, speed and points. Health and attack
+/// come from the balance table; `def_bonus` is added to the definition's defence.
+fn defender_unit(id: &str, name: &str, hp: i32, atk: i32, def_bonus: i32) -> UnitSpec {
+    let d = content()
+        .def(id)
+        .unwrap_or_else(|| panic!("defender {id} has no definition"));
+    let f = d.fighter();
+    let gambits = match &f.orders {
+        Orders::Listed(g) => g.clone(),
+        Orders::Auto => vec![],
+    };
     UnitSpec {
-        key: key.into(),
+        key: d.id.clone(),
         name: name.into(),
-        icon: icon.into(),
-        row,
+        icon: d.icon.clone(),
+        row: f.row,
         max_hp: hp,
         atk,
-        def,
-        spd,
-        ap: 1,
-        pp: 1,
+        def: f.base.def + def_bonus,
+        spd: f.base.spd,
+        ap: f.base.ap,
+        pp: f.base.pp,
         stats: [50; 9],
-        skills: skills.iter().map(|s| s.to_string()).collect(),
+        skills: f.skills.clone(),
         gambits,
         effects: vec![],
         start_tags: vec![],
@@ -103,16 +90,12 @@ pub fn base_defenders(state: &GameState, calc: &EconCalc, tile: u16) -> Vec<Unit
     let b = balance();
     let t = &state.cycle.tiles[tile as usize];
     if t.terrain == Terrain::Hq {
-        return vec![simple_unit(
-            "hq_guard",
+        return vec![defender_unit(
+            hooks::HQ_GUARD,
             &t!("unit.hq_guard"),
-            "class-vanguard",
-            Row::Front,
             b.hq_guard_hp,
             b.hq_guard_atk,
-            8,
-            11,
-            &hooks::HQ_GUARD_SKILLS,
+            0,
         )];
     }
     militia_units(economy::militia_of(calc, state.cycle.district_of(tile)))
@@ -151,16 +134,12 @@ pub fn militia_unit(m: i32) -> UnitSpec {
     } else {
         t!("unit.neighbours")
     };
-    simple_unit(
-        hooks::MILITIA,
+    defender_unit(
+        hooks::MILITIA_UNIT,
         &name,
-        "prof-militia",
-        Row::Front,
         b.militia_base_hp + b.militia_hp_per * m,
         b.militia_atk_base + b.militia_atk_per_2 * m / 2,
-        4 + m / 3,
-        10,
-        &hooks::MILITIA_SKILLS,
+        m / 3,
     )
 }
 
