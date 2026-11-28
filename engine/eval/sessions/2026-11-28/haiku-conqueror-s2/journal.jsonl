@@ -76,3 +76,10 @@
 {"t":460800,"cmd":{"cmd":"set_route","squad":4,"route":[126]}}
 {"t":460800,"cmd":{"cmd":"set_squad","squad":4,"members":[2,111,302]}}
 {"t":489600,"cmd":{"cmd":"set_route","squad":4,"route":[69]}}
+{"t":518400,"cmd":{"cmd":"claim","tile":69}}
+{"t":518400,"cmd":{"cmd":"set_route","squad":4,"route":[85,70]}}
+{"t":547200,"cmd":{"cmd":"claim","tile":70}}
+{"t":547200,"cmd":{"cmd":"set_route","squad":4,"route":[79]}}
+{"t":547200,"cmd":{"cmd":"upgrade","track":"arms"}}
+{"t":547200,"cmd":{"cmd":"upgrade","track":"armor"}}
+{"t":576000,"cmd":{"cmd":"set_route","squad":4,"route":[94]}}
