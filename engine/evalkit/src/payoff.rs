@@ -14,7 +14,8 @@
 //!   matching "research" `Mag`, a category event without one), `contiguous` (m = the district's
 //!   output bonus), `core`, `self_sufficient` (each false → true transition, polled hourly), the
 //!   gifts `special`, `drop`, `trait`, `codex`, `rift`, `armory` (a breakthrough; a plain level is
-//!   trickle), every other `Mag` class (e.g.
+//!   trickle), `unlock` (a system opened: only in games with an unlock profile, `mech::unlocks`),
+//!   every other `Mag` class (e.g.
 //!   `frontier_open`), and `novelty` (see below);
 //! - trickle (tier 0, kept for `print`, never felt): `candidate`, `cache`, `clue`, `claimable`,
 //!   `task`, `trip`, `surge`, `claimed`, `hired`, `counter`, `salvage`, `retired`, `abandoned`,
@@ -144,7 +145,7 @@ pub fn classes_path() -> String {
 }
 
 /// Every class the file may name.
-const KNOWN: [&str; 24] = [
+const KNOWN: [&str; 25] = [
     "research",
     "armory",
     "contiguous",
@@ -169,6 +170,7 @@ const KNOWN: [&str; 24] = [
     "surge",
     "cycle",
     "auto",
+    "unlock",
 ];
 
 #[derive(Deserialize)]

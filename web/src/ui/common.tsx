@@ -136,7 +136,7 @@ export function pageLabel(view: View, s: Sheet): string {
     case 'op':
       return view.operatives.find((o) => o.id === s.op)?.name ?? t('common.crumb.op');
     case 'candidate':
-      return view.candidates.find((c) => c.id === s.candidate)?.op.name ?? t('common.crumb.candidate');
+      return view.candidates?.find((c) => c.id === s.candidate)?.op.name ?? t('common.crumb.candidate');
     case 'district':
       return view.districts.find((d) => d.id === s.district)?.name ?? t('common.crumb.district');
     case 'report':

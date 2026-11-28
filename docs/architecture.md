@@ -56,7 +56,7 @@
 
 1. 机制层新开一个文件（`mech/<机制>.rs`），状态加进 `mech/state.rs`；存档结构变了就把 `SAVE_VERSION` 加一（快速迭代期不写迁移）。
 2. 有定时发生的事：在 `mech/sim.rs` 的 `Timeline` 实现里加上它的下一次时间、“这一刻有没有事”的判断和这一刻要做的事。时钟循环不用改。
-3. 有玩家操作：在 `mech/commands.rs` 的 `Command` 加一项，规则写在机制层。
+3. 有玩家操作：在 `mech/commands.rs` 的 `Command` 加一项，规则写在机制层；在 `Command::system` 里归到一个命令组，并在 `content/unlocks.json` 里由某个解锁管着（见 [unlocks.md](unlocks.md)，不归类编译不过）。
 4. 有可调的数：放进 `content/balance.json`；有新的定义表：放进 `content/` 和数据层。
 5. 客户端：视图（`client/view.rs`）、预演（`client/api.rs`）、文字版（`client/textui.rs`，新命令不接上编译不过）、网页。
 6. 评估：按 `docs/balance-eval.md`“新系统怎么接入”补指标、机器人规则、合格区间和模型系数；新事件 key 在 `engine/eval/payoff_classes.json` 归类。

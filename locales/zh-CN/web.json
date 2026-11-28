@@ -16,6 +16,8 @@
   "panels.pending.count": "{n} 件",
   "panels.pending.none": "没有",
   "panels.pending.empty": "都安排好了。挂着就行，回来再看。",
+  "panels.next.title": "接下来能解锁",
+  "panels.next.cond": "{cond}（{have}/{need}）",
   "panels.tide.col_time": "时间",
   "panels.tide.col_tile": "格子",
   "panels.tide.col_result": "结果",

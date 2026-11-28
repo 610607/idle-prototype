@@ -3,6 +3,7 @@
 
 pub mod defs;
 pub mod hooks;
+pub mod unlocks;
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -1286,6 +1287,8 @@ pub struct Content {
     /// Ids used by two kinds (kept namespaced in `defs`; validation reports them).
     pub def_clashes: Vec<String>,
     pub balance: Balance,
+    /// The unlock registry (`unlocks.json`).
+    pub unlocks: unlocks::Registry,
 }
 
 impl Content {
@@ -1369,6 +1372,7 @@ const FILES: &[(&str, &str)] = &[
         "armory_tracks.json",
         include_str!("../../content/armory_tracks.json"),
     ),
+    ("unlocks.json", include_str!("../../content/unlocks.json")),
 ];
 
 fn parse<T: for<'de> Deserialize<'de>>(name: &str) -> T {
@@ -1431,6 +1435,7 @@ fn load() -> Content {
     let tasks: Vec<TaskDef> = parse("tasks.json");
     let armory: Vec<ArmoryDef> = parse("armory_tracks.json");
     let defenders: Vec<defs::DefenderDef> = parse("defenders.json");
+    let unlocks: unlocks::Registry = parse("unlocks.json");
     let table = defs::table(
         classes
             .iter()
@@ -1477,6 +1482,7 @@ fn load() -> Content {
         defs: table.by_id,
         def_clashes: table.clashes,
         balance,
+        unlocks,
     };
     localize(&mut c);
     c
@@ -1567,6 +1573,10 @@ fn localize(c: &mut Content) {
     for a in &mut c.armory {
         a.name = text("armory", &a.id, "name");
         a.desc = text("armory", &a.id, "desc");
+    }
+    for u in &mut c.unlocks.unlocks {
+        u.name = text("unlock", &u.id, "name");
+        u.hint = text("unlock", &u.id, "hint");
     }
     for t in &mut c.tasks {
         t.group = text("task", &t.id, "group");
@@ -1661,6 +1671,10 @@ pub fn validate() -> Vec<String> {
         }
     }
     errs.extend(c.def_clashes.iter().cloned());
+    errs.extend(
+        c.unlocks
+            .check(|f| c.facility(f).is_some(), |r| c.rule(r).is_some()),
+    );
     for p in &c.professions {
         if !c.classes.contains_key(&p.class) {
             errs.push(format!("profession {}: unknown class {}", p.id, p.class));

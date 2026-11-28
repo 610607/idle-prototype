@@ -17,6 +17,7 @@ pub mod score;
 pub mod sim;
 pub mod state;
 pub mod tasks;
+pub mod unlocks;
 pub mod world;
 
 /// Game version fingerprint (docs/eval-interface.md, manifest `build`): content, balance patch and

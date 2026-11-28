@@ -8,6 +8,7 @@
 //! and action JSON, session directory. It reads and writes files, so it stays out of wasm.
 use crate::client::api::{Engine, RoutePreview};
 use crate::client::view::{OpView, View};
+use crate::data::unlocks::System;
 use crate::data::{content, Act, Cond, Gambit, Stat, Tag, Target};
 use crate::kernel::geom;
 use crate::mech::combat::Outcome;
@@ -686,7 +687,9 @@ fn org(o: &mut String, v: &View) {
 fn hq(o: &mut String, v: &View) {
     let g = &v.org;
     org(o, v);
-    line(o, t!("cli.rules.title"));
+    if v.shows(System::Rules) {
+        line(o, t!("cli.rules.title"));
+    }
     for r in &g.rules {
         line(
             o,
@@ -729,15 +732,17 @@ fn hq(o: &mut String, v: &View) {
         .iter()
         .map(|x| t!("cli.sealed_item", name = x.name, id = x.id))
         .collect();
-    line(
-        o,
-        t!(
-            "cli.sealed",
-            n = sealed.len(),
-            slots = g.sealed_slots,
-            list = none_or(&sealed, &t!("cli.sep.list"))
-        ),
-    );
+    if v.shows(System::Retire) {
+        line(
+            o,
+            t!(
+                "cli.sealed",
+                n = sealed.len(),
+                slots = g.sealed_slots,
+                list = none_or(&sealed, &t!("cli.sep.list"))
+            ),
+        );
+    }
     if !g.history.is_empty() {
         line(o, t!("cli.history.title"));
         for h in &g.history {
@@ -760,6 +765,9 @@ fn hq(o: &mut String, v: &View) {
 
 /// The 知识库: every doctrine researched so far; the archived ones start the next cycle held.
 fn library(o: &mut String, v: &View) {
+    if !v.shows(System::Research) {
+        return;
+    }
     let r = &v.research;
     line(
         o,
@@ -1114,99 +1122,105 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
         line(&mut o, op_short(op));
     }
     let stash: Vec<String> = v.inventory.iter().map(|x| x.name.clone()).collect();
-    line(
-        &mut o,
-        if stash.is_empty() {
-            t!("cli.board.stash_empty")
-        } else {
-            t!("cli.board.stash", n = stash.len(), list = list(&stash))
-        },
-    );
-    let r = &v.research;
-    line(
-        &mut o,
-        t!(
-            "cli.board.doctrines",
-            n = r.held.len(),
-            left = r.left,
-            cost = r.cost,
-            step = r.step
-        ),
-    );
-    for d in &r.held {
+    if v.shows(System::Equipment) {
         line(
             &mut o,
-            t!("cli.board.doctrine", name = d.name, desc = d.desc),
+            if stash.is_empty() {
+                t!("cli.board.stash_empty")
+            } else {
+                t!("cli.board.stash", n = stash.len(), list = list(&stash))
+            },
         );
     }
-    if let Some(ring) = r.unlock_ring {
-        line(
-            &mut o,
-            t!("cli.board.doctrine_unlock", ring = ring, n = r.unlock_count),
-        );
-    }
-    if !r.offers.is_empty() && opts.research {
-        line(&mut o, t!("cli.board.offers"));
-    }
-    if r.reactions_on {
-        line(&mut o, t!("cli.board.codex"));
-        for c in &r.codex {
-            line(
-                &mut o,
-                if c.seen {
-                    t!(
-                        "cli.board.codex_seen",
-                        a = c.a.name,
-                        b = c.b.name,
-                        name = c.name,
-                        text = c.text,
-                        n = c.this_cycle
-                    )
-                } else {
-                    t!("cli.board.codex_rumor", text = c.text)
-                },
-            );
-        }
-    } else {
-        let hub = content()
-            .doctrine("react")
-            .map(|d| d.name.clone())
-            .unwrap_or_default();
-        line(&mut o, t!("cli.board.codex_off", doctrine = hub));
-    }
-    let pct = |target: crate::data::ArmoryTarget| {
-        let (hp, atk) = crate::mech::armory::total_bp(&e.state.cycle.armory, target);
-        ((hp - 10_000) / 100, (atk - 10_000) / 100)
-    };
-    let (shp, satk) = pct(crate::data::ArmoryTarget::Squad);
-    let (mhp, matk) = pct(crate::data::ArmoryTarget::Militia);
-    line(
-        &mut o,
-        t!(
-            "cli.board.armory",
-            satk = satk,
-            shp = shp,
-            matk = matk,
-            mhp = mhp
-        ),
-    );
-    for a in &v.armory {
-        let next = match a.next.as_str() {
-            "level" => t!("cli.armory.next.level", cost = cost_text(&a.cost)),
-            "breakthrough" => t!("cli.armory.next.breakthrough", cost = cost_text(&a.cost)),
-            _ => t!("cli.armory.next.maxed"),
-        };
+    if v.shows(System::Research) {
+        let r = &v.research;
         line(
             &mut o,
             t!(
-                "cli.board.armory_track",
-                name = a.name,
-                level = a.level,
-                max = a.max,
-                breaks = a.breaks,
-                next = next
+                "cli.board.doctrines",
+                n = r.held.len(),
+                left = r.left,
+                cost = r.cost,
+                step = r.step
             ),
         );
+        for d in &r.held {
+            line(
+                &mut o,
+                t!("cli.board.doctrine", name = d.name, desc = d.desc),
+            );
+        }
+        if let Some(ring) = r.unlock_ring {
+            line(
+                &mut o,
+                t!("cli.board.doctrine_unlock", ring = ring, n = r.unlock_count),
+            );
+        }
+        if !r.offers.is_empty() && opts.research {
+            line(&mut o, t!("cli.board.offers"));
+        }
+        if r.reactions_on {
+            line(&mut o, t!("cli.board.codex"));
+            for c in &r.codex {
+                line(
+                    &mut o,
+                    if c.seen {
+                        t!(
+                            "cli.board.codex_seen",
+                            a = c.a.name,
+                            b = c.b.name,
+                            name = c.name,
+                            text = c.text,
+                            n = c.this_cycle
+                        )
+                    } else {
+                        t!("cli.board.codex_rumor", text = c.text)
+                    },
+                );
+            }
+        } else {
+            let hub = content()
+                .doctrine("react")
+                .map(|d| d.name.clone())
+                .unwrap_or_default();
+            line(&mut o, t!("cli.board.codex_off", doctrine = hub));
+        }
+    }
+    if v.shows(System::Armory) {
+        let pct = |target: crate::data::ArmoryTarget| {
+            let (hp, atk) = crate::mech::armory::total_bp(&e.state.cycle.armory, target);
+            ((hp - 10_000) / 100, (atk - 10_000) / 100)
+        };
+        let (shp, satk) = pct(crate::data::ArmoryTarget::Squad);
+        let (mhp, matk) = pct(crate::data::ArmoryTarget::Militia);
+        line(
+            &mut o,
+            t!(
+                "cli.board.armory",
+                satk = satk,
+                shp = shp,
+                matk = matk,
+                mhp = mhp
+            ),
+        );
+        for a in &v.armory {
+            let next = match a.next.as_str() {
+                "level" => t!("cli.armory.next.level", cost = cost_text(&a.cost)),
+                "breakthrough" => t!("cli.armory.next.breakthrough", cost = cost_text(&a.cost)),
+                _ => t!("cli.armory.next.maxed"),
+            };
+            line(
+                &mut o,
+                t!(
+                    "cli.board.armory_track",
+                    name = a.name,
+                    level = a.level,
+                    max = a.max,
+                    breaks = a.breaks,
+                    next = next
+                ),
+            );
+        }
     }
     line(&mut o, t!("cli.board.districts"));
     let empty = v
@@ -1281,7 +1295,29 @@ pub fn board(e: &mut Engine, since: i64, opts: &Options) -> String {
             line(&mut o, format!("  - {}", p.text));
         }
     }
+    next_lines(&mut o, &v);
     o
+}
+
+/// The unlocks the player is working toward (none when everything is open).
+fn next_lines(o: &mut String, v: &View) {
+    if v.next.is_empty() {
+        return;
+    }
+    line(o, t!("cli.board.next"));
+    for n in &v.next {
+        line(
+            o,
+            t!(
+                "cli.board.next_item",
+                name = n.name,
+                cond = n.cond,
+                have = n.have,
+                need = n.need,
+                hint = n.hint
+            ),
+        );
+    }
 }
 
 /// Full skill and trait text (with equipment), candidates, the stash, facilities, policies, the
@@ -1300,54 +1336,60 @@ pub fn info(e: &mut Engine) -> String {
             line(&mut o, op_line(&c.op, false));
         }
     }
-    line(&mut o, t!("cli.info.stash", n = v.inventory.len()));
-    if v.inventory.is_empty() {
-        line(&mut o, t!("cli.info.stash_empty"));
-    }
-    for it in &v.inventory {
-        line(
-            &mut o,
-            t!(
-                "cli.info.stash_item",
-                name = it.name,
-                id = it.id,
-                rw = rw(&it.reads, &it.writes),
-                desc = it.desc
-            ),
-        );
-    }
-    line(&mut o, t!("cli.info.facilities"));
-    for f in v.facilities.iter().filter(|f| f.visible) {
-        line(
-            &mut o,
-            t!(
-                "cli.info.facility",
-                name = f.name,
-                jobs = f.jobs,
-                power = f.power,
-                scrap = f.cost.scrap,
-                parts = f.cost.parts,
-                desc = f.desc
-            ),
-        );
-    }
-    line(&mut o, t!("cli.info.policies"));
-    for d in v.districts.iter().filter(|d| d.owned > 0) {
-        for p in &d.policy_options {
+    if v.shows(System::Equipment) {
+        line(&mut o, t!("cli.info.stash", n = v.inventory.len()));
+        if v.inventory.is_empty() {
+            line(&mut o, t!("cli.info.stash_empty"));
+        }
+        for it in &v.inventory {
             line(
                 &mut o,
                 t!(
-                    "cli.info.policy",
-                    district = d.name,
-                    name = p.name,
-                    desc = p.desc,
-                    reason = p
-                        .reason
-                        .as_ref()
-                        .map(|r| t!("cli.paren", x = r))
-                        .unwrap_or_default()
+                    "cli.info.stash_item",
+                    name = it.name,
+                    id = it.id,
+                    rw = rw(&it.reads, &it.writes),
+                    desc = it.desc
                 ),
             );
+        }
+    }
+    if v.shows(System::Build) {
+        line(&mut o, t!("cli.info.facilities"));
+        for f in v.facilities.iter().filter(|f| f.visible) {
+            line(
+                &mut o,
+                t!(
+                    "cli.info.facility",
+                    name = f.name,
+                    jobs = f.jobs,
+                    power = f.power,
+                    scrap = f.cost.scrap,
+                    parts = f.cost.parts,
+                    desc = f.desc
+                ),
+            );
+        }
+    }
+    if v.shows(System::Policy) {
+        line(&mut o, t!("cli.info.policies"));
+        for d in v.districts.iter().filter(|d| d.owned > 0) {
+            for p in &d.policy_options {
+                line(
+                    &mut o,
+                    t!(
+                        "cli.info.policy",
+                        district = d.name,
+                        name = p.name,
+                        desc = p.desc,
+                        reason = p
+                            .reason
+                            .as_ref()
+                            .map(|r| t!("cli.paren", x = r))
+                            .unwrap_or_default()
+                    ),
+                );
+            }
         }
     }
     hq(&mut o, &v);
@@ -1358,7 +1400,7 @@ pub fn info(e: &mut Engine) -> String {
         .map(|x| t!("cli.tag_id", id = x.id(), name = x.name()))
         .collect();
     for c in samples() {
-        if reach(&c) == Reach::BetweenCycles {
+        if reach(&c) == Reach::BetweenCycles || !e.allows(&c) {
             continue;
         }
         let name = cmd_name(&c);
@@ -1715,7 +1757,11 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
             cmd,
         });
     }
-    for d in v.districts.iter().filter(|d| d.policy_unlocked) {
+    for d in v
+        .districts
+        .iter()
+        .filter(|d| d.policy_unlocked && d.policy_options.is_open())
+    {
         for p in d.policy_options.iter().filter(|p| p.available) {
             if d.policy.as_deref() == Some(p.id.as_str()) {
                 continue;
@@ -1761,6 +1807,9 @@ pub fn menu(e: &mut Engine, opts: &Options) -> Vec<Item> {
             });
         }
     }
+    if !crate::mech::unlocks::all_open(&e.state) {
+        m.retain(|i| e.allows(&i.cmd));
+    }
     m
 }
 
@@ -1774,6 +1823,10 @@ pub fn menu_text(e: &mut Engine, items: &[Item]) -> String {
     }
     if v.phase != Phase::Active {
         // The hints below are about the map.
+        return o;
+    }
+    if !v.locked.is_empty() {
+        // The hints below name routes, squads and garrisons, which may still be locked.
         return o;
     }
     line(
@@ -2098,5 +2151,100 @@ mod tests {
         assert!(
             matches!(c, Command::Garrison { tile: Some(t), .. } if t == parse_label("H7").unwrap())
         );
+    }
+
+    /// Every command is in the unlock registry (or deliberately ungated), and so is every
+    /// building: a new one has to be filed under an unlock (docs/unlocks.md).
+    #[test]
+    fn every_command_and_facility_is_in_the_unlock_registry() {
+        let reg = &content().unlocks;
+        for c in samples() {
+            match c.system() {
+                None => assert!(matches!(c, Command::ChooseMap { .. }), "{c:?} is ungated"),
+                Some(s) => assert!(reg.of_system(s).is_some(), "{c:?}: {s:?} has no unlock"),
+            }
+        }
+        for f in &content().facilities {
+            assert!(
+                reg.of_facility(&f.id).is_some() || reg.ungated_facilities.contains(&f.id),
+                "facility {} is in no unlock",
+                f.id
+            );
+        }
+        for r in &content().rules {
+            assert!(
+                reg.of_rule(&r.id).is_some(),
+                "rule {} is in no unlock",
+                r.id
+            );
+        }
+    }
+
+    fn tutorial_game() -> Engine {
+        let mut e = Engine::new_with(1, T0, DEVICE, &crate::mech::unlocks::Start::tutorial());
+        e.command(&Command::ChooseMap { index: 0 }).unwrap();
+        e
+    }
+
+    #[test]
+    fn tutorial_shows_only_what_is_open() {
+        let opts = Options::default();
+        let mut e = tutorial_game();
+        let items = menu(&mut e, &opts);
+        assert!(!items.is_empty());
+        assert!(items.iter().all(|i| e.allows(&i.cmd)));
+        assert!(items
+            .iter()
+            .all(|i| matches!(&i.cmd, Command::Claim { .. } | Command::SetRoute { .. })));
+        let text = board(&mut e, 0, &opts);
+        assert!(text.contains(&t!("cli.board.next")));
+        let build = &content().unlocks.get("build").unwrap();
+        assert!(text.contains(&build.hint));
+        let hub = content()
+            .doctrine(crate::data::hooks::HUB_DOCTRINE)
+            .unwrap();
+        assert!(!text.contains(&t!("cli.board.codex_off", doctrine = hub.name)));
+        let info = info(&mut e);
+        assert!(!info.contains(&t!("cli.info.facilities")));
+        assert!(!info.contains(r#"{"cmd":"research"}"#));
+        let v: serde_json::Value = serde_json::from_str(&e.view_json()).unwrap();
+        for key in [
+            "research",
+            "armory",
+            "tasks",
+            "facilities",
+            "candidates",
+            "inventory",
+        ] {
+            assert!(v.get(key).is_none(), "{key} is shown while locked");
+        }
+        assert!(v["org"].get("rules").is_none());
+        assert_eq!(v["next"][0]["id"], "build");
+        assert_eq!(
+            (v["next"][0]["have"].as_i64(), v["next"][0]["need"].as_i64()),
+            (Some(0), Some(3))
+        );
+        assert!(v["locked"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|x| x == "research"));
+    }
+
+    #[test]
+    fn default_games_have_no_unlock_fields() {
+        let mut e = new_game(1);
+        let v: serde_json::Value = serde_json::from_str(&e.view_json()).unwrap();
+        assert!(v.get("locked").is_none() && v.get("next").is_none());
+        for key in [
+            "research",
+            "armory",
+            "tasks",
+            "facilities",
+            "candidates",
+            "inventory",
+        ] {
+            assert!(v.get(key).is_some(), "{key} is missing");
+        }
     }
 }

@@ -694,6 +694,27 @@ pub fn timeline(seed: u64, persona: Persona, hours: i64) {
 mod tests {
     use super::*;
 
+    /// A game with most systems locked (the tutorial's unlock profile): the bots' commands that
+    /// are locked are refused, and every bot keeps playing without a panic.
+    #[test]
+    fn bots_survive_a_tutorial_profile_game() {
+        use idle_engine::mech::unlocks::Start;
+        for style in Style::ALL.into_iter().chain([Style::Sandbag]) {
+            let persona = Persona { style, every: 1 };
+            let mut bot = Bot::new(persona.policy());
+            let mut e = Engine::new_with(1, T0, textui::DEVICE, &Start::tutorial());
+            for cmd in setup_cmds() {
+                let _ = bot.act(&mut e, cmd);
+            }
+            for h in 1..=12 {
+                bot.step(&mut e);
+                e.advance(T0 + h * 3600);
+            }
+            assert!(e.state.cycle.unlocks.is_some(), "{}", style.name());
+            assert!(!bot.used().contains_key("research"), "{}", style.name());
+        }
+    }
+
     #[test]
     fn plateau_is_the_first_flat_window() {
         // Rises for 4 hours, then flat: with a 2-hour window the plateau starts at hour 4.

@@ -35,7 +35,7 @@ export function TileSheet({ tile, onClose }: { tile: number; onClose: () => void
   const aside = hasAside ? (
     <>
       {t.border ? <DefenseBlock t={t} /> : null}
-      {t.owned && t.terrain === 'city' ? <BuildBlock t={t} /> : null}
+      {t.owned && t.terrain === 'city' && view.facilities ? <BuildBlock t={t} /> : null}
       {t.owned && t.terrain === 'rift' && t.rift ? <DialBlock t={t} /> : null}
     </>
   ) : undefined;
@@ -248,14 +248,15 @@ function BuildBlock({ t }: { t: TileView }) {
   const [pick, setPick] = useState<string | null>(null);
   const [dry, setDry] = useState<DryRun | null>(null);
   const current = t.usage;
-  const options = view.facilities.filter((f) => f.visible);
-  const hiddenCount = view.facilities.length - options.length;
+  const facilities = view.facilities ?? [];
+  const options = facilities.filter((f) => f.visible);
+  const hiddenCount = facilities.length - options.length;
   const choose = (id: string | null) => {
     setPick(id ?? 'housing');
     setDry(game.dryRun({ cmd: 'build', tile: t.i, facility: id }));
   };
   const usageName =
-    current === 'housing' ? tr('tile.build.housing') : current === 'none' ? tr('tile.build.empty') : view.facilities.find((f) => f.id === current)?.name ?? current;
+    current === 'housing' ? tr('tile.build.housing') : current === 'none' ? tr('tile.build.empty') : facilities.find((f) => f.id === current)?.name ?? current;
   return (
     <Section title={tr('tile.build.title')} icon="housing" tone="good" hint={tr('tile.build.now', { name: usageName })}>
       <div className="list">

@@ -118,7 +118,7 @@ export function TideStrip() {
 function Apprentice() {
   const { view, run } = useCtx();
   const tasks = view.tasks;
-  if (!tasks.open.length) return null;
+  if (!tasks || !tasks.open.length) return null;
   return (
     <Section title={t('panels.tasks.title')} icon="check" tone="hazard" hint={`${tasks.claimed}/${tasks.total}`}>
       <div className="stack" style={{ gap: 6 }}>
@@ -175,6 +175,25 @@ export function PendingList() {
           ))}
         </div>
       )}
+    </Section>
+  );
+}
+
+/** The next one or two unlocks and how far along they are; absent in games with everything open. */
+export function NextUnlocks() {
+  const { view } = useCtx();
+  if (!view.next?.length) return null;
+  return (
+    <Section title={t('panels.next.title')} icon="check" tone="hazard">
+      <div className="stack" style={{ gap: 6 }}>
+        {view.next.map((n) => (
+          <div key={n.id} className="small">
+            <b>{n.name}</b> {t('panels.next.cond', { cond: n.cond, have: n.have, need: n.need })}
+            <div className="tiny faint">{n.hint}</div>
+            <Bar value={n.have} max={n.need} />
+          </div>
+        ))}
+      </div>
     </Section>
   );
 }
@@ -424,6 +443,7 @@ export function RosterPanel() {
     <div className="split">
       <div className="col">{roster}</div>
       <div className="col">
+        {view.candidates ? (
         <Section title={t('panels.candidates.title')} icon="candidate" tone="good" hint={view.queue ? t('panels.candidates.queue', { n: view.queue }) : t('panels.candidates.count', { n: view.candidates.length })}>
           {view.candidates.length === 0 ? (
             <div className="empty">{t('panels.candidates.empty')}</div>
@@ -439,12 +459,14 @@ export function RosterPanel() {
               ))}
             </div>
           )}
-          {view.districts.some((d) => d.customize.unlocked) ? (
+          {view.districts.some((d) => d.customize?.unlocked) ? (
             <div className="tiny faint" style={{ marginTop: 6 }}>
               {t('panels.candidates.custom_open')}
             </div>
           ) : null}
         </Section>
+        ) : null}
+        {view.inventory ? (
         <Section title={t('panels.inventory.title')} icon="equip" tone="rust" hint={t('panels.inventory.count', { n: view.inventory.length })}>
           {view.inventory.length === 0 ? (
             <div className="empty">{t('panels.inventory.empty')}</div>
@@ -460,7 +482,7 @@ export function RosterPanel() {
                     <div className="small muted">{it.desc}</div>
                     <TagIO reads={it.reads} writes={it.writes} />
                   </div>
-                  {view.sealed.some((s) => s.id === it.id) ? (
+                  {view.sealed?.some((s) => s.id === it.id) ? (
                     <span className="small muted">{t('panels.sealed.title')}</span>
                   ) : (
                     <button className="btn small ghost" title={t('panels.inventory.seal_title')} onClick={() => run({ cmd: 'seal', item: it.id, on: true }, t('panels.inventory.sealed', { name: it.name }))}>
@@ -472,6 +494,7 @@ export function RosterPanel() {
             </div>
           )}
         </Section>
+        ) : null}
       </div>
     </div>
   );
@@ -539,7 +562,7 @@ export function HQPanel() {
   const [saveText, setSaveText] = useState('');
   return (
     <>
-    {view.phase === 'active' && view.armory.length ? <ArmoryPanel /> : null}
+    {view.phase === 'active' && view.armory?.length ? <ArmoryPanel /> : null}
     <div className="split">
       <div className="col">
         <Section title={t('panels.org.title', { level: org.level })} icon="org" tone="hazard" hint={org.next ? `${org.exp}/${org.next}` : `${org.exp}`}>
@@ -553,6 +576,7 @@ export function HQPanel() {
           </div>
         </Section>
 
+        {org.rules ? (
         <Section title={t('panels.rules.title')} icon="rules" hint={t('panels.rules.hint')}>
           <div className="stack" style={{ gap: 6 }}>
             {org.rules.map((r) => (
@@ -566,6 +590,7 @@ export function HQPanel() {
             ))}
           </div>
         </Section>
+        ) : null}
 
         {view.phase === 'active' ? <CycleBlock /> : null}
       </div>
@@ -591,6 +616,7 @@ export function HQPanel() {
           </div>
         </Section>
 
+        {view.sealed ? (
         <Section title={t('panels.sealed.title')} icon="seal" tone="rift" hint={`${view.sealed.length}/${org.sealed_slots}`}>
           {view.sealed.length === 0 ? <div className="empty">{t('panels.sealed.empty')}</div> : null}
           {view.sealed.map((it, k) => (
@@ -603,6 +629,7 @@ export function HQPanel() {
             </div>
           ))}
         </Section>
+        ) : null}
 
         {org.history.length ? (
           <Section title={t('panels.history.title')} icon="report">
@@ -699,7 +726,7 @@ function armoryTotal(tracks: ArmoryView[], target: ArmoryView['target']): { hp: 
 
 export function ArmoryPanel() {
   const { view } = useCtx();
-  const tracks = view.armory;
+  const tracks = view.armory ?? [];
   const targets = (['squad', 'militia'] as const).filter((x) => tracks.some((a) => a.target === x));
   return (
     <Section id="armory" title={t('panels.armory.title')} icon="atk" tone="rust" hint={t('panels.armory.hint')}>
@@ -874,8 +901,8 @@ function CycleBlock() {
                     <div className="small muted">
                       {t('panels.cycle.kept_list', {
                         exp: view.results.total,
-                        sealed: view.sealed.length,
-                        doctrines: view.research.archive.map((d) => d.name).join(t('panels.sep.list')) || t('panels.cycle.none_picked'),
+                        sealed: view.sealed?.length ?? 0,
+                        doctrines: (view.research?.archive ?? []).map((d) => d.name).join(t('panels.sep.list')) || t('panels.cycle.none_picked'),
                       })}
                     </div>
                   </div>

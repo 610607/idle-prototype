@@ -1,6 +1,7 @@
 //! Commands in: every player intent is one serialisable command. The same JSON goes through
 //! `apply` for real and through `dry_run` on a copy for previews.
 
+use crate::data::unlocks::System;
 use crate::data::Gambit;
 use crate::mech::actions;
 use crate::mech::sim;
@@ -144,6 +145,7 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
     {
         return Err(t!("err.choose_map_first"));
     }
+    crate::mech::unlocks::check(state, cmd)?;
     let r = match cmd {
         Command::ChooseMap { index } => sim::choose_map(state, *index),
         Command::SetRoute { squad, route } => actions::set_route(state, *squad, route),
@@ -200,6 +202,43 @@ pub fn apply(state: &mut GameState, cmd: &Command) -> Result<(), String> {
     };
     if r.is_ok() {
         state.revision += 1;
+        crate::mech::unlocks::after_command(state, cmd);
     }
     r
+}
+
+impl Command {
+    /// The command group (unlock registry, `data::unlocks::System`) this command belongs to;
+    /// `None` is never gated. No catch-all arm: a new command does not compile until classified.
+    pub fn system(&self) -> Option<System> {
+        match self {
+            Command::ChooseMap { .. } => None,
+            // Until S5's manual dispatch: a route of one tile stands in for it.
+            Command::SetRoute { route, .. } if route.len() <= 1 => Some(System::Dispatch),
+            Command::SetRoute { .. } | Command::Assault { .. } => Some(System::Routes),
+            Command::SetSquad { .. } => Some(System::Squad),
+            Command::Garrison { .. } => Some(System::Garrison),
+            Command::Claim { .. } => Some(System::Claim),
+            Command::Build { .. } => Some(System::Build),
+            Command::Counter { .. } | Command::Abandon { .. } => Some(System::Counter),
+            Command::SetDial { .. } => Some(System::Dial),
+            Command::Hire { .. } | Command::Dismiss { .. } => Some(System::Hire),
+            Command::Customize { .. } => Some(System::Customize),
+            Command::Retire { .. } | Command::Lock { .. } | Command::Seal { .. } => {
+                Some(System::Retire)
+            }
+            Command::SetPolicy { .. } => Some(System::Policy),
+            Command::SetPriority { .. } => Some(System::Priority),
+            Command::SetRule { .. } => Some(System::Rules),
+            Command::SetGambits { .. } => Some(System::Gambits),
+            Command::Equip { .. } => Some(System::Equipment),
+            Command::Research
+            | Command::Reroll
+            | Command::PickDoctrine { .. }
+            | Command::Archive { .. } => Some(System::Research),
+            Command::ClaimTask { .. } => Some(System::Tasks),
+            Command::Upgrade { .. } => Some(System::Armory),
+            Command::Collapse => Some(System::Collapse),
+        }
+    }
 }

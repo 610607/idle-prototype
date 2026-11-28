@@ -14,6 +14,72 @@ use crate::t;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
+/// A view block that belongs to a system an unlock may keep closed (`mech::unlocks`): left out of
+/// the JSON while closed, and holding an empty value for Rust readers then (`Deref`). Open, it
+/// serialises exactly as the value would, so a game with everything open has the same view.
+#[derive(Clone, Debug, Default)]
+pub struct Gated<T> {
+    value: T,
+    open: bool,
+}
+
+impl<T: Default> Gated<T> {
+    /// The block, built only when its system is open.
+    pub fn new(open: bool, f: impl FnOnce() -> T) -> Self {
+        if open {
+            Gated { value: f(), open }
+        } else {
+            Gated {
+                value: T::default(),
+                open,
+            }
+        }
+    }
+}
+
+impl<T> Gated<T> {
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+    /// For `skip_serializing_if`.
+    pub fn closed(&self) -> bool {
+        !self.open
+    }
+}
+
+impl<T> std::ops::Deref for Gated<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<'a, T> IntoIterator for &'a Gated<Vec<T>> {
+    type Item = &'a T;
+    type IntoIter = std::slice::Iter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.value.iter()
+    }
+}
+
+impl<T: Serialize> Serialize for Gated<T> {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.value.serialize(s)
+    }
+}
+
+/// A closed unlock the player is working toward (`mech::unlocks::next`).
+#[derive(Serialize, Clone, Debug)]
+pub struct NextView {
+    pub id: String,
+    pub name: String,
+    pub hint: String,
+    /// The condition as a short phrase ("占下 3 格").
+    pub cond: String,
+    pub have: i32,
+    pub need: i32,
+}
+
 #[derive(Serialize)]
 pub struct TraitView {
     pub id: String,
@@ -195,16 +261,18 @@ pub struct DistrictView {
     pub training_bp: i32,
     pub policy: Option<String>,
     pub policy_unlocked: bool,
-    pub policy_options: Vec<PolicyOption>,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub policy_options: Gated<Vec<PolicyOption>>,
     pub priority: Vec<String>,
     pub flavor: TraitView,
     /// Residents gained per hour x100 right now (0 when housing is full).
     pub growth_x100: i32,
-    pub customize: CustomizeView,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub customize: Gated<CustomizeView>,
 }
 
 /// 定制招募 for one district (docs/ideas.md): what can be ordered here and what it costs.
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct CustomizeView {
     pub unlocked: bool,
     /// Why it is not open yet; empty once open.
@@ -445,7 +513,8 @@ pub struct OrgView {
     pub exp: i64,
     pub next: Option<i64>,
     pub cycles: u32,
-    pub rules: Vec<RuleView>,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub rules: Gated<Vec<RuleView>>,
     pub specials: Vec<SpecialView>,
     pub perks: Vec<PerkView>,
     pub history: Vec<HistoryView>,
@@ -462,7 +531,7 @@ pub struct TaskView {
     pub done: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct TasksView {
     pub open: Vec<TaskView>,
     pub claimed: usize,
@@ -523,7 +592,7 @@ pub struct TagChip {
     pub icon: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct ResearchView {
     pub cost: i64,
     /// Price rise per draw.
@@ -730,21 +799,116 @@ pub struct View {
     pub districts: Vec<DistrictView>,
     pub squads: Vec<SquadView>,
     pub operatives: Vec<OpView>,
-    pub candidates: Vec<CandidateView>,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub candidates: Gated<Vec<CandidateView>>,
     pub queue: usize,
     pub roster_cap: usize,
-    pub inventory: Vec<ItemView>,
-    pub sealed: Vec<ItemView>,
-    pub facilities: Vec<FacilityOption>,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub inventory: Gated<Vec<ItemView>>,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub sealed: Gated<Vec<ItemView>>,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub facilities: Gated<Vec<FacilityOption>>,
     pub tide: Vec<TideView>,
     pub pending: Vec<PendingView>,
     pub events: Vec<EventView>,
     pub org: OrgView,
     pub results: CycleResults,
     pub hire_cost: i64,
-    pub research: ResearchView,
-    pub armory: Vec<ArmoryView>,
-    pub tasks: TasksView,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub research: Gated<ResearchView>,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub armory: Gated<Vec<ArmoryView>>,
+    #[serde(skip_serializing_if = "Gated::closed")]
+    pub tasks: Gated<TasksView>,
+    /// Systems still locked (`mech::unlocks`); absent when everything is open.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub locked: Vec<crate::data::unlocks::System>,
+    /// The next one or two unlocks and how far along they are; absent when everything is open.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub next: Vec<NextView>,
+}
+
+impl View {
+    /// Whether a system's blocks and commands are shown (not locked).
+    pub fn shows(&self, s: crate::data::unlocks::System) -> bool {
+        !self.locked.contains(&s)
+    }
+}
+
+/// How many closed unlocks the view lists as next (docs/design-v2-stage3.md S3: one or two).
+const NEXT_SHOWN: usize = 2;
+
+fn cond_text(c: &crate::data::unlocks::Condition) -> String {
+    use crate::data::unlocks::{Action, Condition, HOUSING};
+    match c {
+        Condition::Always | Condition::Never => t!("unlock.cond.always"),
+        Condition::OwnTile { tile } => t!("unlock.cond.own_tile", tile = geom::label(*tile)),
+        Condition::OwnTiles { n } => t!("unlock.cond.own_tiles", n = n),
+        Condition::Built { facility, n } => {
+            let name = if facility == HOUSING {
+                t!("unlock.cond.housing")
+            } else {
+                content()
+                    .facility(facility)
+                    .map(|f| f.name.clone())
+                    .unwrap_or_else(|| facility.clone())
+            };
+            t!("unlock.cond.built", n = n, name = name)
+        }
+        Condition::Done { action, n } => t!(
+            match action {
+                Action::Dispatch => "unlock.cond.done.dispatch",
+                Action::Route => "unlock.cond.done.route",
+                Action::Claim => "unlock.cond.done.claim",
+                Action::Build => "unlock.cond.done.build",
+                Action::Hire => "unlock.cond.done.hire",
+                Action::Research => "unlock.cond.done.research",
+                Action::SurgeHeld => "unlock.cond.done.surge_held",
+                Action::RouteWin => "unlock.cond.done.route_win",
+            },
+            n = n
+        ),
+        Condition::WonTile { tile } => t!("unlock.cond.won_tile", tile = geom::label(*tile)),
+        Condition::Department { id } => t!(
+            "unlock.cond.department",
+            name = crate::l10n::tr(&format!("department.{id}.name"))
+        ),
+    }
+}
+
+/// The closed unlocks to show next.
+pub fn next_view(state: &GameState) -> Vec<NextView> {
+    let reg = &content().unlocks;
+    crate::mech::unlocks::next(state, NEXT_SHOWN)
+        .into_iter()
+        .filter_map(|n| {
+            let d = reg.get(&n.id)?;
+            Some(NextView {
+                id: n.id.clone(),
+                name: d.name.clone(),
+                hint: d.hint.clone(),
+                cond: cond_text(&n.condition),
+                have: n.have,
+                need: n.need,
+            })
+        })
+        .collect()
+}
+
+/// Which system a pending item belongs to (it is left out while that system is locked).
+fn pending_system(kind: &str) -> Option<crate::data::unlocks::System> {
+    use crate::data::unlocks::System;
+    match kind {
+        "alert" | "alert_more" => Some(System::Counter),
+        "claim" => Some(System::Claim),
+        "candidate" => Some(System::Hire),
+        "policy" => Some(System::Policy),
+        "defend" | "defend_more" => Some(System::Garrison),
+        "route" => Some(System::Dispatch),
+        "research" => Some(System::Research),
+        _ => None,
+    }
 }
 
 /// An event as shown: the kept key and arguments rendered in the current language.
@@ -1065,25 +1229,30 @@ fn perks(level: u32) -> Vec<PerkView> {
 }
 
 pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
+    use crate::data::unlocks::System;
+    use crate::mech::unlocks;
     let c = content();
     let b = balance();
     let cy = &state.cycle;
+    let open = |s: System| unlocks::system_open(state, s);
     let level = sim::org_level(state);
     let org = OrgView {
         level,
         exp: state.org.exp,
         next: b.org_levels.get(level as usize).copied(),
         cycles: state.org.cycles,
-        rules: c
-            .rules
-            .iter()
-            .map(|r| RuleView {
-                id: r.id.clone(),
-                name: r.name.clone(),
-                desc: r.desc.clone(),
-                on: state.org.rules.get(&r.id).copied().unwrap_or(false),
-            })
-            .collect(),
+        rules: Gated::new(open(System::Rules), || {
+            c.rules
+                .iter()
+                .filter(|r| unlocks::rule_open(state, &r.id))
+                .map(|r| RuleView {
+                    id: r.id.clone(),
+                    name: r.name.clone(),
+                    desc: r.desc.clone(),
+                    on: state.org.rules.get(&r.id).copied().unwrap_or(false),
+                })
+                .collect()
+        }),
         specials: c
             .specials
             .iter()
@@ -1169,12 +1338,14 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             districts: vec![],
             squads: vec![],
             operatives: vec![],
-            candidates: vec![],
+            candidates: Gated::new(open(System::Hire), Vec::new),
             queue: 0,
             roster_cap: b.roster_cap,
-            inventory: vec![],
-            sealed: state.org.sealed.iter().map(|s| item_view(s)).collect(),
-            facilities: vec![],
+            inventory: Gated::new(open(System::Equipment), Vec::new),
+            sealed: Gated::new(open(System::Retire), || {
+                state.org.sealed.iter().map(|s| item_view(s)).collect()
+            }),
+            facilities: Gated::new(open(System::Build), Vec::new),
             tide: vec![],
             pending: vec![PendingView {
                 kind: "map",
@@ -1188,9 +1359,11 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             org,
             results: sim::cycle_results(state),
             hire_cost: b.hire_cost_scrap,
-            research: research_view(state),
-            armory: armory_view(state),
-            tasks: tasks_view(state),
+            research: Gated::new(open(System::Research), || research_view(state)),
+            armory: Gated::new(open(System::Armory), || armory_view(state)),
+            tasks: Gated::new(open(System::Tasks), || tasks_view(state)),
+            locked: unlocks::locked_systems(state),
+            next: next_view(state),
         };
     }
 
@@ -1303,20 +1476,21 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 })
                 .collect();
             let policy_unlocked = d.trust >= b.trust_policy;
-            let policy_options = c
-                .policies
-                .iter()
-                .map(|p| {
-                    let r = actions::policy_check(state, d.id, Some(&p.id));
-                    PolicyOption {
-                        id: p.id.clone(),
-                        name: p.name.clone(),
-                        desc: p.desc.clone(),
-                        available: r.is_ok(),
-                        reason: r.err(),
-                    }
-                })
-                .collect();
+            let policy_options = Gated::new(open(System::Policy), || {
+                c.policies
+                    .iter()
+                    .map(|p| {
+                        let r = actions::policy_check(state, d.id, Some(&p.id));
+                        PolicyOption {
+                            id: p.id.clone(),
+                            name: p.name.clone(),
+                            desc: p.desc.clone(),
+                            available: r.is_ok(),
+                            reason: r.err(),
+                        }
+                    })
+                    .collect()
+            });
             DistrictView {
                 id: d.id,
                 name: d.name.render(),
@@ -1341,7 +1515,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                 priority: d.priority.clone(),
                 flavor: trait_view(&d.flavor, false),
                 growth_x100: dc.growth_rate / 100,
-                customize: customize_view(state, &dc),
+                customize: Gated::new(open(System::Customize), || customize_view(state, &dc)),
             }
         })
         .collect();
@@ -1364,39 +1538,42 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
 
     let operatives: Vec<OpView> = cy.operatives().map(|o| op_view(state, o)).collect();
     let cap = actions::pool_cap(state);
-    let candidates = cy
-        .candidate_ops()
-        .take(cap)
-        .map(|(cd, op)| CandidateView {
-            id: cd.id,
-            source: cd.source.render(),
-            arrived: cd.arrived,
-            op: op_view(state, op),
-            cost: if op.persona().special.is_some() {
-                0
-            } else {
-                b.hire_cost_scrap
-            },
-        })
-        .collect();
+    let candidates = Gated::new(open(System::Hire), || {
+        cy.candidate_ops()
+            .take(cap)
+            .map(|(cd, op)| CandidateView {
+                id: cd.id,
+                source: cd.source.render(),
+                arrived: cd.arrived,
+                op: op_view(state, op),
+                cost: if op.persona().special.is_some() {
+                    0
+                } else {
+                    b.hire_cost_scrap
+                },
+            })
+            .collect()
+    });
 
-    let facilities = c
-        .facilities
-        .iter()
-        .map(|f| FacilityOption {
-            id: f.id.clone(),
-            name: f.name.clone(),
-            icon: f.icon.clone(),
-            kind: f.kind,
-            profession: f.profession.clone(),
-            jobs: f.jobs,
-            power: f.power,
-            cost: f.cost.clone(),
-            desc: f.desc.clone(),
-            visible: cy.seen_facilities.contains(&f.id) || cy.resources.half_covers(&f.cost),
-            affordable: cy.resources.covers(&f.cost),
-        })
-        .collect();
+    let facilities = Gated::new(open(System::Build), || {
+        c.facilities
+            .iter()
+            .filter(|f| unlocks::facility_open(state, &f.id))
+            .map(|f| FacilityOption {
+                id: f.id.clone(),
+                name: f.name.clone(),
+                icon: f.icon.clone(),
+                kind: f.kind,
+                profession: f.profession.clone(),
+                jobs: f.jobs,
+                power: f.power,
+                cost: f.cost.clone(),
+                desc: f.desc.clone(),
+                visible: cy.seen_facilities.contains(&f.id) || cy.resources.half_covers(&f.cost),
+                affordable: cy.resources.covers(&f.cost),
+            })
+            .collect()
+    });
 
     // 待你决定: things only the player decides.
     let mut pending = Vec::new();
@@ -1576,6 +1753,10 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         }
     }
 
+    if !unlocks::all_open(state) {
+        pending.retain(|p| pending_system(p.kind).is_none_or(open));
+    }
+
     let income = calc.income.map(|v| v / 100);
     View {
         time: state.time,
@@ -1600,8 +1781,12 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         candidates,
         queue: cy.candidate_count().saturating_sub(cap),
         roster_cap: b.roster_cap,
-        inventory: cy.inventory().map(item_view).collect(),
-        sealed: state.org.sealed.iter().map(|s| item_view(s)).collect(),
+        inventory: Gated::new(open(System::Equipment), || {
+            cy.inventory().map(item_view).collect()
+        }),
+        sealed: Gated::new(open(System::Retire), || {
+            state.org.sealed.iter().map(|s| item_view(s)).collect()
+        }),
         facilities,
         tide: tide_view(tide),
         pending,
@@ -1609,9 +1794,11 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
         org,
         results: sim::cycle_results(state),
         hire_cost: b.hire_cost_scrap,
-        research: research_view(state),
-        armory: armory_view(state),
-        tasks: tasks_view(state),
+        research: Gated::new(open(System::Research), || research_view(state)),
+        armory: Gated::new(open(System::Armory), || armory_view(state)),
+        tasks: Gated::new(open(System::Tasks), || tasks_view(state)),
+        locked: unlocks::locked_systems(state),
+        next: next_view(state),
     }
 }
 

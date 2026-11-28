@@ -117,6 +117,8 @@
   "cli.board.events": "\n[这段时间发生的事] {n} 条",
   "cli.board.events_more": "\n[这段时间发生的事] {n} 条，只列最近 {shown} 条",
   "cli.board.pending": "[待你决定]",
+  "cli.board.next": "[接下来能解锁]",
+  "cli.board.next_item": "  - {name}：{cond}（{have}/{need}）。{hint}",
   "cli.between.title": "== 两轮之间（已收束 {n} 轮）==",
   "cli.between.maps": "[选地图] 第 {cycle} 轮从 {n} 张地图里选一张（见菜单）：每张图的天险、裂隙和特殊格都不同，异界气候决定来敌常带什么标签",
   "cli.org.title": "[组织] Lv.{level}，经验 {exp}/{next}（✓ 已解锁，· 升到该级解锁）",

@@ -218,12 +218,14 @@ export interface DistrictView {
   training_bp: number;
   policy: string | null;
   policy_unlocked: boolean;
-  policy_options: PolicyOption[];
+  /** Absent while the policy system is locked (`locked`). */
+  policy_options?: PolicyOption[];
   priority: string[];
   flavor: TraitView;
   /** Residents gained per hour x100 (0 when housing is full). */
   growth_x100: number;
-  customize: CustomizeView;
+  /** Absent while custom recruiting is locked. */
+  customize?: CustomizeView;
 }
 
 /** 定制招募 for one district: what can be ordered here and what it costs (in residents). */
@@ -355,7 +357,8 @@ export interface OrgView {
   exp: number;
   next: number | null;
   cycles: number;
-  rules: { id: string; name: string; desc: string; on: boolean }[];
+  /** Absent while the rules system is locked. */
+  rules?: { id: string; name: string; desc: string; on: boolean }[];
   specials: SpecialView[];
   perks: { level: number; text: string; unlocked: boolean }[];
   history: {
@@ -408,21 +411,40 @@ export interface View {
   districts: DistrictView[];
   squads: SquadView[];
   operatives: OpView[];
-  candidates: CandidateView[];
+  /** Blocks marked optional are absent while their system is locked (see `locked`). */
+  candidates?: CandidateView[];
   queue: number;
   roster_cap: number;
-  inventory: ItemView[];
-  sealed: ItemView[];
-  facilities: FacilityOption[];
+  inventory?: ItemView[];
+  sealed?: ItemView[];
+  facilities?: FacilityOption[];
   tide: TideView[];
   pending: PendingView[];
   events: GameEvent[];
   org: OrgView;
   results: CycleResults;
   hire_cost: number;
-  research: ResearchView;
-  armory: ArmoryView[];
-  tasks: TasksView;
+  research?: ResearchView;
+  armory?: ArmoryView[];
+  tasks?: TasksView;
+  /** Systems still locked (absent when everything is open: random-map games). */
+  locked?: UnlockSystem[];
+  /** The next one or two unlocks and how far along they are (absent when everything is open). */
+  next?: NextUnlock[];
+}
+
+/** Command groups / view blocks the unlock registry gates (`data::unlocks::System`). */
+export type UnlockSystem =
+  | 'dispatch' | 'routes' | 'squad' | 'claim' | 'build' | 'hire' | 'customize' | 'garrison' | 'policy' | 'priority'
+  | 'rules' | 'gambits' | 'equipment' | 'research' | 'tasks' | 'armory' | 'dial' | 'counter' | 'retire' | 'collapse';
+
+export interface NextUnlock {
+  id: string;
+  name: string;
+  hint: string;
+  cond: string;
+  have: number;
+  need: number;
 }
 
 export interface TaskView {
