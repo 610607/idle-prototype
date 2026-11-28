@@ -33,7 +33,7 @@ pub fn bump_counter(state: &mut GameState, op_id: u32, counter: &str, by: i32) {
         return;
     };
     let grown = operative::bump(op, counter, by);
-    let name = op.name.clone();
+    let name = op.persona().name.clone();
     if forecasting {
         return;
     }
@@ -106,7 +106,8 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         started_at: 0,
         tiles: vec![],
         districts: vec![],
-        operatives: vec![],
+        entities: Default::default(),
+        roster: vec![],
         squads: vec![],
         candidates: vec![],
         resources: Default::default(),
@@ -212,17 +213,14 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
             lock_trait: None,
         };
         let mut op = operative::generate(&mut state.rng, id, class, &origin);
-        op.rarity = op.rarity.min(1);
+        op.persona_mut().rarity = op.persona().rarity.min(1);
         ops.push(op);
     }
-    for sp in state.org.specials.clone() {
-        let mut op = sp;
-        op.assignment = Assignment::Idle;
-        op.rest_until = 0;
-        ops.push(op);
+    for sp in &state.org.specials {
+        ops.push(sp.to_operative());
     }
     let squads = 1 + OrgPerks::count(&b.org_perks.squads, level);
-    let first: Vec<u32> = ops.iter().take(3).map(|o| o.id).collect();
+    let first: Vec<u32> = ops.iter().take(3).map(|o| o.id.0).collect();
     let mut sq = Vec::new();
     for k in 0..squads {
         let id = state.next_id;
@@ -240,11 +238,14 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
         });
     }
     for op in ops.iter_mut() {
-        if first.contains(&op.id) {
-            op.assignment = Assignment::Squad { squad: sq[0].id };
+        if first.contains(&op.id.0) {
+            op.state.assignment = Assignment::Squad { squad: sq[0].id };
         }
     }
-    state.cycle.operatives = ops;
+    state.cycle.roster = ops.iter().map(|o| o.id).collect();
+    for op in ops {
+        state.cycle.entities.insert(op);
+    }
     state.cycle.squads = sq;
     // Sealed equipment comes back out; filed doctrines start held.
     state.cycle.inventory = state.org.sealed.clone();
@@ -310,26 +311,20 @@ pub fn collapse(state: &mut GameState) -> Result<(), String> {
         exploration: r.exploration,
         ended_at: state.time,
     });
-    // Special operatives keep what they grew this cycle.
+    // Special operatives keep what they grew this cycle (not their equipment: it is per-cycle
+    // unless sealed).
     for op in state
         .cycle
-        .operatives
-        .iter()
-        .filter(|o| o.special.is_some())
+        .operatives()
+        .filter(|o| o.persona().special.is_some())
     {
         if let Some(slot) = state
             .org
             .specials
             .iter_mut()
-            .find(|s| s.special == op.special)
+            .find(|s| s.persona.special == op.persona().special)
         {
-            let mut kept = op.clone();
-            kept.assignment = Assignment::Idle;
-            if let Some(eq) = kept.equipment.take() {
-                // Equipment is per-cycle unless sealed.
-                let _ = eq;
-            }
-            *slot = kept;
+            *slot = SealedSpecial::of(op);
         }
     }
     let pv = previews(&mut state.rng);
@@ -540,11 +535,10 @@ fn run_rules(state: &mut GameState) {
         let cap = actions::pool_cap(state);
         let picks: Vec<u32> = state
             .cycle
-            .candidates
-            .iter()
+            .candidate_ops()
             .take(cap)
-            .filter(|c| c.op.rarity >= 1 || c.op.special.is_some())
-            .map(|c| c.id)
+            .filter(|(_, o)| o.persona().rarity >= 1 || o.persona().special.is_some())
+            .map(|(c, _)| c.id)
             .collect();
         for id in picks {
             let name = state
@@ -552,7 +546,7 @@ fn run_rules(state: &mut GameState) {
                 .candidates
                 .iter()
                 .find(|c| c.id == id)
-                .map(|c| c.op.name.clone())
+                .map(|c| state.cycle.candidate_op(c).persona().name.clone())
                 .unwrap_or_default();
             if actions::hire(state, id).is_ok() {
                 state.event(
@@ -629,17 +623,15 @@ fn check_specials(state: &mut GameState) {
             .org
             .specials
             .iter()
-            .any(|o| o.special.as_deref() == Some(&s.id));
+            .any(|o| o.persona.special.as_deref() == Some(&s.id));
         let waiting = state
             .cycle
-            .candidates
-            .iter()
-            .any(|x| x.op.special.as_deref() == Some(&s.id));
+            .candidate_ops()
+            .any(|(_, x)| x.persona().special.as_deref() == Some(&s.id));
         let present = state
             .cycle
-            .operatives
-            .iter()
-            .any(|o| o.special.as_deref() == Some(&s.id));
+            .operatives()
+            .any(|o| o.persona().special.as_deref() == Some(&s.id));
         if recruited || waiting || present {
             continue;
         }
@@ -662,12 +654,14 @@ fn check_specials(state: &mut GameState) {
         };
         let op = operative::generate(&mut state.rng, id, &s.class, &origin);
         let cid = state.alloc_id();
+        let entity = op.id;
+        state.cycle.entities.insert(op);
         // Specials jump the queue.
         state.cycle.candidates.insert(
             0,
             Candidate {
                 id: cid,
-                op,
+                entity,
                 source: origin.label.clone(),
                 arrived: state.time,
             },
@@ -744,10 +738,10 @@ mod tests {
         actions::customize(&mut s, 0, "militia", None, Some(&lock), Some(3)).unwrap();
         let cost = actions::customize_cost(false, true, Some(3));
         assert_eq!(s.cycle.districts[0].population, 30 - cost);
-        let cand = s.cycle.candidates.last().unwrap();
-        assert_eq!(cand.op.class, "vanguard");
-        assert_eq!(cand.op.rarity, 3);
-        assert_eq!(cand.op.traits[0], lock);
+        let cand = s.cycle.candidate_op(s.cycle.candidates.last().unwrap());
+        assert_eq!(cand.class(), "vanguard");
+        assert_eq!(cand.persona().rarity, 3);
+        assert_eq!(cand.persona().traits[0], lock);
         // The mixed class needs engineers at work too; a big order needs enough residents.
         assert!(
             actions::customize(&mut s, 0, "militia", Some("combat_sapper"), None, None).is_err()
@@ -876,5 +870,43 @@ mod tests {
         assert_eq!(s.cycle.previews.len(), 3);
         choose_map(&mut s, 1).unwrap();
         assert_eq!(s.cycle.number, 2);
+    }
+
+    /// A special kept from an earlier cycle comes back with its old number after the new crew, so
+    /// the roster is not in number order; hiring keeps the candidate's entity number, dismissing
+    /// drops the entity.
+    #[test]
+    fn specials_return_after_the_crew_with_their_number() {
+        let mut s = started(4);
+        s.cycle.stats.surges_held = 10_000;
+        s.cycle.stats.max_ring = 100;
+        check_specials(&mut s);
+        let (cid, eid) = {
+            let c = s.cycle.candidates().next().unwrap();
+            assert!(s.cycle.candidate_op(c).persona().special.is_some());
+            (c.id, c.entity)
+        };
+        assert!(s.op(eid.0).is_none(), "a candidate is not on the roster");
+        actions::hire(&mut s, cid).unwrap();
+        assert_eq!(s.cycle.roster.last(), Some(&eid));
+        assert_eq!(s.org.specials.len(), 1);
+        let n = s.cycle.entities.len();
+        let plain = s
+            .cycle
+            .candidate_ops()
+            .find(|(_, o)| o.persona().special.is_none())
+            .map(|(c, _)| c.id);
+        if let Some(id) = plain {
+            actions::dismiss(&mut s, id).unwrap();
+            assert_eq!(s.cycle.entities.len(), n - 1);
+        }
+        collapse(&mut s).unwrap();
+        choose_map(&mut s, 0).unwrap();
+        let ids = s.cycle.roster_ids();
+        assert_eq!(ids.len(), 4);
+        assert_eq!(*ids.last().unwrap(), eid.0);
+        assert!(ids[..3].iter().all(|i| *i > eid.0));
+        let order: Vec<u32> = s.cycle.operatives().map(|o| o.id.0).collect();
+        assert_eq!(order, ids);
     }
 }

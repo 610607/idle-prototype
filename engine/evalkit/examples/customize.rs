@@ -31,10 +31,11 @@ fn recruit(class: &str, draw: u64, slot: u32, lock: Option<&str>, rarity: u8) ->
     rng.shuffle(&mut pool);
     let mut traits: Vec<String> = lock.map(|t| vec![t.to_string()]).unwrap_or_default();
     traits.extend(pool.into_iter().take(slots - traits.len()));
-    op.traits = traits;
-    op.rarity = rarity;
+    op.persona_mut().traits = traits;
+    op.persona_mut().rarity = rarity;
     for s in Stat::ALL {
-        op.stats[s.idx()] = 47 + rarity as i32 * 4 + cl.bias.get(&s).copied().unwrap_or(0);
+        op.persona_mut().stats[s.idx()] =
+            47 + rarity as i32 * 4 + cl.bias.get(&s).copied().unwrap_or(0);
     }
     op
 }

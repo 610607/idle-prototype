@@ -317,7 +317,7 @@ pub fn claim_forecast(state: &GameState, tile: u16) -> ClaimForecast {
         .filter(|o| matches!(cy.post(o), Post::Squad { .. }));
     let guard = idle
         .chain(squad)
-        .map(|o| o.id)
+        .map(|o| o.id.0)
         .find(|id| holds(Some(Some(*id))));
     guard
         .map(ClaimForecast::Guard)

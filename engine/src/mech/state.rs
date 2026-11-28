@@ -1,6 +1,7 @@
 //! Game state. Everything here is saved; derived values (border, alerts, power) are recomputed.
 
 use crate::data::{Gambit, Resources};
+use crate::kernel::entity::{DefId, Entity, EntityId, Store};
 use crate::kernel::rng::Rng;
 use crate::l10n::Text;
 use crate::mech::combat::{BattleReport, Outcome};
@@ -8,7 +9,7 @@ use crate::t;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const SAVE_VERSION: u32 = 6;
+pub const SAVE_VERSION: u32 = 7;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -194,11 +195,10 @@ pub enum Assignment {
     },
 }
 
+/// 队员数据块：名字、出身、九项属性、特质、经历计数、战术规则、锁定。
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Operative {
-    pub id: u32,
+pub struct Persona {
     pub name: Text,
-    pub class: String,
     /// 0 = N, 1 = R, 2 = SR, 3 = SSR.
     pub rarity: u8,
     /// Where they came from, e.g. "钟表匠巷 · 工程师".
@@ -214,25 +214,119 @@ pub struct Operative {
     pub exp_traits: Vec<String>,
     pub gambits: Vec<Gambit>,
     #[serde(default)]
-    pub equipment: Option<String>,
-    #[serde(default)]
     pub counters: BTreeMap<String, i32>,
     #[serde(default)]
     pub special: Option<String>,
     #[serde(default)]
     pub locked: bool,
-    #[serde(default)]
-    pub assignment: Assignment,
+}
+
+/// 可出战数据块：休整到几点（将来放血量）。
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Fighter {
     #[serde(default)]
     pub rest_until: i64,
 }
 
+/// An entity's state, in blocks by interface (docs/design-v2-refactor.md, 目标类型): code asks
+/// whether a block is there, not what kind of thing it is.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct State {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persona: Option<Persona>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fighter: Option<Fighter>,
+    /// Where an operative is posted. A relation kept here until the containers take it (C1, C3).
+    #[serde(default)]
+    pub assignment: Assignment,
+    /// The item an operative carries, by id. Until the equipment slot takes it (B3, C2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub equipment: Option<String>,
+}
+
+/// An operative: an entity whose definition is its class, with a persona and a fighter block.
+/// The entity number is the operative id seen in views, reports and commands.
+pub type Operative = Entity<State>;
+
+impl Entity<State> {
+    /// The operative data (panics on an entity without it: only operatives are asked).
+    pub fn persona(&self) -> &Persona {
+        self.state
+            .persona
+            .as_ref()
+            .unwrap_or_else(|| panic!("entity {} has no persona", self.id.0))
+    }
+
+    pub fn persona_mut(&mut self) -> &mut Persona {
+        let id = self.id.0;
+        self.state
+            .persona
+            .as_mut()
+            .unwrap_or_else(|| panic!("entity {id} has no persona"))
+    }
+
+    pub fn fighter(&self) -> &Fighter {
+        self.state
+            .fighter
+            .as_ref()
+            .unwrap_or_else(|| panic!("entity {} cannot fight", self.id.0))
+    }
+
+    pub fn fighter_mut(&mut self) -> &mut Fighter {
+        let id = self.id.0;
+        self.state
+            .fighter
+            .as_mut()
+            .unwrap_or_else(|| panic!("entity {id} cannot fight"))
+    }
+
+    /// The operative's class (its definition id).
+    pub fn class(&self) -> &str {
+        &self.def
+    }
+}
+
+/// A recruit waiting in the pool. `id` is the offer number commands use; the recruit itself is an
+/// entity in the cycle's store (`entity`, its future operative id), not on the roster yet.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Candidate {
     pub id: u32,
-    pub op: Operative,
+    pub entity: EntityId,
     pub source: Text,
     pub arrived: i64,
+}
+
+/// A special operative kept across cycles (`Org::specials`): its number, definition and persona.
+/// It enters the cycle's store when a cycle starts (`sim::choose_map`).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SealedSpecial {
+    pub id: EntityId,
+    pub def: DefId,
+    pub persona: Persona,
+}
+
+impl SealedSpecial {
+    pub fn of(op: &Operative) -> Self {
+        SealedSpecial {
+            id: op.id,
+            def: op.def.clone(),
+            persona: op.persona().clone(),
+        }
+    }
+
+    /// The operative as it starts a cycle: idle, rested, carrying nothing.
+    pub fn to_operative(&self) -> Operative {
+        Entity::new(
+            self.id,
+            self.def.clone(),
+            State {
+                persona: Some(self.persona.clone()),
+                fighter: Some(Fighter::default()),
+                assignment: Assignment::Idle,
+                equipment: None,
+            },
+        )
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -383,7 +477,11 @@ pub struct Cycle {
     pub started_at: i64,
     pub tiles: Vec<Tile>,
     pub districts: Vec<District>,
-    pub operatives: Vec<Operative>,
+    /// Every entity of this cycle: operatives on the roster and candidates.
+    pub entities: Store<State>,
+    /// The roster in hiring order (specials kept from earlier cycles come after the crew, with
+    /// their old numbers, so this is not number order).
+    pub roster: Vec<EntityId>,
     pub squads: Vec<Squad>,
     /// Pool first, then the queue beyond `pool_cap` (never dropped).
     pub candidates: Vec<Candidate>,
@@ -439,7 +537,7 @@ pub struct Org {
     pub cycles: u32,
     pub rules: BTreeMap<String, bool>,
     /// Special operatives recruited (kept across cycles).
-    pub specials: Vec<Operative>,
+    pub specials: Vec<SealedSpecial>,
     /// Specials whose condition was ever met.
     pub met_specials: Vec<String>,
     /// Equipment kept in sealed storage.
@@ -546,12 +644,13 @@ impl GameState {
         id
     }
 
+    /// An operative on the roster.
     pub fn op(&self, id: u32) -> Option<&Operative> {
-        self.cycle.operatives.iter().find(|o| o.id == id)
+        self.cycle.operative(id)
     }
 
     pub fn op_mut(&mut self, id: u32) -> Option<&mut Operative> {
-        self.cycle.operatives.iter_mut().find(|o| o.id == id)
+        self.cycle.operative_mut(id)
     }
 
     pub fn squad_mut(&mut self, id: u32) -> Option<&mut Squad> {

@@ -836,9 +836,14 @@ pub fn item_view(id: &str) -> ItemView {
 
 pub fn op_view(state: &GameState, op: &Operative) -> OpView {
     let c = content();
-    let class = &c.classes[&op.class];
-    let mut traits: Vec<TraitView> = op.traits.iter().map(|t| trait_view(t, false)).collect();
-    traits.extend(op.exp_traits.iter().map(|t| trait_view(t, true)));
+    let class = &c.classes[op.class()];
+    let mut traits: Vec<TraitView> = op
+        .persona()
+        .traits
+        .iter()
+        .map(|t| trait_view(t, false))
+        .collect();
+    traits.extend(op.persona().exp_traits.iter().map(|t| trait_view(t, true)));
     let skills: Vec<SkillView> = class
         .skills
         .iter()
@@ -857,7 +862,10 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
     let growing: Vec<GrowingView> = c
         .exp_traits
         .iter()
-        .filter(|x| !op.exp_traits.contains(&x.trait_id) && !op.traits.contains(&x.trait_id))
+        .filter(|x| {
+            !op.persona().exp_traits.contains(&x.trait_id)
+                && !op.persona().traits.contains(&x.trait_id)
+        })
         .map(|x| GrowingView {
             id: x.trait_id.clone(),
             name: c
@@ -867,6 +875,7 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
                 .unwrap_or_default(),
             hint: x.hint.clone(),
             have: op
+                .persona()
                 .counters
                 .get(&x.counter)
                 .copied()
@@ -910,27 +919,27 @@ pub fn op_view(state: &GameState, op: &Operative) -> OpView {
         Post::Garrison { tile } => t!("view.status.garrison", tile = geom::label(tile)),
     };
     OpView {
-        id: op.id,
-        name: op.name.render(),
-        class: op.class.clone(),
+        id: op.id.0,
+        name: op.persona().name.render(),
+        class: op.def.clone(),
         class_name: class.name.clone(),
         icon: class.icon.clone(),
         side: class.side.clone(),
         front: class.row == crate::data::Row::Front,
-        rarity: op.rarity,
-        rarity_name: RARITY_NAMES[op.rarity.min(3) as usize],
-        origin: op.origin.render(),
-        stats: op.stats,
+        rarity: op.persona().rarity,
+        rarity_name: RARITY_NAMES[op.persona().rarity.min(3) as usize],
+        origin: op.persona().origin.render(),
+        stats: op.persona().stats,
         derived: operative::derived(op),
         traits,
         growing,
         skills,
-        gambits: op.gambits.clone(),
+        gambits: op.persona().gambits.clone(),
         assignment: post,
         status,
         equipment,
-        special: op.special.clone(),
-        locked: op.locked,
+        special: op.persona().special.clone(),
+        locked: op.persona().locked,
         reads,
         writes,
     }
@@ -1097,7 +1106,7 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
                         .org
                         .specials
                         .iter()
-                        .any(|o| o.special.as_deref() == Some(&s.id)),
+                        .any(|o| o.persona.special.as_deref() == Some(&s.id)),
                     icon: c
                         .classes
                         .get(&s.class)
@@ -1356,14 +1365,14 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
     let operatives: Vec<OpView> = cy.operatives().map(|o| op_view(state, o)).collect();
     let cap = actions::pool_cap(state);
     let candidates = cy
-        .candidates()
+        .candidate_ops()
         .take(cap)
-        .map(|cd| CandidateView {
+        .map(|(cd, op)| CandidateView {
             id: cd.id,
             source: cd.source.render(),
             arrived: cd.arrived,
-            op: op_view(state, &cd.op),
-            cost: if cd.op.special.is_some() {
+            op: op_view(state, op),
+            cost: if op.persona().special.is_some() {
                 0
             } else {
                 b.hire_cost_scrap
@@ -1428,7 +1437,10 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             defense::ClaimForecast::Guard(op) => (
                 t!(
                     "view.pending.claim_guard",
-                    name = state.op(op).map(|o| o.name.render()).unwrap_or_default()
+                    name = state
+                        .op(op)
+                        .map(|o| o.persona().name.render())
+                        .unwrap_or_default()
                 ),
                 Some(op),
             ),
@@ -1449,13 +1461,13 @@ pub fn build(state: &GameState, tide: &[TideEntry]) -> View {
             district: None,
         });
     }
-    for cd in cy.candidates().take(cap) {
+    for (cd, op) in cy.candidate_ops().take(cap) {
         pending.push(PendingView {
             kind: "candidate",
             text: t!(
                 "view.pending.candidate",
-                rarity = RARITY_NAMES[cd.op.rarity.min(3) as usize],
-                name = cd.op.name,
+                rarity = RARITY_NAMES[op.persona().rarity.min(3) as usize],
+                name = op.persona().name,
                 source = cd.source
             ),
             tile: None,

@@ -82,7 +82,7 @@ fn members(t: &[usize; 3], slot: Option<usize>, item: &Item) -> Vec<UnitSpec> {
             );
             if Some(k) == slot {
                 match item {
-                    Item::Trait(id) => op.traits = vec![id.clone()],
+                    Item::Trait(id) => op.persona_mut().traits = vec![id.clone()],
                     Item::Equip(id) => op = operative::with_item(&op, Some(id)),
                     Item::Doctrine(_) => {}
                 }

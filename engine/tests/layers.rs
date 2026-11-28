@@ -248,10 +248,12 @@ fn clients_read_state_through_queries() {
     // Types that only exist in the saved state's current shape.
     const TYPES: [&str; 3] = ["Assignment", "TileUse", "Cycle"];
     // The cycle's lists, read as `<cycle>.<list>` rather than through a query call.
-    const LISTS: [&str; 7] = [
+    const LISTS: [&str; 9] = [
         "tiles",
         "districts",
         "operatives",
+        "entities",
+        "roster",
         "squads",
         "candidates",
         "inventory",

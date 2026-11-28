@@ -7,7 +7,9 @@ use crate::kernel::geom::{self, TILES};
 use crate::mech::combat::{self, BattleKind};
 use crate::mech::economy;
 use crate::mech::operative;
-use crate::mech::state::{Assignment, Dial, EventKind, GameState, SpecialKind, Terrain, TileUse};
+use crate::mech::state::{
+    Assignment, Dial, EventKind, GameState, SealedSpecial, SpecialKind, Terrain, TileUse,
+};
 use crate::mech::world;
 use crate::{l10n, t, txt};
 
@@ -138,9 +140,11 @@ pub fn abandon(state: &mut GameState, tile: u16) -> ActResult {
     }
     let district = t.district;
     let natives = t.natives;
-    for op in state.cycle.operatives.iter_mut() {
-        if op.assignment == (Assignment::Garrison { tile }) {
-            op.assignment = Assignment::Idle;
+    for id in state.cycle.roster_ids() {
+        if let Some(op) = state.op_mut(id) {
+            if op.state.assignment == (Assignment::Garrison { tile }) {
+                op.state.assignment = Assignment::Idle;
+            }
         }
     }
     {
@@ -288,29 +292,40 @@ pub fn hire(state: &mut GameState, candidate: u32) -> ActResult {
     if pos >= pool_cap(state) {
         return Err(t!("err.queued"));
     }
-    let normals = state.cycle.operatives.len();
+    let normals = state.cycle.roster_size();
     if normals >= b.roster_cap {
         return Err(t!("err.roster_full", cap = b.roster_cap));
     }
-    let is_special = state.cycle.candidates[pos].op.special.is_some();
+    let is_special = state
+        .cycle
+        .candidate_op(&state.cycle.candidates[pos])
+        .persona()
+        .special
+        .is_some();
     let cost = if is_special { 0 } else { b.hire_cost_scrap };
     if state.cycle.resources.scrap < cost {
         return Err(t!("err.not_enough_scrap"));
     }
     state.cycle.resources.scrap -= cost;
     let c = state.cycle.candidates.remove(pos);
-    let name = c.op.name.clone();
-    if let Some(sid) = &c.op.special {
+    let op = state
+        .cycle
+        .entities
+        .get(c.entity)
+        .expect("candidate entity");
+    let name = op.persona().name.clone();
+    if let Some(sid) = &op.persona().special {
         if !state
             .org
             .specials
             .iter()
-            .any(|o| o.special.as_deref() == Some(sid))
+            .any(|o| o.persona.special.as_deref() == Some(sid))
         {
-            state.org.specials.push(c.op.clone());
+            let sealed = SealedSpecial::of(op);
+            state.org.specials.push(sealed);
         }
     }
-    state.cycle.operatives.push(c.op);
+    state.cycle.roster.push(c.entity);
     state.cycle.stats.hired += 1;
     state.event(
         EventKind::Info,
@@ -442,10 +457,17 @@ pub fn dismiss(state: &mut GameState, candidate: u32) -> ActResult {
         .iter()
         .position(|c| c.id == candidate)
         .ok_or_else(|| t!("err.no_candidate"))?;
-    if state.cycle.candidates[pos].op.special.is_some() {
+    if state
+        .cycle
+        .candidate_op(&state.cycle.candidates[pos])
+        .persona()
+        .special
+        .is_some()
+    {
         return Err(t!("err.special_no_dismiss"));
     }
-    state.cycle.candidates.remove(pos);
+    let c = state.cycle.candidates.remove(pos);
+    state.cycle.entities.remove(c.entity);
     Ok(())
 }
 
@@ -453,11 +475,11 @@ pub fn dismiss(state: &mut GameState, candidate: u32) -> ActResult {
 pub fn retire(state: &mut GameState, op_id: u32) -> ActResult {
     let pos = state
         .cycle
-        .operatives
+        .roster
         .iter()
-        .position(|o| o.id == op_id)
+        .position(|o| *o == op_id)
         .ok_or_else(|| t!("err.no_op"))?;
-    let op = &state.cycle.operatives[pos];
+    let op = state.op(op_id).expect("roster entity").persona();
     if op.special.is_some() {
         return Err(t!("err.special_no_retire"));
     }
@@ -467,10 +489,11 @@ pub fn retire(state: &mut GameState, op_id: u32) -> ActResult {
     let (d, p) = (op.origin_district, op.origin_prof.clone());
     let name = op.name.clone();
     unassign(state, op_id);
-    if let Some(eq) = state.cycle.operatives[pos].equipment.take() {
+    let id = state.cycle.roster.remove(pos);
+    let op = state.cycle.entities.remove(id).expect("roster entity");
+    if let Some(eq) = op.state.equipment {
         state.cycle.inventory.push(eq);
     }
-    state.cycle.operatives.remove(pos);
     let note = match (d, p) {
         (Some(d), Some(p)) => {
             *state.cycle.districts[d as usize]
@@ -496,7 +519,7 @@ pub fn unassign(state: &mut GameState, op_id: u32) {
         s.members.retain(|m| *m != op_id);
     }
     if let Some(op) = state.op_mut(op_id) {
-        op.assignment = Assignment::Idle;
+        op.state.assignment = Assignment::Idle;
     }
 }
 
@@ -514,15 +537,16 @@ pub fn garrison(state: &mut GameState, op_id: u32, tile: Option<u16>) -> ActResu
             return Err(t!("err.garrison_owned_only"));
         }
         // One operative per tile: the previous one goes idle.
-        for o in state.cycle.operatives.iter_mut() {
-            if o.assignment == (Assignment::Garrison { tile: t }) && o.id != op_id {
-                o.assignment = Assignment::Idle;
+        for id in state.cycle.roster_ids() {
+            let o = state.op_mut(id).expect("roster entity");
+            if o.state.assignment == (Assignment::Garrison { tile: t }) && o.id != op_id {
+                o.state.assignment = Assignment::Idle;
             }
         }
     }
     unassign(state, op_id);
     if let (Some(t), Some(op)) = (tile, state.op_mut(op_id)) {
-        op.assignment = Assignment::Garrison { tile: t };
+        op.state.assignment = Assignment::Garrison { tile: t };
     }
     Ok(())
 }
@@ -543,13 +567,13 @@ pub fn set_squad(state: &mut GameState, squad: u32, members: &[u32]) -> ActResul
     let old: Vec<u32> = state.cycle.members(squad).collect();
     for m in old {
         if let Some(op) = state.op_mut(m) {
-            op.assignment = Assignment::Idle;
+            op.state.assignment = Assignment::Idle;
         }
     }
     for m in members {
         unassign(state, *m);
         if let Some(op) = state.op_mut(*m) {
-            op.assignment = Assignment::Squad { squad };
+            op.state.assignment = Assignment::Squad { squad };
         }
     }
     let s = state.squad_mut(squad).unwrap();
@@ -636,8 +660,8 @@ pub fn equip(state: &mut GameState, op_id: u32, item: Option<&str>) -> ActResult
         state.cycle.inventory.remove(pos);
     }
     let op = state.op_mut(op_id).unwrap();
-    let old = op.equipment.take();
-    op.equipment = item.map(|s| s.to_string());
+    let old = op.state.equipment.take();
+    op.state.equipment = item.map(|s| s.to_string());
     if let Some(o) = old {
         state.cycle.inventory.push(o);
     }
@@ -767,7 +791,7 @@ pub fn is_landmark(state: &GameState, tile: u16) -> bool {
 
 pub fn lock(state: &mut GameState, op_id: u32, locked: bool) -> ActResult {
     let op = state.op_mut(op_id).ok_or_else(|| t!("err.no_op"))?;
-    op.locked = locked;
+    op.persona_mut().locked = locked;
     Ok(())
 }
 
@@ -782,7 +806,7 @@ pub fn set_gambits(
     if gambits.len() > slots {
         return Err(t!("err.gambit_slots", n = slots));
     }
-    let skills = &c.classes[&op.class].skills;
+    let skills = &c.classes[op.class()].skills;
     for g in &gambits {
         if let crate::data::Act::Skill { skill } = &g.act {
             if !skills.contains(skill) {
@@ -790,6 +814,6 @@ pub fn set_gambits(
             }
         }
     }
-    state.op_mut(op_id).unwrap().gambits = gambits;
+    state.op_mut(op_id).unwrap().persona_mut().gambits = gambits;
     Ok(())
 }

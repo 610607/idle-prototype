@@ -531,7 +531,8 @@ impl Engine {
             });
         }
         for o in cy.operatives() {
-            let Some((r, _)) = defense::preview(&self.state, tile, Some(Some(o.id)), false) else {
+            let Some((r, _)) = defense::preview(&self.state, tile, Some(Some(o.id.0)), false)
+            else {
                 continue;
             };
             let (held, lw, tw, rounds, hp, wg) = summarize(&r);
@@ -547,14 +548,14 @@ impl Engine {
             };
             let icon = crate::data::content()
                 .classes
-                .get(&o.class)
+                .get(o.class())
                 .map(|c| c.icon.clone())
                 .unwrap_or_default();
             out.push(GarrisonOption {
-                op: Some(o.id),
-                name: o.name.render(),
+                op: Some(o.id.0),
+                name: o.persona().name.render(),
                 icon,
-                current: current == Some(o.id),
+                current: current == Some(o.id.0),
                 busy,
                 held,
                 lost_wave: lw,

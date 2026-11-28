@@ -116,16 +116,16 @@ pub fn member(
         lock_trait: None,
     };
     let mut op = operative::generate(&mut rng, slot, class, &origin);
-    op.rarity = 1;
+    op.persona_mut().rarity = 1;
     for s in Stat::ALL {
-        op.stats[s.idx()] = 47 + 4 + cl.bias.get(&s).copied().unwrap_or(0);
+        op.persona_mut().stats[s.idx()] = 47 + 4 + cl.bias.get(&s).copied().unwrap_or(0);
     }
     match traits {
-        Traits::Bare => op.traits.clear(),
+        Traits::Bare => op.persona_mut().traits.clear(),
         Traits::Random => {
             let mut pool = cl.trait_pool.clone();
             rng.shuffle(&mut pool);
-            op.traits = pool.into_iter().take(2).collect();
+            op.persona_mut().traits = pool.into_iter().take(2).collect();
         }
     }
     operative::with_item(&op, equip)
