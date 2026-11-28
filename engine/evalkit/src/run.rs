@@ -136,6 +136,10 @@ pub enum Style {
     /// Greedy play plus squad care: lineup, items and tactics tuned on previews, the candidate
     /// queue kept moving, recruits trained to order.
     Tactician,
+    /// Greedy play that keeps its score (so the threat) low: claims and builds only under a
+    /// slowly rising threat budget (压分). Not in `ALL`: it is a check that sandbagging does not
+    /// pay, run next to `greedy`, not a style of its own.
+    Sandbag,
 }
 
 impl Style {
@@ -155,6 +159,7 @@ impl Style {
             Style::Turtle => "turtle",
             Style::Scholar => "scholar",
             Style::Tactician => "tactician",
+            Style::Sandbag => "sandbag",
         }
     }
 }
@@ -178,7 +183,10 @@ impl Persona {
             Some((a, n)) => (a, n.parse().ok().filter(|n: &i64| *n >= 1)?),
             None => (s, 1),
         };
-        let style = Style::ALL.into_iter().find(|x| x.name() == style)?;
+        let style = Style::ALL
+            .into_iter()
+            .chain([Style::Sandbag])
+            .find(|x| x.name() == style)?;
         Some(Persona { style, every })
     }
     pub fn name(self) -> String {
@@ -216,6 +224,10 @@ impl Persona {
             },
             Style::Tactician => Policy {
                 tactics: true,
+                ..base
+            },
+            Style::Sandbag => Policy {
+                sandbag: true,
                 ..base
             },
         }
@@ -658,5 +670,35 @@ mod tests {
         assert_eq!(g.hours, 1);
         assert_eq!(g.metrics["stop.h"], Some(1.0));
         assert_eq!(g.metrics["plateau.h"], Some(0.0));
+    }
+
+    #[test]
+    fn hands_off_play_converges() {
+        // Six hours of the reference play, then nobody touches the game for ten days: the score
+        // settles (stores fill up, nothing new is claimed, built or hired), routes lose nothing
+        // (they stop at walls) and no ground is lost (design v2 阶段 1).
+        use idle_engine::mech::score;
+        let (g, _) = play_bot(0, Persona::REFERENCE, Stop::hours(6));
+        let mut e = Engine::from_state(g.e.state.clone());
+        e.state.trace = Some(Vec::new());
+        let owned = |e: &Engine| e.state.cycle.tiles.iter().filter(|t| t.owned).count();
+        let (t0, owned0) = (e.state.time, owned(&e));
+        let mut scores = vec![score::total(&e.state) as f64];
+        for h in 1..=240 {
+            e.advance(t0 + h * 3600);
+            scores.push(score::total(&e.state) as f64);
+        }
+        let flat = plateau_start(&scores, PLATEAU_WINDOW_H, PLATEAU_TOL);
+        assert!(flat.is_some_and(|h| h < 192), "never settles: {scores:?}");
+        let lost = e
+            .state
+            .trace
+            .take()
+            .unwrap()
+            .into_iter()
+            .filter(|t| matches!(t, Trace::Route { won: false, .. }))
+            .count();
+        assert_eq!(lost, 0, "idle routes stop in front of walls");
+        assert!(owned(&e) >= owned0);
     }
 }

@@ -2,281 +2,393 @@
   "archive_habit": {
     "kind": "trait",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "barrier_runner": {
     "kind": "trait",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "bloodhound": {
     "kind": "doctrine",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "bounty": {
     "kind": "doctrine",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "bulwark": {
     "kind": "doctrine",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "burst": {
     "kind": "doctrine",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "capacitor": {
     "kind": "equipment",
     "mean": 0.08,
-    "best": 0.2
+    "best": 0.2,
+    "threat": 4,
+    "surge_pct": 0.16
   },
   "cascade": {
     "kind": "doctrine",
     "mean": 0.03,
-    "best": 0.03
+    "best": 0.03,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "chain": {
     "kind": "doctrine",
     "mean": 0.03,
-    "best": 0.03
+    "best": 0.03,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "conductor": {
     "kind": "trait",
     "mean": 0.08,
-    "best": 0.2
+    "best": 0.2,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "decoy": {
     "kind": "trait",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "defuser": {
     "kind": "trait",
     "mean": 0.01,
-    "best": 0.03
+    "best": 0.03,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "electrician_roots": {
     "kind": "trait",
     "mean": 0.01,
-    "best": 0.03
+    "best": 0.03,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "erosion_feeder": {
     "kind": "trait",
     "mean": 0.03,
-    "best": 0.05
+    "best": 0.05,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "etch": {
     "kind": "doctrine",
     "mean": -0.03,
-    "best": -0.03
+    "best": -0.03,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "field_dressing": {
     "kind": "doctrine",
     "mean": 0.05,
-    "best": 0.05
+    "best": 0.05,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "fog_sight": {
     "kind": "trait",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "fog_walker": {
     "kind": "trait",
     "mean": 0.03,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "ionize": {
     "kind": "doctrine",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "iron_lung": {
     "kind": "trait",
     "mean": 0.03,
-    "best": 0.05
+    "best": 0.05,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "last_stand": {
     "kind": "doctrine",
     "mean": 0.05,
-    "best": 0.05
+    "best": 0.05,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "mist_pathfinder": {
     "kind": "trait",
     "mean": 0.01,
-    "best": 0.03
+    "best": 0.03,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "night_market_voice": {
     "kind": "trait",
     "mean": 0.03,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "night_watch": {
     "kind": "trait",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "overclock": {
     "kind": "doctrine",
     "mean": 0.08,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "overclock_nerve": {
     "kind": "trait",
     "mean": 0.03,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "overflow": {
     "kind": "doctrine",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "party_line": {
     "kind": "trait",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "plating": {
     "kind": "doctrine",
     "mean": 0.1,
-    "best": 0.1
+    "best": 0.1,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "precise": {
     "kind": "trait",
     "mean": 0.02,
-    "best": 0.05
+    "best": 0.05,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "quick_draw": {
     "kind": "trait",
     "mean": 0.03,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "radio_tinker": {
     "kind": "trait",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "react": {
     "kind": "doctrine",
     "mean": 0.05,
-    "best": 0.05
+    "best": 0.05,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "resonance": {
     "kind": "trait",
     "mean": 0.01,
-    "best": 0.03
+    "best": 0.03,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "resonance_coil": {
     "kind": "equipment",
     "mean": 0.01,
-    "best": 0.03
+    "best": 0.03,
+    "threat": 4,
+    "surge_pct": 0.16
   },
   "resonant_core": {
     "kind": "doctrine",
     "mean": 0.03,
-    "best": 0.03
+    "best": 0.03,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "rift_ink": {
     "kind": "equipment",
     "mean": 0.03,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 4,
+    "surge_pct": 0.16
   },
   "rift_neighbor": {
     "kind": "trait",
     "mean": 0.01,
-    "best": 0.03
+    "best": 0.03,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "rift_sensitive": {
     "kind": "trait",
     "mean": 0.03,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "riot_shield": {
     "kind": "equipment",
     "mean": 0.03,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 4,
+    "surge_pct": 0.16
   },
   "riot_veteran": {
     "kind": "trait",
     "mean": 0.07,
-    "best": 0.15
+    "best": 0.15,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "road_veteran": {
     "kind": "trait",
     "mean": 0.05,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "rooftop_watcher": {
     "kind": "trait",
     "mean": 0.06,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "scarred": {
     "kind": "trait",
     "mean": 0.02,
-    "best": 0.05
+    "best": 0.05,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "scavenger_eye": {
     "kind": "trait",
     "mean": 0.01,
-    "best": 0.05
+    "best": 0.05,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "shield_burst": {
     "kind": "trait",
     "mean": 0.0,
-    "best": 0.03
+    "best": 0.03,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "shock_drill": {
     "kind": "doctrine",
     "mean": 0.08,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "silver_tongue": {
     "kind": "trait",
     "mean": 0.02,
-    "best": 0.05
+    "best": 0.05,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "siphon": {
     "kind": "doctrine",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "spall": {
     "kind": "doctrine",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "spotter": {
     "kind": "doctrine",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 8,
+    "surge_pct": 0.31
   },
   "spotter_scope": {
     "kind": "equipment",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 4,
+    "surge_pct": 0.16
   },
   "steady_hand": {
     "kind": "trait",
     "mean": 0.0,
-    "best": 0.0
+    "best": 0.0,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "street_smart": {
     "kind": "trait",
     "mean": 0.03,
-    "best": 0.08
+    "best": 0.08,
+    "threat": 0,
+    "surge_pct": 0.0
   },
   "tuning_fork": {
     "kind": "equipment",
     "mean": 0.04,
-    "best": 0.05
+    "best": 0.05,
+    "threat": 4,
+    "surge_pct": 0.16
   },
   "veteran_kit": {
     "kind": "doctrine",
     "mean": 0.1,
-    "best": 0.1
+    "best": 0.1,
+    "threat": 8,
+    "surge_pct": 0.31
   }
 }

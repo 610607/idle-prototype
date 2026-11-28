@@ -62,6 +62,11 @@ pub struct Band {
     /// Observation only, whatever the goal's level.
     #[serde(default)]
     pub watch: bool,
+    /// Compare with another persona: the band bounds this run's statistic divided by the same
+    /// statistic of that persona's run (from the same review, else its baseline). For “playing
+    /// this way pays no more than the reference” (`max: 1`).
+    #[serde(default)]
+    pub vs: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -78,9 +83,10 @@ pub struct Goal {
     /// played to the plateau, `eval run --until plateau`) or "any".
     #[serde(default = "default_run")]
     pub run: String,
-    /// Personas whose results can fail this gate (the file's `gate_personas`); empty = all.
-    /// Other personas' results outside a band read as watch: a strategy reading, not a verdict.
-    #[serde(skip)]
+    /// Personas whose results can fail this gate: the goal's own `gate_personas` when it names
+    /// some (a check on another persona, like `sandbag`), else the file's; empty = all. Other
+    /// personas' results outside a band read as watch: a strategy reading, not a verdict.
+    #[serde(default)]
     pub gate_personas: Vec<String>,
 }
 
@@ -111,7 +117,7 @@ struct GoalFile {
 pub fn load(path: &str) -> Vec<Goal> {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
     let mut f: GoalFile = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{path}: {e}"));
-    for g in &mut f.goals {
+    for g in f.goals.iter_mut().filter(|g| g.gate_personas.is_empty()) {
         g.gate_personas = f.gate_personas.clone();
     }
     let mut ids = BTreeSet::new();
@@ -183,8 +189,31 @@ pub fn stat(s: &Summary, name: &str) -> f64 {
     }
 }
 
-/// Every check of every goal that applies to this run's persona.
+/// Every check of every goal that applies to this run's persona; `vs` bands read the other
+/// persona from its baseline.
 pub fn evaluate<'a>(goals: &'a [Goal], f: &RunFile) -> Vec<Outcome<'a>> {
+    evaluate_with(goals, f, &[])
+}
+
+/// The statistic `b.stat` of metric `id` in the run `b.vs` names: one of `others`, else that
+/// persona's baseline.
+fn versus(b: &Band, id: &str, others: &[&RunFile]) -> Option<f64> {
+    let vs = b.vs.as_deref()?;
+    let base;
+    let o = match others.iter().find(|o| o.persona == vs) {
+        Some(o) => *o,
+        None => {
+            let p = baseline_path(vs);
+            base = std::path::Path::new(&p).exists().then(|| read_run(&p))?;
+            &base
+        }
+    };
+    let v = o.metrics.get(id)?;
+    Some(stat(&registry::summary(id, v), &b.stat)).filter(|y| y.is_finite() && *y != 0.0)
+}
+
+/// [`evaluate`], with the other runs of the same review for `vs` bands.
+pub fn evaluate_with<'a>(goals: &'a [Goal], f: &RunFile, others: &[&RunFile]) -> Vec<Outcome<'a>> {
     let mut out = Vec::new();
     for g in goals.iter().filter(|g| g.reads(f)) {
         for (id, bands) in &g.checks {
@@ -202,7 +231,11 @@ pub fn evaluate<'a>(goals: &'a [Goal], f: &RunFile) -> Vec<Outcome<'a>> {
                     continue;
                 };
                 let s = registry::summary(id, v);
-                let x = stat(&s, &b.stat);
+                let mut x = stat(&s, &b.stat);
+                if b.vs.is_some() {
+                    // Nothing to compare with reads n/a, like a missing value.
+                    x = versus(b, id, others).map_or(f64::INFINITY, |y| x / y);
+                }
                 let pass = b.min.is_none_or(|lo| x >= lo) && b.max.is_none_or(|hi| x <= hi);
                 let status = if x.is_infinite() && !b.missing_fails {
                     Status::Na
@@ -465,23 +498,26 @@ pub fn judge<'a>(files: &'a [RunFile], goals: &'a [Goal], base: Option<&str>) ->
         .iter()
         .enumerate()
         .flat_map(|(i, r)| {
-            evaluate(goals, r.f).into_iter().map(move |o| {
-                let (base, change) = match r.comparable() {
-                    Some(b) => (
-                        b.metrics
-                            .get(o.metric)
-                            .map(|v| stat(&registry::summary(o.metric, v), &o.band.stat)),
-                        delta(b, r.f, o.metric),
-                    ),
-                    None => (None, None),
-                };
-                Judged {
-                    run: i,
-                    outcome: o,
-                    base,
-                    change,
-                }
-            })
+            let others: Vec<&RunFile> = files.iter().collect();
+            evaluate_with(goals, r.f, &others)
+                .into_iter()
+                .map(move |o| {
+                    let (base, change) = match r.comparable() {
+                        Some(b) => (
+                            b.metrics
+                                .get(o.metric)
+                                .map(|v| stat(&registry::summary(o.metric, v), &o.band.stat)),
+                            delta(b, r.f, o.metric),
+                        ),
+                        None => (None, None),
+                    };
+                    Judged {
+                        run: i,
+                        outcome: o,
+                        base,
+                        change,
+                    }
+                })
         })
         .collect();
 
@@ -688,6 +724,32 @@ mod tests {
         assert_eq!(
             evaluate(std::slice::from_ref(&goal("plateau")), &hours).len(),
             0
+        );
+    }
+
+    #[test]
+    fn vs_bands_compare_with_the_other_persona() {
+        let goal: Goal = serde_json::from_value(serde_json::json!({
+            "id": "g", "kind": "experience", "level": "gate", "text": "", "doc": "",
+            "checks": { "score.final": [{ "stat": "p50", "max": 1.0, "vs": "greedy", "personas": ["sandbag"] }] },
+            "run": "any"
+        }))
+        .unwrap();
+        let run = |persona: &str, score: f64| RunFile {
+            persona: persona.into(),
+            metrics: [("score.final".to_string(), vec![Some(score)])].into(),
+            ..Default::default()
+        };
+        let greedy = run("greedy", 100.0);
+        let goals = std::slice::from_ref(&goal);
+        let low = evaluate_with(goals, &run("sandbag", 80.0), &[&greedy]);
+        assert_eq!(low[0].status, Status::Pass);
+        assert!((low[0].value - 0.8).abs() < 1e-9);
+        let high = evaluate_with(goals, &run("sandbag", 120.0), &[&greedy]);
+        assert_eq!(high[0].status, Status::Fail);
+        assert!(
+            evaluate_with(goals, &greedy, &[&greedy]).is_empty(),
+            "only sandbag runs"
         );
     }
 
