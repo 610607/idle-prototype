@@ -120,10 +120,15 @@ fn route_for(deep_first: bool, e: &mut Engine, squad: u32) -> Option<Vec<u16>> {
         .map(|t| (t.ring, t.i))
         .collect();
     targets.sort();
+    // The nearest-first scan stops after a dozen targets (one of them wins in practice). Deepest
+    // first looks at all of them: with enemy strength stepping up by ring (prototype v2) the deepest
+    // dozen can all lose, and stopping there sent the explorer into the same lost fight every turn.
+    let mut scan = 12;
     if deep_first {
         targets.sort_by_key(|&(r, i)| (std::cmp::Reverse(r), i));
+        scan = targets.len();
     }
-    for (_, t) in targets.iter().take(12) {
+    for (_, t) in targets.iter().take(scan) {
         let p = e.preview_route(squad, &[*t]);
         if p.ok
             && p.outcome
