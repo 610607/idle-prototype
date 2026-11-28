@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { t as tr } from '../i18n';
 import { Icon } from '../icons';
 import type { Command, Dial, DryRun, GarrisonOption, TileView } from '../types';
-import { Cost, DIAL_NAMES, DryRunView, fmtIn, OUTCOME_NAMES, Page, Section, TagIO, useCtx } from './common';
+import { Cost, DIAL_NAMES, DryRunView, facilityDef, fmtIn, OUTCOME_NAMES, Page, Section, shows, TagIO, useCtx } from './common';
 
 const TERRAIN_NAMES: Record<string, string> = {
   unknown: tr('terrain.unknown'),
@@ -20,25 +20,37 @@ const SPECIAL_NAMES: Record<string, string> = {
   core: tr('tile.special.core'),
 };
 
+/** 曾经的用途 of a fixed map's plot, as a phrase ("曾是诊所"); empty without one. */
+export function formerText(game: import('../engine/client').Game, former: string | undefined): string {
+  if (!former) return '';
+  if (former === 'housing') return tr('tile.former.housing');
+  return tr('tile.former.facility', { name: facilityDef(game, former)?.name ?? former });
+}
+
 export function TileSheet({ tile, onClose }: { tile: number; onClose: () => void }) {
-  const { view } = useCtx();
+  const { view, game } = useCtx();
   const t = view.tiles[tile]!;
   const district = t.district !== undefined ? view.districts.find((d) => d.id === t.district) : undefined;
+  const former = formerText(game, t.former);
   const title = (
     <span>
       {t.label} · {t.special ? SPECIAL_NAMES[t.special] : TERRAIN_NAMES[t.terrain]}
+      {former ? <span className="small"> · {former}</span> : null}
       {district ? <span className="muted small"> · {district.name}</span> : null}
     </span>
   );
   const icon = t.terrain === 'hq' ? 'tile-hq' : t.terrain === 'rift' ? 'tile-rift' : t.terrain === 'barrier' ? 'tile-barrier' : t.revealed ? 'tile-city' : 'fog';
-  const hasAside = t.border || (t.owned && t.terrain === 'city') || (t.owned && t.terrain === 'rift' && !!t.rift);
-  const aside = hasAside ? (
-    <>
-      {t.border ? <DefenseBlock t={t} /> : null}
-      {t.owned && t.terrain === 'city' && view.facilities ? <BuildBlock t={t} /> : null}
-      {t.owned && t.terrain === 'rift' && t.rift ? <DialBlock t={t} /> : null}
-    </>
-  ) : undefined;
+  const defense = t.border && shows(view, 'garrison');
+  const build = t.owned && t.terrain === 'city' && !!view.facilities;
+  const dial = t.owned && t.terrain === 'rift' && !!t.rift && shows(view, 'dial');
+  const aside =
+    defense || build || dial ? (
+      <>
+        {defense ? <DefenseBlock t={t} /> : null}
+        {build ? <BuildBlock t={t} /> : null}
+        {dial ? <DialBlock t={t} /> : null}
+      </>
+    ) : undefined;
   return (
     <Page title={title} icon={icon} onClose={onClose} aside={aside}>
       <Section title={tr('tile.overview.title')} icon={icon}>
@@ -46,19 +58,23 @@ export function TileSheet({ tile, onClose }: { tile: number; onClose: () => void
         {!t.revealed && t.terrain !== 'barrier' ? <p className="muted small">{tr('tile.overview.fog')}</p> : null}
         {t.terrain === 'barrier' ? <p className="muted small">{tr('tile.overview.barrier')}</p> : null}
       </Section>
-      {t.claimable ? <ClaimBlock t={t} /> : null}
-      {t.alert ? <AlertBlock t={t} /> : null}
+      {t.claimable && shows(view, 'claim') ? <ClaimBlock t={t} /> : null}
+      {t.alert && shows(view, 'counter') ? <AlertBlock t={t} /> : null}
       {!t.owned && t.revealed && t.enemies.length ? <EnemyBlock t={t} /> : null}
       {district ? <DistrictLink id={district.id} /> : null}
-      {t.owned && t.terrain !== 'hq' ? <AbandonBlock t={t} /> : null}
+      {t.owned && t.terrain !== 'hq' && shows(view, 'counter') ? <AbandonBlock t={t} /> : null}
     </Page>
   );
 }
 
 function Status({ t }: { t: TileView }) {
-  const { view, now } = useCtx();
+  const { view, now, game } = useCtx();
   const items: [string, React.ReactNode][] = [];
-  items.push([tr('tile.status.ring'), tr('tile.status.ring_value', { n: t.ring })]);
+  // A fixed map's tiles carry their own level (档), not a ring.
+  if (view.bounds) {
+    if (t.terrain !== 'hq' && t.terrain !== 'barrier') items.push([tr('tile.status.level'), tr('tile.status.level_value', { n: t.ring })]);
+  } else items.push([tr('tile.status.ring'), tr('tile.status.ring_value', { n: t.ring })]);
+  if (t.former) items.push([tr('tile.status.former'), formerText(game, t.former)]);
   if (t.revealed && t.terrain !== 'barrier') {
     items.push([tr('tile.status.warden'), <span className={t.alert ? 'bad' : ''}>{t.warden} / 100{t.owned ? '' : tr('tile.status.warden_claimable')}</span>]);
   }
@@ -353,11 +369,24 @@ function DialBlock({ t }: { t: TileView }) {
 }
 
 function EnemyBlock({ t }: { t: TileView }) {
-  const { view, setRouteEdit, open, toast, game, run } = useCtx();
-  const routes = !view.locked?.includes('routes');
-  const dispatch = !view.locked?.includes('dispatch');
+  const { view, setRouteEdit, open, toast, game } = useCtx();
+  const routes = shows(view, 'routes');
+  const dispatch = shows(view, 'dispatch');
+  const adjacent = t.border || view.tiles.some((x) => x.owned && Math.abs((x.i % 15) - (t.i % 15)) + Math.abs(Math.floor(x.i / 15) - Math.floor(t.i / 15)) === 1);
   return (
     <Section title={tr('tile.enemy.title')} icon="wave" tone="rift" hint={tr('tile.enemy.waves', { n: t.enemies.length })}>
+      {/* On a fixed map squads walk through a claimable tile without a fight (as the text client
+          offers no dispatch there): claim it instead. */}
+      {dispatch && adjacent && t.claimable && view.pace ? <p className="small good" style={{ margin: '0 0 8px' }}>{tr('tile.dispatch.claim_first')}</p> : null}
+      {dispatch && adjacent && !(t.claimable && view.pace) ? (
+        <div className="stack" style={{ gap: 6, marginBottom: 8 }}>
+          {view.squads
+            .filter((s) => s.members.length)
+            .map((s) => (
+              <DispatchRow key={s.id} squad={s.id} tile={t} />
+            ))}
+        </div>
+      ) : null}
       <div className="stack" style={{ gap: 4 }}>
         {t.enemies.map((w, k) => (
           <div key={k} className="row wrap small" style={{ gap: 10 }}>
@@ -373,51 +402,70 @@ function EnemyBlock({ t }: { t: TileView }) {
         ))}
       </div>
       <p className="small muted" style={{ margin: '8px 0' }}>
-        {tr('tile.enemy.help', { n: game.balance.warden_route_win, max: game.balance.warden_max })}
+        {routes ? tr('tile.enemy.help', { n: game.balance.warden_route_win, max: game.balance.warden_max }) : tr('tile.enemy.help_fight', { n: game.balance.warden_route_win, max: game.balance.warden_max })}
       </p>
-      <div className="row wrap">
-        {dispatch
-          ? view.squads
-              .filter((s) => s.members.length && !s.running)
-              .map((s) => {
-                const p = game.previewRoute(s.id, [t.i]);
-                return (
-                  <button
-                    key={`d${s.id}`}
-                    className="btn small primary"
-                    disabled={!p.ok}
-                    title={p.ok ? undefined : p.error}
-                    onClick={() => run({ cmd: 'dispatch', squad: s.id, tile: t.i }, tr('tile.enemy.dispatched', { name: s.name }))}
-                  >
-                    <Icon id="route" size={14} /> {tr('tile.enemy.dispatch', { name: s.name })}
-                    {p.ok ? ` · ${OUTCOME_NAMES[p.outcome!]}` : ''}
-                  </button>
-                );
-              })
-          : null}
-        {view.squads
-          .filter((s) => s.members.length && routes)
-          .map((s) => (
-            <button
-              key={s.id}
-              className="btn small"
-              onClick={() => {
-                const next = s.route.includes(t.i) ? s.route : [...s.route, t.i];
-                const p = game.previewRoute(s.id, next);
-                if (!p.ok) {
-                  toast(p.error ?? tr('tile.enemy.route_blocked'), true);
-                  setRouteEdit({ squad: s.id, route: s.route });
-                } else {
-                  setRouteEdit({ squad: s.id, route: next });
-                }
-                open(null);
-              }}
-            >
-              <Icon id="route" size={14} /> {tr('tile.enemy.add_route', { name: s.name })}
-            </button>
-          ))}
-      </div>
+      {routes ? (
+        <div className="row wrap">
+          {view.squads
+            .filter((s) => s.members.length)
+            .map((s) => (
+              <button
+                key={s.id}
+                className="btn small"
+                onClick={() => {
+                  const next = s.route.includes(t.i) ? s.route : [...s.route, t.i];
+                  const p = game.previewRoute(s.id, next);
+                  if (!p.ok) {
+                    toast(p.error ?? tr('tile.enemy.route_blocked'), true);
+                    setRouteEdit({ squad: s.id, route: s.route });
+                  } else {
+                    setRouteEdit({ squad: s.id, route: next });
+                  }
+                  open(null);
+                }}
+              >
+                <Icon id="route" size={14} /> {tr('tile.enemy.add_route', { name: s.name })}
+              </button>
+            ))}
+        </div>
+      ) : null}
     </Section>
+  );
+}
+
+/** One squad's 派遣 to this tile: what the engine's preview says (win, how long, or why it would
+ *  turn back), and the button. */
+function DispatchRow({ squad, tile }: { squad: number; tile: TileView }) {
+  const { view, game, run, open } = useCtx();
+  const s = view.squads.find((x) => x.id === squad)!;
+  // view.revision changes with every state change, so the preview follows HP and stock.
+  const p = useMemo(() => game.previewRoute(squad, [tile.i]), [game, squad, tile.i, view.revision, view.time]); // eslint-disable-line react-hooks/exhaustive-deps
+  const busy = !!s.running;
+  const wall = p.ok && p.stopped !== undefined;
+  const secs = p.seconds ?? p.minutes * 60;
+  const say = !p.ok
+    ? p.error
+    : busy
+      ? tr('tile.dispatch.busy', { name: s.name })
+      : wall
+        ? p.low_hp
+          ? tr('tile.dispatch.wall_hp', { outcome: OUTCOME_NAMES[p.outcome ?? 'emergency'] })
+          : tr('tile.dispatch.wall', { outcome: OUTCOME_NAMES[p.outcome ?? 'emergency'] })
+        : tr('tile.dispatch.preview', { outcome: OUTCOME_NAMES[p.outcome ?? 'victory'], time: fmtIn(secs) });
+  const good = p.ok && !wall && p.outcome === 'victory';
+  return (
+    <div className="dispatch-row">
+      <button
+        className={'btn' + (good && !busy ? ' primary' : '')}
+        disabled={!p.ok || busy}
+        onClick={() => {
+          if (run({ cmd: 'dispatch', squad, tile: tile.i }, tr('tile.enemy.dispatched', { name: s.name }))) open(null);
+        }}
+      >
+        <Icon id="route" size={14} /> {tr('tile.enemy.dispatch', { name: s.name })}
+      </button>
+      <span className={'small ' + (good ? 'good' : p.ok && !busy ? 'warn' : 'muted')}>{say}</span>
+    </div>
   );
 }
 

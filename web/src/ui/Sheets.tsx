@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { t, tn } from '../i18n';
 import { Icon } from '../icons';
 import type { Cond, DistrictView, DryRun, Gambit, OpView, Target } from '../types';
-import { Bar, DryRunView, fmtIn, OUTCOME_NAMES, Page, Rarity, RES_KEYS, RES_NAMES, Section, SQUAD_HEX, TagIO, useCtx } from './common';
+import { Bar, DryRunView, fmtIn, OUTCOME_NAMES, Page, Rarity, RES_KEYS, RES_NAMES, Section, shows, SQUAD_HEX, TagIO, useCtx } from './common';
 import { HpBar, OpRow, TideRows } from './Panels';
 
 // ---------------------------------------------------------------------------
@@ -68,12 +68,14 @@ export function OpSheet({ op, onClose }: { op: number; onClose: () => void }) {
       icon={o.icon}
       onClose={onClose}
       aside={
-        <>
-          <AssignBlock o={o} />
-          <EquipBlock o={o} />
-          <GambitEditor o={o} />
-          <OpDanger o={o} onClose={onClose} />
-        </>
+        shows(view, 'squad') || shows(view, 'garrison') || shows(view, 'equipment') || shows(view, 'gambits') || shows(view, 'retire') ? (
+          <>
+            {shows(view, 'squad') || shows(view, 'garrison') ? <AssignBlock o={o} /> : null}
+            {shows(view, 'equipment') ? <EquipBlock o={o} /> : null}
+            {shows(view, 'gambits') ? <GambitEditor o={o} /> : null}
+            {shows(view, 'retire') ? <OpDanger o={o} onClose={onClose} /> : null}
+          </>
+        ) : undefined
       }
     >
       <OpDetail o={o} />
@@ -207,7 +209,7 @@ function AssignBlock({ o }: { o: OpView }) {
   return (
     <Section title={t('sheets.assign.title')} icon="squad" tone="elec" hint={o.status}>
       <div className="row wrap">
-        {view.squads.map((s, i) => {
+        {(shows(view, 'squad') ? view.squads : []).map((s, i) => {
           const inIt = s.members.includes(o.id);
           const full = !inIt && s.members.length >= 3;
           return (
@@ -228,7 +230,7 @@ function AssignBlock({ o }: { o: OpView }) {
             </button>
           );
         })}
-        {a.t === 'garrison' ? (
+        {!shows(view, 'garrison') ? null : a.t === 'garrison' ? (
           <>
             <button className="btn small" onClick={() => open({ kind: 'tile', tile: a.tile })}>
               {t('sheets.assign.goto', { tile: view.tiles[a.tile]?.label ?? '' })}
@@ -422,7 +424,7 @@ export function DistrictSheet({ district, onClose }: { district: number; onClose
       onClose={onClose}
       aside={
         <>
-          <DistrictPriority d={d} />
+          {shows(view, 'priority') ? <DistrictPriority d={d} /> : null}
           {d.policy_options ? <DistrictPolicy d={d} /> : null}
           {d.customize ? <DistrictCustomize d={d} /> : null}
           <Section title={t('sheets.district.tiles')} icon="map" hint={`${d.owned}/${d.total}`}>
@@ -466,11 +468,15 @@ export function DistrictSheet({ district, onClose }: { district: number; onClose
             </div>
           ))}
         </div>
-        <div className="small muted" style={{ marginTop: 4 }}>
-          {t('sheets.district.militia', { militia: d.militia, volunteers: d.volunteers })}
-        </div>
+        {view.threat ? (
+          <div className="small muted" style={{ marginTop: 4 }}>
+            {t('sheets.district.militia', { militia: d.militia, volunteers: d.volunteers })}
+          </div>
+        ) : null}
       </Section>
 
+      {/* A fixed map where talent does not build up (the tutorial) has nothing to show here. */}
+      {view.pace && d.talent.every((tl) => !tl.rate && !tl.pct) ? null : (
       <Section title={t('sheets.district.talent')} icon="talent" hint={d.training_bp ? t('sheets.district.training', { pct: d.training_bp / 100 }) : undefined}>
         <div className="stack" style={{ gap: 6 }}>
           {d.talent.map((tl) => (
@@ -492,7 +498,7 @@ export function DistrictSheet({ district, onClose }: { district: number; onClose
           ))}
         </div>
       </Section>
-
+      )}
     </Page>
   );
 }
@@ -710,6 +716,7 @@ export function SquadSheet({ squad, onClose }: { squad: number; onClose: () => v
   const { view, open, run, setRouteEdit } = useCtx();
   const s = view.squads.find((x) => x.id === squad)!;
   const free = view.operatives.filter((o) => !s.members.includes(o.id));
+  const edit = shows(view, 'squad');
   const trip = s.last ?? s.running;
   return (
     <Page
@@ -728,7 +735,7 @@ export function SquadSheet({ squad, onClose }: { squad: number; onClose: () => v
                 o={o}
                 onClick={() => open({ kind: 'op', op: id })}
                 right={
-                  <span
+                  !edit ? null : <span
                     className="btn small ghost"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -742,7 +749,7 @@ export function SquadSheet({ squad, onClose }: { squad: number; onClose: () => v
             ) : null;
           })}
         </div>
-        {s.members.length < 3 && free.length ? (
+        {edit && s.members.length < 3 && free.length ? (
           <div className="row wrap" style={{ marginTop: 6 }}>
             {free.map((o) => (
               <button key={o.id} className="btn small" onClick={() => run({ cmd: 'set_squad', squad, members: [...s.members, o.id] }, t('sheets.assign.joined', { op: o.name, squad: s.name }))}>
@@ -753,12 +760,14 @@ export function SquadSheet({ squad, onClose }: { squad: number; onClose: () => v
           </div>
         ) : null}
       </Section>
-      <Section title={t('sheets.squad.route')} icon="route" tone="elec" hint={t('sheets.squad.trips', { n: s.trips })}>
-        <div className="small">{s.route.length ? s.route.map((i) => view.tiles[i]!.label).join(' → ') : t('sheets.squad.no_route')}</div>
-        <button className="btn small" style={{ marginTop: 6 }} onClick={() => setRouteEdit({ squad, route: s.route })} disabled={!s.members.length}>
-          {t('sheets.squad.edit_route')}
-        </button>
-      </Section>
+      {shows(view, 'routes') ? (
+        <Section title={t('sheets.squad.route')} icon="route" tone="elec" hint={t('sheets.squad.trips', { n: s.trips })}>
+          <div className="small">{s.route.length ? s.route.map((i) => view.tiles[i]!.label).join(' → ') : t('sheets.squad.no_route')}</div>
+          <button className="btn small" style={{ marginTop: 6 }} onClick={() => setRouteEdit({ squad, route: s.route })} disabled={!s.members.length}>
+            {t('sheets.squad.edit_route')}
+          </button>
+        </Section>
+      ) : null}
     </Page>
   );
 }

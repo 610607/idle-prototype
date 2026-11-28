@@ -38,7 +38,6 @@ export class Game {
   readonly content: ContentView;
   /** Balance numbers, for text that quotes them (never write them into components). */
   readonly balance: Balance;
-  loadError: string | null = null;
 
   private constructor(engine: WasmEngine, offset: number, content: ContentView, balance: Balance) {
     this.engine = engine;
@@ -47,23 +46,21 @@ export class Game {
     this.balance = balance;
   }
 
-  static async boot(): Promise<Game> {
+  /** Load the engine and the saved game. Null: nothing saved yet, so the player picks how to start
+   *  (`start`). `bootError` then says why a save could not be read, if there was one. */
+  static async boot(): Promise<Game | null> {
     await init({ module_or_path: wasmUrl });
-    const content = JSON.parse(WasmEngine.content()) as ContentView;
-    const balance = JSON.parse(WasmEngine.balance()) as Balance;
-    const offset = readOffset();
+    Game.content = JSON.parse(WasmEngine.content()) as ContentView;
+    Game.balanceJson = JSON.parse(WasmEngine.balance()) as Balance;
     // Debug entry: `?map=tutorial` starts a new game on that fixed map (maps.json), replacing the
-    // saved one; the parameter is dropped from the address so a reload keeps playing it.
+    // saved one; the parameter is dropped from the address so a reload keeps playing it. Static
+    // hosts may drop query strings: the start screen offers the same choice in the page.
     const map = new URLSearchParams(window.location.search).get('map');
     if (map) {
       const url = new URL(window.location.href);
       url.searchParams.delete('map');
       window.history.replaceState(null, '', url.toString());
-      const seed = Math.floor(Math.random() * 2 ** 31);
-      const e = WasmEngine.new_map(seed, Math.floor(Date.now() / 1000) + offset, 'web', map);
-      const g = new Game(e, offset, content, balance);
-      g.persist();
-      return g;
+      return Game.start(map);
     }
     let saved: string | null = null;
     try {
@@ -71,25 +68,43 @@ export class Game {
     } catch {
       saved = null;
     }
-    let loadError: string | null = null;
     if (saved) {
       try {
-        const g = new Game(WasmEngine.load(saved), offset, content, balance);
+        const g = new Game(WasmEngine.load(saved), readOffset(), Game.content, Game.balanceJson);
         g.tick();
         return g;
       } catch (e) {
-        loadError = String(e instanceof Error ? e.message : e);
+        Game.bootError = String(e instanceof Error ? e.message : e);
       }
     }
-    const g = new Game(Game.fresh(offset), offset, content, balance);
-    g.loadError = loadError;
+    return null;
+  }
+
+  private static content: ContentView;
+  private static balanceJson: Balance;
+  /** Why the saved game could not be loaded (the start screen says so). */
+  static bootError: string | null = null;
+
+  /** A new game: a fixed map by id (`tutorial`), or null for the random three-map choice. */
+  static start(map: string | null): Game {
+    const seed = Math.floor(Math.random() * 2 ** 31);
+    const now = Math.floor(Date.now() / 1000);
+    const e = map ? WasmEngine.new_map(seed, now, 'web', map) : new WasmEngine(seed, now, 'web');
+    const g = new Game(e, 0, Game.content, Game.balanceJson);
+    Game.bootError = null;
     g.persist();
     return g;
   }
 
-  private static fresh(offset: number): WasmEngine {
-    const seed = Math.floor(Math.random() * 2 ** 31);
-    return new WasmEngine(seed, Math.floor(Date.now() / 1000) + offset, 'web');
+  /** Drop this game and its save (back to the start screen). */
+  discard(): void {
+    this.engine.free();
+    try {
+      localStorage.removeItem(SAVE_KEY);
+      localStorage.removeItem(OFFSET_KEY);
+    } catch {
+      // nothing saved
+    }
   }
 
   now(): number {
@@ -166,13 +181,6 @@ export class Game {
     } catch (e) {
       return String(e instanceof Error ? e.message : e);
     }
-  }
-
-  reset(): void {
-    this.engine.free();
-    this.offset = 0;
-    this.engine = Game.fresh(0);
-    this.persist();
   }
 
   /** Debug: jump the clock forward. Offline catch-up runs the same discrete-event path. */

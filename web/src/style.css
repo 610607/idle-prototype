@@ -279,8 +279,83 @@ h1, h2, h3, h4 { font-family: var(--font-head); margin: 0; font-weight: 400; let
 }
 
 /* ---------------------------------------------------------------- plates (sections) */
-/* A fixed map's one-line hint (S7): a handover note, never in the way. */
-.hint-line { border-left: 3px solid var(--hazard); padding: 6px 10px; margin: 0 0 8px; background: var(--panel-2, transparent); color: var(--ink-2); }
+/* A fixed map's hint: a handover note pinned above the map, never in the way. A new one flashes. */
+.hint-line {
+  display: flex; gap: 10px; align-items: flex-start; border-left: 4px solid var(--hazard); padding: 8px 12px;
+  background: var(--panel-2); color: var(--ink); font-size: 14px; line-height: 1.55; box-shadow: var(--drop);
+}
+.hint-line .hint-tag {
+  flex: none; font-family: var(--font-head); font-size: 12px; letter-spacing: 0.08em; line-height: 1;
+  padding: 4px 6px 3px; margin-top: 1px; background: var(--hazard-dim); color: var(--hazard-lit);
+}
+.hint-line.fresh .hint-tag { background: var(--hazard); color: var(--hazard-ink); }
+.hint-line.fresh { animation: hint-in 2.4s ease-out 1; }
+@keyframes hint-in {
+  0% { background: var(--hazard-dim); box-shadow: 0 0 0 2px var(--hazard); }
+  60% { background: var(--hazard-dim-2); box-shadow: 0 0 0 2px var(--hazard); }
+  100% { background: var(--panel-2); box-shadow: var(--drop); }
+}
+@media (prefers-reduced-motion: reduce) { .hint-line.fresh { animation: none; } }
+.hint-line.compact { font-size: 12.5px; padding: 6px 10px; box-shadow: none; }
+.hint-line.folded .hint-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.hint-line.ending { border-left-color: var(--good); align-items: center; }
+.hint-line.ending .hint-tag { background: var(--good-dk); color: var(--ink); }
+/* the copy above the workspace only shows on phones, where the map column is hidden */
+.work-hint { display: none; }
+@media (max-width: 900px) {
+  .work-hint:not(:empty) { display: block; padding: 8px 10px 0; }
+  .main[data-mv='map'] .work-hint { display: none; }
+}
+
+/* the chapter is over: ending text, the 密室, the way on */
+.ending-card {
+  border: 1px solid var(--good-dk); border-left: 4px solid var(--good); background: var(--panel-2);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--drop);
+}
+.ending-card h3 { font-size: 20px; color: var(--good); }
+.ending-card p { margin: 0; line-height: 1.6; }
+.ending-dialog { max-width: 520px; border-top: 4px solid var(--good); }
+.records { display: flex; flex-direction: column; gap: 4px; }
+.records .record { display: flex; gap: 6px; font-size: 13px; color: var(--ink-3); line-height: 1.5; }
+.records .record.done { color: var(--ink); }
+.records .record .mark { flex: none; width: 12px; color: var(--ink-3); }
+.records .record.done .mark { color: var(--good); }
+
+/* next unlocks and departments: one compact row each, with a thin progress bar */
+.next-list { display: flex; flex-direction: column; gap: 8px; }
+.next-item .bar { margin: 3px 0 2px; }
+.next-item.ready { outline: 2px solid var(--hazard); outline-offset: 4px; }
+.pulse-ring { animation: ring 1.6s ease-in-out infinite; }
+@keyframes ring { 0%, 100% { box-shadow: 0 0 0 0 rgba(224, 180, 60, 0); } 50% { box-shadow: 0 0 0 4px rgba(224, 180, 60, 0.45); } }
+@media (prefers-reduced-motion: reduce) { .pulse-ring { animation: none; } }
+
+/* health: a bar and a line of text; downed shows how far the get-up has come */
+.hp { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-top: 2px; min-width: 0; }
+.hp-bar { position: relative; flex: 0 0 84px; height: 7px; background: var(--sunk); border: 1px solid var(--line); overflow: hidden; }
+.hp-bar i { position: absolute; left: 0; top: 0; bottom: 0; display: block; }
+.hp.good .hp-bar i { background: var(--good); }
+.hp.warn .hp-bar i { background: var(--warn); }
+.hp.bad .hp-bar i { background: var(--bad); }
+.hp-bar i.getup { background: repeating-linear-gradient(-45deg, var(--ink-3) 0 3px, transparent 3px 6px) !important; }
+.hp-label { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hp.down .hp-label { color: var(--bad); }
+.member-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.member-row .hp { flex: 1; min-width: 150px; }
+.btn.link, button.link { background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink); }
+button.link:hover span { text-decoration: underline; }
+.dispatch-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stop-line { background: var(--warn-bg); padding: 4px 6px; }
+
+/* the start screen: two ways to begin */
+.pane.start { max-width: 880px; margin: 0 auto; width: 100%; padding-top: 28px; }
+.start-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.start-choice p { margin: 0; }
+.start-choice .btn { align-self: flex-start; }
+.start-choice.recommended { outline: 2px solid var(--hazard); outline-offset: -2px; }
+.topbar .restart { color: var(--ink-3); }
+@media (max-width: 900px) {
+  .topbar .restart { padding: 0 6px; }
+}
 
 .section {
   --tone: var(--steel-lt);

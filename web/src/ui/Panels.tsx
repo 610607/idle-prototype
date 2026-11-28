@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { Icon } from '../icons';
-import type { ArmoryView, OpView, PendingView, SquadView, TideView } from '../types';
+import type { ArmoryView, HintView, OpView, PendingView, SquadView, TideView } from '../types';
 import { WASH } from './Board';
-import { Bar, Cost, fmtAgo, fmtClock, fmtIn, OUTCOME_NAMES, RES_KEYS, RES_NAMES, Rarity, Section, SQUAD_HEX, TagIO, useCtx } from './common';
+import { Bar, Cost, fmtAgo, fmtClock, fmtIn, OUTCOME_NAMES, RES_KEYS, RES_NAMES, Rarity, Section, shows, SQUAD_HEX, TagIO, useCtx } from './common';
 
 const PENDING_ICON: Record<string, string> = {
   map: 'map',
@@ -22,6 +22,7 @@ const PENDING_ICON: Record<string, string> = {
 // 指挥 tab: what to do (tasks, squads) on the left; what is coming and what happened on the right.
 
 export function CommandPanel() {
+  const { view } = useCtx();
   return (
     <div className="split">
       <div className="col">
@@ -29,7 +30,7 @@ export function CommandPanel() {
         <SquadsPanel />
       </div>
       <div className="col">
-        <TideTable limit={10} />
+        {view.threat ? <TideTable limit={10} /> : null}
         <EventLog />
       </div>
     </div>
@@ -185,78 +186,183 @@ export function Departments() {
   if (!view.departments?.length) return null;
   return (
     <Section title={t('panels.dept.title')} icon="org" tone="hazard">
-      <div className="stack" style={{ gap: 6 }}>
+      <div className="next-list">
         {view.departments.map((d) => (
-          <div key={d.id} className="small">
-            <b>{d.name}</b>{' '}
-            {d.founded ? (
-              <span className="faint">{t('panels.dept.founded')}</span>
-            ) : (
-              <>
-                {t('panels.next.cond', { cond: d.cond, have: d.have, need: d.need })} <Cost cost={d.cost} have={view.resources} />
-              </>
-            )}
+          <div key={d.id} className={'next-item' + (d.can_found ? ' ready' : '')}>
+            <div className="row wrap small" style={{ gap: 6 }}>
+              <b>{d.name}</b>
+              {d.founded ? (
+                <span className="chip good">{t('panels.dept.founded')}</span>
+              ) : (
+                <>
+                  <span className="grow muted">{d.ready ? t('panels.dept.ready') : d.cond}</span>
+                  {d.ready ? null : (
+                    <span className="num">
+                      {d.have}/{d.need}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+            {d.founded || d.ready ? null : <Bar value={d.have} max={d.need} />}
             <div className="tiny faint">{d.desc}</div>
-            {d.founded ? null : d.can_found ? (
-              <button className="btn small primary" onClick={() => run({ cmd: 'found_department', department: d.id }, t('panels.dept.done', { name: d.name }))}>
-                {t('panels.dept.found')}
-              </button>
-            ) : (
-              <Bar value={d.have} max={d.need} />
+            {d.founded ? null : (
+              <div className="row wrap small" style={{ gap: 8, marginTop: 4 }}>
+                <span className="muted">{t('panels.dept.cost')}</span>
+                <Cost cost={d.cost} have={view.resources} />
+                {d.ready ? (
+                  <button
+                    className={'btn small ' + (d.can_found ? 'primary pulse-ring' : '')}
+                    disabled={!d.can_found}
+                    onClick={() => run({ cmd: 'found_department', department: d.id }, t('panels.dept.done', { name: d.name }))}
+                  >
+                    {t('panels.dept.found')}
+                  </button>
+                ) : null}
+              </div>
             )}
           </div>
         ))}
       </div>
+    </Section>
+  );
+}
+
+/** How long a new hint stays marked as new, in seconds of game time. */
+const HINT_FRESH_SECS = 12;
+
+/** A fixed map's hint: the latest one stays until another replaces it, and a new one flashes. It
+ *  never blocks anything. Once the chapter is over this is the way out instead. `compact`: the copy
+ *  phones show above the workspace. */
+export function HintLine({ compact }: { compact?: boolean }) {
+  const { view, now } = useCtx();
+  const [last, setLast] = useState<HintView | null>(view.hint ?? null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (view.hint) setLast(view.hint);
+  }, [view.hint?.t, view.hint?.text]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (view.chapter_end) return <ChapterEndCard compact={compact} />;
+  const h = view.hint ?? last;
+  if (!h) return null;
+  const fresh = now - h.t < HINT_FRESH_SECS;
+  return (
+    // Keyed by the hint, so a new one remounts and its flash plays again.
+    // On phones an older hint folds to two lines above the workspace; a tap opens it.
+    <div
+      key={`${h.t}:${h.text}`}
+      className={'hint-line' + (fresh ? ' fresh' : '') + (compact ? ' compact' : '') + (compact && !fresh && !open ? ' folded' : '')}
+      role="status"
+      onClick={compact ? () => setOpen((o) => !o) : undefined}
+    >
+      <span className="hint-tag">{fresh ? t('panels.hint.new') : t('panels.hint.tag')}</span>
+      <span className="hint-text">{h.text}</span>
+    </div>
+  );
+}
+
+/** The chapter is over: the ending, the 密室 and the way on to a formal run. */
+function ChapterEndCard({ compact }: { compact?: boolean }) {
+  const { view, run } = useCtx();
+  const end = view.chapter_end!;
+  const leave = (
+    <button className="btn primary" onClick={() => run({ cmd: 'leave_map' }, t('panels.chapter_end.left'))}>
+      {t('panels.chapter_end.leave')}
+    </button>
+  );
+  if (compact)
+    return (
+      <div className="hint-line ending compact">
+        <span className="hint-tag">{t('panels.chapter_end.title')}</span>
+        <span className="hint-text">{leave}</span>
+      </div>
+    );
+  return (
+    <div className="ending-card">
+      <h3>{t('panels.chapter_end.title')}</h3>
+      <p>{end.text}</p>
+      <RecordList />
+      <div className="row wrap" style={{ gap: 8 }}>
+        {leave}
+        <span className="tiny faint">{t('panels.chapter_end.stay')}</span>
+      </div>
+    </div>
+  );
+}
+
+/** The ending once, as a dialog over the page; closed, it stays above the map (ChapterEndCard). */
+export function ChapterEndDialog() {
+  const { view, run } = useCtx();
+  const [closed, setClosed] = useState<number | null>(null);
+  const end = view.chapter_end;
+  if (!end || closed === end.t || view.phase !== 'active') return null;
+  return (
+    <div className="scrim" onClick={() => setClosed(end.t)}>
+      <div className="dialog stack ending-dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ fontSize: 22 }}>{t('panels.chapter_end.title')}</h2>
+        <p style={{ margin: 0 }}>{end.text}</p>
+        <RecordList />
+        <div className="row wrap" style={{ justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn ghost" onClick={() => setClosed(end.t)}>
+            {t('panels.chapter_end.later')}
+          </button>
+          <button className="btn primary" onClick={() => run({ cmd: 'leave_map' }, t('panels.chapter_end.left'))}>
+            {t('panels.chapter_end.leave')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The 密室 lines: what was done, and what the room below holds because of it. */
+function RecordList() {
+  const { view } = useCtx();
+  if (!view.records?.length) return null;
+  return (
+    <div className="records">
+      <div className="tiny muted">{t('panels.records.lead')}</div>
+      {view.records.map((r) => (
+        <div key={r.id} className={'record' + (r.done ? ' done' : '')}>
+          <span className="mark">{r.done ? '✓' : '·'}</span>
+          <span>
+            {r.done ? null : <span className="faint">{t('panels.records.not_yet')}</span>}
+            <b>{r.did}</b> → {r.got}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 密室: the room under HQ, as repaired so far, and the next one or two repairs. */
+export function RecordsPanel() {
+  const { view } = useCtx();
+  if (!view.records?.length) return null;
+  return (
+    <Section title={t('panels.records.title')} icon="org" tone="hazard">
+      <RecordList />
     </Section>
   );
 }
 
 /** The next one or two unlocks and how far along they are; absent in games with everything open. */
-/** A fixed map's one-line hint (S7; the highlight comes with S9). It never blocks anything. */
-export function HintLine() {
-  const { view, run } = useCtx();
-  if (view.chapter_end) {
-    return (
-      <div className="hint-line small">
-        <b>{t('panels.chapter_end.title')}</b> {view.chapter_end.text}{' '}
-        <button className="btn small primary" onClick={() => run({ cmd: 'leave_map' }, t('panels.chapter_end.left'))}>
-          {t('panels.chapter_end.leave')}
-        </button>
-      </div>
-    );
-  }
-  if (!view.hint) return null;
-  return <div className="hint-line small">{view.hint.text}</div>;
-}
-
-/** The organisation's 规章和档案: records kept, then the next one or two (S7, minimal). */
-export function RecordsPanel() {
-  const { view } = useCtx();
-  if (!view.records?.length) return null;
-  return (
-    <Section title={t('panels.records.title')} icon="check" tone="hazard">
-      <div className="stack" style={{ gap: 4 }}>
-        {view.records.map((r) => (
-          <div key={r.id} className={'small ' + (r.done ? '' : 'faint')}>
-            {r.done ? '✓' : '·'} {r.did} → {r.got}
-          </div>
-        ))}
-      </div>
-    </Section>
-  );
-}
-
 export function NextUnlocks() {
   const { view } = useCtx();
   if (!view.next?.length) return null;
   return (
-    <Section title={t('panels.next.title')} icon="check" tone="hazard">
-      <div className="stack" style={{ gap: 6 }}>
+    <Section title={t('panels.next.title')} icon="unlock" tone="hazard">
+      <div className="next-list">
         {view.next.map((n) => (
-          <div key={n.id} className="small">
-            <b>{n.name}</b> {t('panels.next.cond', { cond: n.cond, have: n.have, need: n.need })}
-            <div className="tiny faint">{n.hint}</div>
+          <div key={n.id} className="next-item" title={n.hint}>
+            <div className="row small" style={{ gap: 6 }}>
+              <b>{n.name}</b>
+              <span className="grow muted ellipsis">{n.cond}</span>
+              <span className="num">
+                {n.have}/{n.need}
+              </span>
+            </div>
             <Bar value={n.have} max={n.need} />
+            <div className="tiny faint">{n.hint}</div>
           </div>
         ))}
       </div>
@@ -350,6 +456,7 @@ export function SquadsPanel() {
           <SquadCard key={s.id} s={s} color={SQUAD_HEX[i % SQUAD_HEX.length]!} />
         ))}
       </div>
+      {view.med_line ? <MedLineRow /> : null}
       {view.threat ? (
         <div className="small muted" style={{ marginTop: 6 }}>
           {t('panels.squads.threat_note', { x: (view.threat.strength_bp / 10000).toFixed(1), next: view.threat.next })}
@@ -364,38 +471,49 @@ function SquadCard({ s, color }: { s: SquadView; color: string }) {
   const stop = s.last?.stopped ?? null;
   const members = s.members.map((id) => view.operatives.find((o) => o.id === id)).filter(Boolean) as OpView[];
   const trip = s.running;
+  const routes = shows(view, 'routes');
   const status = !members.length
     ? t('panels.squad.no_members')
     : s.force
       ? t('panels.squad.force_next')
       : trip
-      ? t('panels.squad.on_route', { left: fmtIn(trip.end - now) })
+      ? trip.end - now <= 0
+        ? t('panels.squad.arriving')
+        : t(s.once ? 'panels.squad.on_dispatch' : 'panels.squad.on_route', { left: fmtIn(trip.end - now) })
       : members.every((m) => m.health.down)
         ? t('panels.squad.all_down')
         : s.route.length
           ? t('panels.squad.ready')
-          : t('panels.squad.no_route');
+          : routes
+            ? t('panels.squad.no_route')
+            : t('panels.squad.idle_dispatch');
   return (
     <div className="card" style={{ boxShadow: `inset 4px 0 0 ${color}`, paddingLeft: 14 }}>
-      <div className="row">
+      <div className="row wrap">
         <h3 style={{ color, fontSize: 17 }}>{s.name}</h3>
         <span className="small muted grow">{status}</span>
-        <button className="btn small" onClick={() => setRouteEdit({ squad: s.id, route: s.route })} disabled={!members.length}>
-          <Icon id="route" size={14} /> {t('panels.squad.route')}
-        </button>
+        {routes ? (
+          <button className="btn small" onClick={() => setRouteEdit({ squad: s.id, route: s.route })} disabled={!members.length}>
+            <Icon id="route" size={14} /> {t('panels.squad.route')}
+          </button>
+        ) : null}
         <button className="btn small ghost" onClick={() => open({ kind: 'squad', squad: s.id })}>
           {t('panels.squad.details')}
         </button>
       </div>
-      <div className="row wrap small" style={{ gap: 8, marginTop: 4 }}>
+      <div className="stack" style={{ gap: 4, marginTop: 4 }}>
         {members.map((m) => (
-          <span key={m.id} className="row" style={{ gap: 3 }}>
-            <Icon id={m.icon} />
-            {m.name}
-          </span>
+          <div key={m.id} className="member-row">
+            <button className="row link" style={{ gap: 3 }} onClick={() => open({ kind: 'op', op: m.id })}>
+              <Icon id={m.icon} />
+              <span className="small">{m.name}</span>
+            </button>
+            <HpBar o={m} />
+            <HealButton o={m} />
+          </div>
         ))}
       </div>
-      {s.route.length ? (
+      {s.route.length && !s.once ? (
         <div className="small faint" style={{ marginTop: 2 }}>
           {t('panels.squad.route_list', { tiles: s.route.map((i) => view.tiles[i]!.label).join(' → ') })}
         </div>
@@ -407,17 +525,18 @@ function SquadCard({ s, color }: { s: SquadView; color: string }) {
             ? t('panels.squad.last_results', { outcome: OUTCOME_NAMES[s.last.outcome], results: s.last.results.map((r) => r.label).join(t('panels.sep.list')) })
             : t('panels.squad.last_patrol', { outcome: OUTCOME_NAMES[s.last.outcome] })}
           {s.last.forced ? t('panels.squad.forced') : null}
+          {s.last.healed_at?.length ? t('panels.squad.healed_at', { tiles: s.last.healed_at.map((i) => view.tiles[i]!.label).join(t('panels.sep.list')) }) : null}
         </div>
       ) : null}
       {stop ? (
-        <div className="row wrap small warn" style={{ gap: 6, marginTop: 2 }}>
+        <div className="row wrap small warn stop-line" style={{ gap: 6, marginTop: 2 }}>
           <span className="grow">{t(stop.low_hp ? 'panels.squad.stopped_hp' : 'panels.squad.stopped', { tile: stop.label, outcome: stop.outcome ? OUTCOME_NAMES[stop.outcome] : '' })}</span>
           {stop.report !== null ? (
             <button className="btn small ghost" onClick={() => open({ kind: 'report', title: `${s.name} · ${stop.label}`, load: () => game.report(stop.report!) })}>
               {t('panels.squad.why')}
             </button>
           ) : null}
-          {!s.force ? (
+          {!s.force && routes && s.route.length ? (
             <button className="btn small" onClick={() => run({ cmd: 'assault', squad: s.id }, t('panels.squad.assault_done', { squad: s.name, tile: stop.label }))}>
               {t('panels.squad.assault')}
             </button>
@@ -481,23 +600,50 @@ export function EventLog() {
 
 /** Current health as a bar: downed, out on a trip (as it will be when back), or at home. */
 export function HpBar({ o }: { o: OpView }) {
+  const { view, now } = useCtx();
   const h = o.health;
   const pct = h.down ? 0 : Math.round((h.hp * 100) / Math.max(1, h.max));
-  const tone = h.down || pct < 30 ? 'var(--bad, #c0392b)' : pct < 60 ? 'var(--warn, #d68910)' : 'var(--good, #27ae60)';
+  const tone = h.down || pct < 30 ? 'bad' : pct < 60 ? 'warn' : 'good';
+  // `up_in` is from when the view was built; count it down between redraws.
+  const upIn = h.up_in !== undefined ? Math.max(0, h.up_in - (now - view.time)) : undefined;
   const label = h.down
-    ? h.up_in !== undefined
-      ? t('panels.hp.down_in', { left: fmtIn(h.up_in) })
+    ? upIn !== undefined
+      ? t('panels.hp.down_in', { left: fmtIn(upIn) })
       : t('panels.hp.down_away')
     : h.away
       ? t('panels.hp.back', { hp: h.hp, max: h.max })
       : t('panels.hp.now', { hp: h.hp, max: h.max });
   return (
-    <div className="tiny" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-      <span style={{ flex: '0 0 72px', height: 6, background: 'rgba(127,127,127,.25)', borderRadius: 3, overflow: 'hidden' }}>
-        <span style={{ display: 'block', width: `${pct}%`, height: '100%', background: tone }} />
+    <div className={'hp ' + tone + (h.down ? ' down' : '')}>
+      <span className="hp-bar">
+        <i style={{ width: `${pct}%` }} />
+        {h.down && upIn !== undefined && view.pace ? <i className="getup" style={{ width: `${Math.round(100 - (upIn * 100) / Math.max(1, view.pace.get_up_secs))}%` }} /> : null}
       </span>
-      <span className={h.down ? 'bad' : 'muted'}>{label}</span>
+      <span className="hp-label">{label}</span>
     </div>
+  );
+}
+
+/** One button that heals an operative: to full when the stock pays, else as far as it goes. The
+ *  engine prices both (`health.heal`); nothing shows before healing is open or at full health. */
+export function HealButton({ o }: { o: OpView }) {
+  const { view, run } = useCtx();
+  const h = o.health;
+  const heal = h.heal;
+  if (!heal || h.away || (!h.down && h.hp >= h.max)) return null;
+  const have = view.resources.medicine ?? 0;
+  const full = heal.full <= have;
+  const some = heal.reach > h.hp || (h.down && heal.reach > 0);
+  return (
+    <button
+      className={'btn small' + (full ? ' primary' : '')}
+      disabled={!full && !some}
+      title={full ? undefined : t('sheets.heal.short', { reach: heal.reach })}
+      onClick={() => run({ cmd: 'heal', op: o.id }, t('sheets.heal.done', { name: o.name }))}
+    >
+      <Icon id="res-medicine" size={14} />
+      {full ? t('panels.heal.full', { cost: heal.full }) : some ? t('panels.heal.part', { reach: heal.reach, cost: have }) : t('panels.heal.none', { cost: heal.full })}
+    </button>
   );
 }
 
@@ -559,7 +705,7 @@ function MedLineRow() {
 export function RosterPanel() {
   const { view, open, run } = useCtx();
   const roster = (
-    <Section title={t('panels.roster.title')} icon="roster" hint={`${view.operatives.length}/${view.roster_cap}`}>
+    <Section title={t('panels.roster.title')} icon="roster" hint={shows(view, 'hire') ? `${view.operatives.length}/${view.roster_cap}` : undefined}>
       <div className="list">
         {view.operatives.map((o) => (
           <OpRow key={o.id} o={o} onClick={() => open({ kind: 'op', op: o.id })} right={o.locked ? <Icon id="lock" className="faint" /> : null} />
@@ -654,9 +800,11 @@ export function DistrictsPanel() {
               <span>
                 <span className="faint">{t('panels.districts.population')}</span> <span className="num">{d.population}</span>
               </span>
-              <span>
-                <span className="faint">{t('panels.districts.militia')}</span> <span className="num">{d.militia}</span>
-              </span>
+              {view.threat ? (
+                <span>
+                  <span className="faint">{t('panels.districts.militia')}</span> <span className="num">{d.militia}</span>
+                </span>
+              ) : null}
               {d.contiguous ? <span className="chip good">{t('panels.districts.contiguous')}</span> : null}
               {d.unhoused ? <span className="chip bad">{t('panels.districts.unhoused', { n: d.unhoused })}</span> : null}
             </div>
@@ -686,15 +834,17 @@ export function DistrictsPanel() {
 // 总部 tab
 
 export function HQPanel() {
-  const { view, run, game, toast, confirm } = useCtx();
+  const { view, run, game, toast, restart } = useCtx();
   const org = view.org;
   const [saveText, setSaveText] = useState('');
   return (
     <>
     {view.phase === 'active' && view.armory?.length ? <ArmoryPanel /> : null}
-    <RecordsPanel />
+    {/* Between cycles the map choice shows the 密室 at its top already. */}
+    {view.phase === 'active' ? <RecordsPanel /> : null}
     <div className="split">
       <div className="col">
+        {shows(view, 'org_level') ? (
         <Section title={t('panels.org.title', { level: org.level })} icon="org" tone="hazard" hint={org.next ? `${org.exp}/${org.next}` : `${org.exp}`}>
           {org.next ? <Bar value={org.exp} max={org.next} /> : null}
           <div className="stack" style={{ gap: 2, marginTop: 8 }}>
@@ -705,6 +855,7 @@ export function HQPanel() {
             ))}
           </div>
         </Section>
+        ) : null}
 
         {org.rules ? (
         <Section title={t('panels.rules.title')} icon="rules" hint={t('panels.rules.hint')}>
@@ -722,9 +873,11 @@ export function HQPanel() {
         </Section>
         ) : null}
 
-        {view.phase === 'active' ? <CycleBlock /> : null}
+        {view.phase === 'active' && shows(view, 'collapse') ? <CycleBlock /> : null}
       </div>
       <div className="col">
+        {/* A fixed map (the tutorial) has no special operatives to meet. */}
+        {view.pace && view.phase === 'active' ? null : (
         <Section title={t('panels.specials.title')} icon="star" tone="hazard" hint={t('panels.specials.hint')}>
           <div className="stack" style={{ gap: 8 }}>
             {org.specials.map((s) => (
@@ -745,6 +898,7 @@ export function HQPanel() {
             ))}
           </div>
         </Section>
+        )}
 
         {view.sealed ? (
         <Section title={t('panels.sealed.title')} icon="seal" tone="rift" hint={`${view.sealed.length}/${org.sealed_slots}`}>
@@ -775,6 +929,17 @@ export function HQPanel() {
         ) : null}
 
         <Section title={t('panels.debug.title')} icon="clock">
+          <div className="row wrap" style={{ marginBottom: 8 }}>
+            <button className="btn danger" onClick={restart}>
+              {t('app.restart.button')}
+            </button>
+            <span className="small faint">{t('app.restart.hint')}</span>
+          </div>
+          <details>
+          <summary className="small muted" style={{ cursor: 'pointer' }}>{t('panels.debug.more')}</summary>
+          {/* Skipping hours on a fixed map (whose hour is seconds) only piles up stock. */}
+          {view.pace ? null : (
+          <>
           <div className="row wrap">
             {[
               [3600, t('panels.debug.hours', { n: 1 })],
@@ -798,6 +963,8 @@ export function HQPanel() {
           <div className="small faint" style={{ marginTop: 4 }}>
             {t('panels.debug.note', { h: Math.round(game.offset / 3600) })}
           </div>
+          </>
+          )}
           <div className="row wrap" style={{ marginTop: 8 }}>
             <button className="btn small" onClick={() => setSaveText(game.exportSave())}>
               {t('panels.debug.export')}
@@ -812,25 +979,9 @@ export function HQPanel() {
             >
               {t('panels.debug.import')}
             </button>
-            <button
-              className="btn small danger"
-              onClick={() =>
-                confirm({
-                  title: t('panels.debug.reset_title'),
-                  body: t('panels.debug.reset_body'),
-                  ok: t('panels.debug.reset_ok'),
-                  danger: true,
-                  onOk: () => {
-                    game.reset();
-                    toast(t('panels.debug.reset_done'));
-                  },
-                })
-              }
-            >
-              {t('panels.debug.reset')}
-            </button>
           </div>
           <textarea className="save" value={saveText} onChange={(e) => setSaveText(e.target.value)} placeholder={t('panels.debug.save_placeholder')} />
+          </details>
         </Section>
       </div>
     </div>
