@@ -43,8 +43,13 @@ DIR/
   save.json       当前存档（引擎的存档格式）
   journal.jsonl   每条被接受的命令：{"t": 秒, "cmd": {…}}，按顺序；包括开局设定和自动领取的见习任务
   visits.jsonl    每次回访一行（行动执行之后写）
-  final.json      终局：{"t": 秒, "summary": {…}, "save_sha": "…"}
+  final.json      终局：{"t": 秒, "summary": {…}, "save_sha": "…", "view_sha": "…"}
 ```
+
+final.json 的两个指纹都是 FNV-1a 64（16 位十六进制，`kernel::hash::fnv64`）：
+
+- `save_sha`：终局存档（`Engine::save()` 的整个字符串）的指纹。
+- `view_sha`（可选）：终局局面数据（`Engine::view_json()`，就是网页拿到的那份）的指纹。它不读存档，所以存档结构变了、游戏没变时它不动。2026-11-28 加入；只加了一个可选字段，`protocol` 仍是 1。之前录的会话没有这个字段，照常能重放。
 
 `t` 是从本轮开始算起的秒数（整数）。命令日志来自引擎的测量钩子 `Trace::Command`，所以不管命令来自菜单、JSON 还是自动领取，都会记下来。引擎是确定性的，而且一次推进多久不影响结果（一次推进 48 小时和每 5 分钟推进一次，存档逐字节相同），所以按 (t, 命令) 重放能得到同一局。
 
@@ -175,7 +180,15 @@ cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --session
 - `llm.invalid`：行动里失败项的占比（失败项 ÷ 全部行动项；看得懂的反面信号，也能发现接口问题）。
 - 没有回访记录（机器人写的会话）就不输出 `llm.*`。
 
-重放后的存档指纹和 final.json 不一致，或者日志里有命令被引擎拒绝（或者日志里有晚于 final.json `t` 的命令），说明游戏在会话之后改过：这个会话标为过期，只输出 `llm.feel.*`、`llm.score.*`，不输出对局指标和 `llm.delight_given_*`、`llm.delight_lift`、`llm.invalid`，并打印警告。每个重放的会话都写 `session.stale`：过期为 1，否则为 0（机器人写的会话也有），汇总多个会话时据此看出哪些过期。
+重放后的存档指纹和 final.json 不一致，或者 final.json 有 `view_sha` 而重放后的局面指纹和它不一致，或者日志里有命令被引擎拒绝（或者日志里有晚于 final.json `t` 的命令），说明游戏在会话之后改过：这个会话标为过期，只输出 `llm.feel.*`、`llm.score.*`，不输出对局指标和 `llm.delight_given_*`、`llm.delight_lift`、`llm.invalid`，并打印警告。每个重放的会话都写 `session.stale`：过期为 1，否则为 0（机器人写的会话也有），汇总多个会话时据此看出哪些过期。
+
+`eval session` 每个会话打印一行，带重放后的存档指纹和局面指纹。
+
+补记指纹：`eval session DIR… --bless`（不限一个玩家，不算指标）。它只在一个指纹还对得上的时候重记另一个，其余的原样不动并列出来，有不动的就以非零状态退出：
+
+- 存档指纹对得上、final.json 没有 `view_sha`：补上 `view_sha`。
+- `view_sha` 对得上、存档指纹对不上（存档结构变了，游戏没变，比如引擎重构里 `SAVE_VERSION` 加一之后）：重记 `save_sha`，save.json 换成重放出的存档。
+- 两个都对得上：不动。其他情况（命令被拒绝、存档对不上又没有 `view_sha`、`view_sha` 对不上）：不动，列出原因。
 
 ## 接入其他模型
 
@@ -191,14 +204,16 @@ cargo run --release --example eval -- run greedy --seeds 8 --hours 168 --session
 ## 版本和稳健性
 
 - **协议版本**：`protocol` 字段。只加可选字段不算不兼容；删字段、改含义、改目录结构要加一，并在这里写明变化。
-- **会话过期**：见上一节，按重放后的存档指纹判断（重放时有命令被拒绝也算过期）。
+- **会话过期**：见上一节，按重放后的存档指纹判断，有 `view_sha` 时也比局面指纹（重放时有命令被拒绝也算过期）。
+- **协议变更记录**：2026-11-28，final.json 加可选字段 `view_sha`，版本仍是 1。
 - **菜单 id**：由命令内容算出，不随菜单顺序变化。
 - **测试**（`cargo test`）：
-  - 会话本身（`engine/tests/session.rs`）：模拟玩家通过库接口和 `serve` 各玩一局，命令日志重放得到同一个终局存档；被拒绝的行动不改目录。
+  - 会话本身（`engine/tests/session.rs`）：模拟玩家通过库接口和 `serve` 各玩一局，命令日志重放得到同一个终局存档和同一个局面指纹；被拒绝的行动不改目录。
   - 评估会话（`engine/evalkit/src/session.rs`）：
     - 机器人（`greedy`，种子 0，12 小时）写出的会话重放后，存档指纹一致，指标逐位相同（重放多出的只有 `session.stale` = 0），命令计数相同，不判过期。
     - 脚本玩家通过 `textui::session` 的库接口玩一局（`every:3`，24 小时；每次选第一个菜单项，感受轮流记惊喜、平淡、不写，被问时各维度打 3 分），重放后不判过期，`llm.feel.d1.*` 之和不超过 1，`llm.score.*.d1` 都是 3，`llm.invalid` 为 0，`owned.h12` 等对局指标齐全，所有 id 都在注册表里。
     - 改掉 final.json 的 `save_sha`：判为过期，只剩 `llm.feel.*`、`llm.score.*` 和 `session.stale` = 1。
+    - `view_sha`：玩完的会话带这个字段，重放后相等；去掉它照常重放，`--bless` 补回来的文件和原来逐字节相同；改错它判为过期，`--bless` 不动；只改错 `save_sha` 判为过期，`--bless` 凭 `view_sha` 重记；两个都没有可凭的就不动。
     - `protocol` 为 2 的 manifest 报错；没有 final.json 的目录跳过；不同玩家、同一种子两次都报错。
   - 事件分类棘轮：`locales/zh-CN/events.json` 里每个事件 key 都要在 `engine/eval/payoff_classes.json` 里有归类（爽点类别和级别，或明确记为“不算”）。新事件不归类，测试就失败，这就是“新系统怎么接入”清单里的爽点声明。
   - 指标注册表：`engine/eval/metrics.json` 登记每个指标 id 的模式、类别（局面探针 / 结果量 / 自选样本）、缺值读法（`late` 按“没发生、最晚”算，`skip` 略过没有可量的种子）和一句说明。`eval run` 产出的 id、`goals.json` 里引用的 id 都必须能在注册表里找到；改名或拼错立刻失败。`eval metrics` 打印注册表，给人和模型读结果时查。

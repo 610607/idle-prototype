@@ -1,0 +1,33 @@
+{
+  "persona": "explorer",
+  "seed": 0,
+  "hours": 24,
+  "lang": "zh-CN",
+  "trace": [
+    {"h":0,"view":"5728191fd1352ec9","events":"a8093131074a9ec2","n":1},
+    {"h":1,"view":"fda07969bd047d28","events":"f1b2098e46ceada9","n":4},
+    {"h":2,"view":"4d9611205cc1b270","events":"00b987c7c74dcc8a","n":5},
+    {"h":3,"view":"8a564d6f1679e32f","events":"5fa00000a013de72","n":6},
+    {"h":4,"view":"f406bc89a1747521","events":"9be6a0109caa87c7","n":8},
+    {"h":5,"view":"2bc281c51b0e816e","events":"e41e7126c9c4b76a","n":3},
+    {"h":6,"view":"a8991fa25f9f02aa","events":"d1b595e8c98f2650","n":1},
+    {"h":7,"view":"25d327084ca025d1","events":"cbf29ce484222325","n":0},
+    {"h":8,"view":"f53f55c14663dae9","events":"6cc3f8763c5a4a4c","n":2},
+    {"h":9,"view":"fc49e4858048d2cf","events":"8776909f404fcaa6","n":1},
+    {"h":10,"view":"369748f5708eb5d9","events":"d6e51d30a73588cd","n":1},
+    {"h":11,"view":"4ed4dbc247b6cf53","events":"cbf29ce484222325","n":0},
+    {"h":12,"view":"5525a9433966d34b","events":"75d2da87158504dc","n":2},
+    {"h":13,"view":"71f8382449a02761","events":"890971097643261f","n":1},
+    {"h":14,"view":"788cb79012bbe778","events":"3f9fdabbde559dea","n":1},
+    {"h":15,"view":"c0583bb6eaaa3d72","events":"cbf29ce484222325","n":0},
+    {"h":16,"view":"d52c9708d95c759b","events":"beb6d815b2cf6026","n":2},
+    {"h":17,"view":"591bc1cbdf0cc206","events":"362658e02d8daa17","n":1},
+    {"h":18,"view":"4c5035daae61ae08","events":"fa3b6a02d45d39fb","n":1},
+    {"h":19,"view":"473740bb12b8fc8b","events":"cbf29ce484222325","n":0},
+    {"h":20,"view":"658b8a027a8800db","events":"962770e59dea34c7","n":2},
+    {"h":21,"view":"8dad4b83e5df0e5d","events":"cbf29ce484222325","n":0},
+    {"h":22,"view":"b74ea90e3db04a6a","events":"cbf29ce484222325","n":0},
+    {"h":23,"view":"6c4fdc8b971a037c","events":"8f7911ed31a799ac","n":1},
+    {"h":24,"view":"0ec0d8c4d6e305d6","events":"cbf29ce484222325","n":0}
+  ]
+}

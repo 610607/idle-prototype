@@ -29,6 +29,8 @@ cargo run --release --example eval -- check /tmp/a.json
 cargo run --release --example eval -- review /tmp/a.json --out /tmp/report.md
 cargo run --release --example eval -- run greedy --seeds 20 --hours 72 --patch '{"warden_route_win": 5}' --out /tmp/b.json
 cargo run --release --example eval -- compare /tmp/a.json /tmp/b.json
+cargo run --release --example eval -- compare /tmp/a.json /tmp/b.json --exact   # 重构用：每个指标、每个命令次数都相等才算过，否则列出不同的 key 并以非零状态退出
+cargo run --release --example eval -- golden            # 重构用：六个参考玩家的逐小时局面轨迹，逐字节对照（engine/eval/golden/README.md）
 cargo run --release --example eval -- numbers
 cargo run --release --example eval -- calibrate
 cargo run --release --example eval -- model

@@ -572,6 +572,66 @@ pub fn run(
 }
 
 impl RunFile {
+    /// Every key in which `other` is not exactly this run (`eval compare --exact`,
+    /// docs/design-v2-refactor.md §对照物): the hours and seeds, every metric seed by seed (bit for
+    /// bit, `None` only equal to `None`) and every command count. Empty when the two are the same
+    /// games; persona name, patch and build are labels and are not compared.
+    pub fn exact_diff(&self, other: &RunFile) -> Vec<String> {
+        let mut out = Vec::new();
+        if self.hours != other.hours {
+            out.push(format!("hours: {} → {}", self.hours, other.hours));
+        }
+        if self.seeds != other.seeds {
+            out.push(format!("seeds: {:?} → {:?}", self.seeds, other.seeds));
+        }
+        let show = |v: &Option<f64>| v.map_or("-".to_string(), |x| x.to_string());
+        let ids: std::collections::BTreeSet<&String> =
+            self.metrics.keys().chain(other.metrics.keys()).collect();
+        for id in ids {
+            match (self.metrics.get(id), other.metrics.get(id)) {
+                (Some(_), None) => out.push(format!("metric {id}: only in A")),
+                (None, Some(_)) => out.push(format!("metric {id}: only in B")),
+                (Some(a), Some(b)) => {
+                    let same = |i: usize| {
+                        a.get(i).map(|x| x.map(f64::to_bits))
+                            == b.get(i).map(|x| x.map(f64::to_bits))
+                    };
+                    let bad: Vec<String> = (0..a.len().max(b.len()))
+                        .filter(|i| !same(*i))
+                        .map(|i| {
+                            let seed = self
+                                .seeds
+                                .get(i)
+                                .or(other.seeds.get(i))
+                                .map_or("?".to_string(), |s| s.to_string());
+                            format!(
+                                "seed {seed}: {} → {}",
+                                a.get(i).map_or("none".into(), show),
+                                b.get(i).map_or("none".into(), show)
+                            )
+                        })
+                        .collect();
+                    if !bad.is_empty() {
+                        out.push(format!("metric {id}: {}", bad.join("; ")));
+                    }
+                }
+                (None, None) => {}
+            }
+        }
+        let names: std::collections::BTreeSet<&String> =
+            self.commands.keys().chain(other.commands.keys()).collect();
+        for name in names {
+            let (a, b) = (
+                self.commands.get(name).copied().unwrap_or(0),
+                other.commands.get(name).copied().unwrap_or(0),
+            );
+            if a != b {
+                out.push(format!("command {name}: {a} → {b}"));
+            }
+        }
+        out
+    }
+
     /// A run file from per-seed results, in seed order; a metric a seed lacks reads `None` there.
     pub fn collect(persona: String, hours: i64, mut results: Vec<SeedResult>) -> RunFile {
         results.sort_by_key(|r| r.0);
@@ -644,6 +704,38 @@ mod tests {
         assert_eq!(plateau_start(&[0.0; 5], 3, 0.02), Some(0));
         // A drop counts as flat (the score stopped rising).
         assert_eq!(plateau_start(&[0.0, 50.0, 30.0, 20.0], 1, 0.02), Some(1));
+    }
+
+    #[test]
+    fn exact_diff_names_every_differing_key() {
+        let m = |v: f64| -> Metrics { [("own.24".to_string(), Some(v))].into() };
+        let cmds = |n: u32| -> BTreeMap<String, u32> { [("claim".to_string(), n)].into() };
+        let a = RunFile::collect(
+            "a".into(),
+            6,
+            vec![(0, m(1.0), cmds(2)), (1, m(2.0), cmds(1))],
+        );
+        let same = RunFile::collect(
+            "b".into(),
+            6,
+            vec![(0, m(1.0), cmds(2)), (1, m(2.0), cmds(1))],
+        );
+        assert!(a.exact_diff(&same).is_empty());
+        let mut other = m(2.5);
+        other.insert("new.metric".into(), None);
+        let b = RunFile::collect(
+            "a".into(),
+            6,
+            vec![(0, m(1.0), cmds(2)), (1, other, cmds(4))],
+        );
+        assert_eq!(
+            a.exact_diff(&b),
+            [
+                "metric new.metric: only in B",
+                "metric own.24: seed 1: 2 → 2.5",
+                "command claim: 3 → 6"
+            ]
+        );
     }
 
     #[test]
