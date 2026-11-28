@@ -316,6 +316,24 @@ export interface SquadView {
   trips: number;
   deepest: number;
   force: boolean;
+  /** A manual dispatch: the squad goes once and stands by when it is back. */
+  once?: boolean;
+}
+
+/** A department (engine/content/departments.json): founded or how far along its condition is. */
+export interface DepartmentView {
+  id: string;
+  name: string;
+  desc: string;
+  founded: boolean;
+  ready: boolean;
+  can_found: boolean;
+  cond: string;
+  have: number;
+  need: number;
+  cost: Resources;
+  /** False while what it stands for is not built yet (it grants nothing). */
+  wired: boolean;
 }
 
 export interface FacilityOption {
@@ -326,7 +344,10 @@ export interface FacilityOption {
   profession: string | null;
   jobs: number;
   power: number;
+  /** What the next one costs (grows with each one already standing). */
   cost: Resources;
+  /** How many stand on owned tiles. */
+  built: number;
   desc: string;
   visible: boolean;
   affordable: boolean;
@@ -458,6 +479,10 @@ export interface View {
   locked?: UnlockSystem[];
   /** The next one or two unlocks and how far along they are (absent when everything is open). */
   next?: NextUnlock[];
+  /** Departments the player can see. */
+  departments: DepartmentView[];
+  /** What the next claim costs (grows with every tile claimed this cycle); absent between cycles. */
+  claim_price?: Resources;
   /** The part of the board a fixed map uses (absent: the whole board). */
   bounds?: Bounds;
   /** A fixed map's pace (absent on random maps). */
@@ -764,4 +789,6 @@ export type Command =
   | { cmd: 'upgrade'; track: string }
   | { cmd: 'collapse' }
   | { cmd: 'heal'; op: number; hp?: number }
-  | { cmd: 'set_med_line'; on: boolean; below_pct: number; reserve: number };
+  | { cmd: 'set_med_line'; on: boolean; below_pct: number; reserve: number }
+  | { cmd: 'dispatch'; squad: number; tile: number }
+  | { cmd: 'found_department'; department: string };

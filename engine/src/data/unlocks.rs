@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum System {
-    /// Sending a squad to one tile (until S5's manual dispatch command: a route of one tile).
+    /// Sending a squad to fight one tile once (`Command::Dispatch`).
     Dispatch,
     /// Routes of several tiles and hard fights.
     Routes,
@@ -73,7 +73,7 @@ impl System {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
-    /// Manual dispatches (S5's command; until then a one-tile route set by the player).
+    /// Manual dispatches (`Command::Dispatch`).
     Dispatch,
     /// Routes of several tiles set by the player.
     Route,
@@ -121,7 +121,7 @@ pub enum Condition {
     Done { action: Action, n: i32 },
     /// A route fight on this tile (board index) was won.
     WonTile { tile: u16 },
-    /// The department is founded (S5 adds departments; nothing founds one yet).
+    /// The department is founded (`departments.json`, `Org::departments`).
     Department { id: String },
 }
 
@@ -265,6 +265,88 @@ impl Registry {
             }
             for (id, c) in &p.when {
                 check_condition(&mut errs, &format!("{id} (profile {pid})"), c, &facility_ok);
+            }
+        }
+        errs
+    }
+}
+
+/// A department (`content/departments.json`, docs/unlocks.md): founded once with a command, it
+/// stays with the organisation and opens its `grants` at the start of every later cycle too.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DepartmentDef {
+    pub id: String,
+    /// When it can be founded.
+    pub when: Condition,
+    /// What founding it costs.
+    #[serde(default)]
+    pub cost: crate::data::Resources,
+    /// Unlock ids it opens while founded.
+    #[serde(default)]
+    pub grants: Vec<String>,
+    /// An unlock that must be open before the department is listed at all (none: always).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown_after: Option<String>,
+    /// False while the automation it stands for is not built yet: foundable, grants nothing.
+    #[serde(default)]
+    pub wired: bool,
+    #[serde(skip)]
+    pub name: String,
+    #[serde(skip)]
+    pub desc: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Departments {
+    pub departments: Vec<DepartmentDef>,
+}
+
+impl Departments {
+    pub fn get(&self, id: &str) -> Option<&DepartmentDef> {
+        self.departments.iter().find(|d| d.id == id)
+    }
+
+    /// Problems with the departments against the unlock registry.
+    pub fn check(&self, reg: &Registry, facility_ok: impl Fn(&str) -> bool) -> Vec<String> {
+        let mut errs = Vec::new();
+        for (k, d) in self.departments.iter().enumerate() {
+            if self.departments[..k].iter().any(|x| x.id == d.id) {
+                errs.push(format!("department {}: duplicate id", d.id));
+            }
+            for g in d.grants.iter().chain(d.shown_after.iter()) {
+                if reg.get(g).is_none() {
+                    errs.push(format!("department {}: unknown unlock {g}", d.id));
+                }
+            }
+            if !d.wired && !d.grants.is_empty() {
+                errs.push(format!("department {}: not wired but grants", d.id));
+            }
+            if matches!(d.when, Condition::Never) {
+                errs.push(format!("department {}: can never be founded", d.id));
+            }
+            check_condition(
+                &mut errs,
+                &format!("department {}", d.id),
+                &d.when,
+                &facility_ok,
+            );
+        }
+        for u in &reg.unlocks {
+            if let Condition::Department { id } = &u.when {
+                if self.get(id).is_none() {
+                    errs.push(format!("unlock {}: unknown department {id}", u.id));
+                }
+            }
+        }
+        for (pid, p) in &reg.profiles {
+            for (uid, c) in &p.when {
+                if let Condition::Department { id } = c {
+                    if self.get(id).is_none() {
+                        errs.push(format!(
+                            "unlock {uid} (profile {pid}): unknown department {id}"
+                        ));
+                    }
+                }
             }
         }
         errs

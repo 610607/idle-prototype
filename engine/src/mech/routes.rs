@@ -246,7 +246,10 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
             // fight the squad would have lost). Keep why, once per wall.
             stopped_at = Some(tile);
             stop_outcome = Some(report.outcome);
-            // The same fight as last time: same wall, nothing fought before it, same health.
+            // The same fight as last time (same wall, nothing fought before it, same health)
+            // keeps its report number. Reports are not saved, so after a load (or once the
+            // buffer dropped it) the report is put back under that number: whether a game was
+            // saved and loaded in between never changes what happens next.
             let now_hp: BTreeMap<u32, Hurt> =
                 party.iter().map(|m| (m.id, m.hurt.clone())).collect();
             stop_report = squad
@@ -258,12 +261,16 @@ pub fn plan_trip(state: &mut GameState, squad_id: u32, start: i64) -> Option<Tri
                         && l.results.is_empty()
                         && l.hp == now_hp
                 })
-                .and_then(|l| l.stop_report)
-                .filter(|id| state.reports.iter().any(|(r, _)| r == id));
-            if stop_report.is_none() {
-                let mut rec = input.clone();
-                rec.record = true;
-                stop_report = Some(state.store_report(combat::simulate(&rec)));
+                .and_then(|l| l.stop_report);
+            let mut rec = input.clone();
+            rec.record = true;
+            match stop_report {
+                Some(id) => {
+                    if !state.reports.iter().any(|(r, _)| *r == id) {
+                        state.restore_report(id, combat::simulate(&rec));
+                    }
+                }
+                None => stop_report = Some(state.store_report(combat::simulate(&rec))),
             }
             inputs.push((tile, input));
             break;
@@ -560,6 +567,11 @@ pub fn commit_trip(state: &mut GameState, squad_id: u32) {
     let sq = &mut state.cycle.squads[si];
     sq.trips += 1;
     sq.last = Some(trip);
+    // A manual dispatch goes once.
+    if sq.once {
+        sq.once = false;
+        sq.route.clear();
+    }
 }
 
 /// Start a trip if the squad is idle and able. Returns true if one started.

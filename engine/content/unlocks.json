@@ -28,7 +28,7 @@
       "when": { "built": { "facility": "clinic", "n": 1 } },
       "after": "healing"
     },
-    { "id": "routes", "gates": ["routes"], "when": "never" },
+    { "id": "routes", "gates": ["routes"], "when": { "department": { "id": "dispatch_office" } } },
     {
       "id": "rules",
       "gates": ["rules"],

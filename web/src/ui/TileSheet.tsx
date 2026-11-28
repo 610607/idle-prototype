@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { t as tr } from '../i18n';
 import { Icon } from '../icons';
 import type { Command, Dial, DryRun, GarrisonOption, TileView } from '../types';
-import { Cost, DIAL_NAMES, DryRunView, fmtIn, Page, Section, TagIO, useCtx } from './common';
+import { Cost, DIAL_NAMES, DryRunView, fmtIn, OUTCOME_NAMES, Page, Section, TagIO, useCtx } from './common';
 
 const TERRAIN_NAMES: Record<string, string> = {
   unknown: tr('terrain.unknown'),
@@ -126,6 +126,11 @@ function ClaimBlock({ t }: { t: TileView }) {
     <div className="card striped good">
       <Section title={t.terrain === 'rift' ? tr('tile.claim.title_rift') : tr('tile.claim.title')} icon="check" tone="good" hint={tr('tile.claim.hint')}>
         {line && <p className="small" style={{ margin: '0 0 6px' }}>{line.text}</p>}
+        {view.claim_price ? (
+          <p className="small" style={{ margin: '0 0 6px' }}>
+            {tr('tile.claim.price')} <Cost cost={view.claim_price} have={view.resources} />
+          </p>
+        ) : null}
         <DryRunView dry={dry} />
         <div className="row" style={{ marginTop: 8, gap: 6 }}>
           {guard && <ClaimButton tile={t.i} ok={dry.ok} guard={guard.id} label={tr('tile.claim.button_guard', { name: guard.name })} />}
@@ -348,7 +353,9 @@ function DialBlock({ t }: { t: TileView }) {
 }
 
 function EnemyBlock({ t }: { t: TileView }) {
-  const { view, setRouteEdit, open, toast, game } = useCtx();
+  const { view, setRouteEdit, open, toast, game, run } = useCtx();
+  const routes = !view.locked?.includes('routes');
+  const dispatch = !view.locked?.includes('dispatch');
   return (
     <Section title={tr('tile.enemy.title')} icon="wave" tone="rift" hint={tr('tile.enemy.waves', { n: t.enemies.length })}>
       <div className="stack" style={{ gap: 4 }}>
@@ -369,8 +376,27 @@ function EnemyBlock({ t }: { t: TileView }) {
         {tr('tile.enemy.help', { n: game.balance.warden_route_win, max: game.balance.warden_max })}
       </p>
       <div className="row wrap">
+        {dispatch
+          ? view.squads
+              .filter((s) => s.members.length && !s.running)
+              .map((s) => {
+                const p = game.previewRoute(s.id, [t.i]);
+                return (
+                  <button
+                    key={`d${s.id}`}
+                    className="btn small primary"
+                    disabled={!p.ok}
+                    title={p.ok ? undefined : p.error}
+                    onClick={() => run({ cmd: 'dispatch', squad: s.id, tile: t.i }, tr('tile.enemy.dispatched', { name: s.name }))}
+                  >
+                    <Icon id="route" size={14} /> {tr('tile.enemy.dispatch', { name: s.name })}
+                    {p.ok ? ` · ${OUTCOME_NAMES[p.outcome!]}` : ''}
+                  </button>
+                );
+              })
+          : null}
         {view.squads
-          .filter((s) => s.members.length)
+          .filter((s) => s.members.length && routes)
           .map((s) => (
             <button
               key={s.id}

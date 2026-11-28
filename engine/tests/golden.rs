@@ -119,6 +119,8 @@ fn held_tile(s: &mut GameState) -> u16 {
         garrison: Some(guard),
     };
     commands::apply(s, &claim).unwrap();
+    // Claims cost scrap (阶段 3 S6); the stock is part of the threat, so put it back.
+    s.cycle.resources.scrap = 10_000;
     tile
 }
 

@@ -152,8 +152,24 @@ pub struct MapDef {
     /// The unlock profile a game on this map starts with (`unlocks.json`, `profiles`).
     #[serde(default = "default_profile")]
     pub unlocks: String,
+    /// Claim and building prices on this map, in place of `balance.json`'s `costs`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub costs: Option<Costs>,
     #[serde(skip)]
     pub name: String,
+}
+
+/// Claim and building prices (`mech::cost`): the n-th claim of a cycle costs
+/// `claim_base × claim_mult^n`, the n-th building of a kind its base cost × `build_mult^n`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Costs {
+    /// Empty: claims are free.
+    #[serde(default)]
+    pub claim_base: super::Resources,
+    /// Basis points (13500 = ×1.35 per claim).
+    pub claim_mult_bp: i64,
+    /// Basis points (15000 = ×1.5 per building of the same kind).
+    pub build_mult_bp: i64,
 }
 
 fn default_profile() -> String {

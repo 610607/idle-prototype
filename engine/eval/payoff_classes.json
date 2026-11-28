@@ -3,6 +3,7 @@
   "keys": {
     "event.research.new": { "class": "research", "tier": 1 },
     "event.unlocked": { "class": "unlock", "tier": 1 },
+    "event.department_founded": { "class": "unlock", "tier": 1 },
     "event.research.done": { "class": "research", "tier": 1 },
     "event.armory.breakthrough": { "class": "armory", "tier": 2 },
     "event.armory.level": { "class": "armory", "tier": 0 },

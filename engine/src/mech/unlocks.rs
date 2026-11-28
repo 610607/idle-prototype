@@ -5,30 +5,26 @@
 //! 有状态时，每条命令被接受以后、时间线上每个时刻处理完以后，按登记表的顺序检查一遍条件
 //! （[`refresh`]），新开的解锁写一条事件。
 
-use crate::data::unlocks::{Action, Condition, System, UnlockDef, HOUSING};
+use crate::data::unlocks::{Action, Condition, DepartmentDef, System, UnlockDef, HOUSING};
 use crate::data::{content, hooks};
 use crate::mech::commands::Command;
 use crate::mech::state::{EventKind, GameState, Terrain, TileUse};
 use crate::{l10n, t, txt};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
-/// A game's unlock state (absent when everything is open).
+/// A game's unlock state (absent when everything is open). The `done` counters live on the cycle
+/// (`Cycle::done`) and founded departments on the organisation (`Org::departments`): both are
+/// kept in every game, unlock state or not.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Unlocks {
     /// The start profile (`unlocks.json`, `profiles`): its condition overrides apply.
     pub profile: String,
     /// Unlock ids open now.
     pub open: BTreeSet<String>,
-    /// Player actions counted for `Condition::Done`.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub done: BTreeMap<Action, u32>,
     /// Tiles where a route fight was won (for `Condition::WonTile`).
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub won: BTreeSet<u16>,
-    /// Departments founded (S5).
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub departments: BTreeSet<String>,
 }
 
 /// How a game starts (the start configuration's unlock part). `Start::default()` is today's
@@ -162,6 +158,10 @@ pub fn check(state: &GameState, cmd: &Command) -> Result<(), String> {
             closed(reg.of_facility(facility.as_deref().unwrap_or(HOUSING)))
         }
         Command::SetRule { rule, .. } => closed(reg.of_rule(rule)),
+        // Claiming and stationing someone at once also needs the garrison system.
+        Command::Claim {
+            garrison: Some(_), ..
+        } => closed(reg.of_system(System::Garrison)),
         _ => Ok(()),
     }
 }
@@ -169,8 +169,8 @@ pub fn check(state: &GameState, cmd: &Command) -> Result<(), String> {
 /// What an accepted command counts toward (`Condition::Done`).
 fn action_of(cmd: &Command) -> Option<Action> {
     match cmd {
-        Command::SetRoute { route, .. } if route.len() == 1 => Some(Action::Dispatch),
-        Command::SetRoute { route, .. } if route.len() > 1 => Some(Action::Route),
+        Command::Dispatch { .. } => Some(Action::Dispatch),
+        Command::SetRoute { route, .. } if !route.is_empty() => Some(Action::Route),
         Command::Claim { .. } => Some(Action::Claim),
         Command::Build { .. } => Some(Action::Build),
         Command::Hire { .. } => Some(Action::Hire),
@@ -179,44 +179,34 @@ fn action_of(cmd: &Command) -> Option<Action> {
     }
 }
 
-/// Counts an action toward `Condition::Done` (S5's manual dispatch calls this with `Dispatch`).
+/// Counts an action toward `Condition::Done` (in every game: departments read it too).
 pub fn bump(state: &mut GameState, a: Action) {
-    if let Some(u) = state.cycle.unlocks.as_mut() {
-        *u.done.entry(a).or_insert(0) += 1;
-    }
+    *state.cycle.done.entry(a).or_insert(0) += 1;
 }
 
-/// After an accepted command: count it, then check the conditions.
+/// After an accepted command: count it, then check the conditions (when there is unlock state).
 pub fn after_command(state: &mut GameState, cmd: &Command) {
-    if state.cycle.unlocks.is_none() {
-        return;
-    }
     if let Some(a) = action_of(cmd) {
         bump(state, a);
     }
-    refresh(state);
-}
-
-/// Records a founded department (`Condition::Department`). Nothing founds one before S5.
-pub fn found_department(state: &mut GameState, id: &str) {
-    if let Some(u) = state.cycle.unlocks.as_mut() {
-        u.departments.insert(id.to_string());
+    if state.cycle.unlocks.is_some() {
+        refresh(state);
     }
-    refresh(state);
 }
 
-fn done(state: &GameState, u: &Unlocks, a: Action) -> i32 {
+fn done(state: &GameState, a: Action) -> i32 {
     let st = &state.cycle.stats;
     match a {
         Action::SurgeHeld => st.surges_held,
         Action::RouteWin => st.route_wins,
         Action::Research => state.cycle.research_count as i32,
-        _ => u.done.get(&a).copied().unwrap_or(0) as i32,
+        _ => state.cycle.done.get(&a).copied().unwrap_or(0) as i32,
     }
 }
 
 /// Progress toward a condition as (have, need), `have` capped at `need`; `None` for `Never`.
-pub fn progress(state: &GameState, u: &Unlocks, c: &Condition) -> Option<(i32, i32)> {
+/// Works without unlock state too (won tiles are only tracked with it).
+pub fn progress(state: &GameState, c: &Condition) -> Option<(i32, i32)> {
     let cy = &state.cycle;
     let flag = |b: bool| (b as i32, 1);
     let (have, need) = match c {
@@ -251,15 +241,17 @@ pub fn progress(state: &GameState, u: &Unlocks, c: &Condition) -> Option<(i32, i
                 .count() as i32,
             *n,
         ),
-        Condition::Done { action, n } => (done(state, u, *action), *n),
-        Condition::WonTile { tile } => flag(u.won.contains(tile)),
-        Condition::Department { id } => flag(u.departments.contains(id)),
+        Condition::Done { action, n } => (done(state, *action), *n),
+        Condition::WonTile { tile } => {
+            flag(cy.unlocks.as_ref().is_some_and(|u| u.won.contains(tile)))
+        }
+        Condition::Department { id } => flag(state.org.departments.contains(id)),
     };
     Some((have.min(need), need))
 }
 
-fn met(state: &GameState, u: &Unlocks, c: &Condition) -> bool {
-    progress(state, u, c).is_some_and(|(h, n)| h >= n)
+fn met(state: &GameState, c: &Condition) -> bool {
+    progress(state, c).is_some_and(|(h, n)| h >= n)
 }
 
 fn after_met(u: &Unlocks, def: &UnlockDef) -> bool {
@@ -289,7 +281,7 @@ pub fn refresh(state: &mut GameState) {
         if u.open.contains(&def.id) || !after_met(&u, def) {
             continue;
         }
-        if met(state, &u, condition(&u, def)) {
+        if met(state, condition(&u, def)) {
             u.open.insert(def.id.clone());
             opened.push(def.id.clone());
         }
@@ -344,7 +336,7 @@ pub fn next(state: &GameState, k: usize) -> Vec<Next> {
         .filter(|d| !u.open.contains(&d.id) && after_met(u, d))
         .filter_map(|d| {
             let c = condition(u, d);
-            let (have, need) = progress(state, u, c)?;
+            let (have, need) = progress(state, c)?;
             Some(Next {
                 id: d.id.clone(),
                 condition: c.clone(),
@@ -354,6 +346,84 @@ pub fn next(state: &GameState, k: usize) -> Vec<Next> {
         })
         .take(k)
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Departments (`departments.json`): founded once, kept by the organisation.
+
+/// Whether a department is listed at all (its `shown_after` unlock is open, or it has none).
+pub fn department_shown(state: &GameState, d: &DepartmentDef) -> bool {
+    d.shown_after.as_deref().is_none_or(|u| is_open(state, u))
+}
+
+/// Progress toward founding a department, as (have, need).
+pub fn department_progress(state: &GameState, d: &DepartmentDef) -> (i32, i32) {
+    progress(state, &d.when).unwrap_or((0, 1))
+}
+
+/// Whether a department could be founded now, and why not.
+pub fn department_check(state: &GameState, id: &str) -> Result<(), String> {
+    let d = content()
+        .departments
+        .get(id)
+        .ok_or_else(|| t!("err.no_department"))?;
+    if state.org.departments.contains(id) {
+        return Err(t!("err.department_founded", name = d.name));
+    }
+    if !department_shown(state, d) {
+        let name = d
+            .shown_after
+            .as_deref()
+            .and_then(|u| content().unlocks.get(u))
+            .map(|u| u.name.clone())
+            .unwrap_or_default();
+        return Err(t!("err.locked", name = name));
+    }
+    let (have, need) = department_progress(state, d);
+    if have < need {
+        return Err(t!("err.department_not_ready", have = have, need = need));
+    }
+    if !state.cycle.resources.covers(&d.cost) {
+        return Err(t!("err.not_enough_materials"));
+    }
+    Ok(())
+}
+
+/// Found a department: pay, keep it on the organisation, open what it grants.
+pub fn found(state: &mut GameState, id: &str) -> Result<(), String> {
+    department_check(state, id)?;
+    let d = content().departments.get(id).expect("checked");
+    state.cycle.resources.sub(&d.cost);
+    state.org.departments.insert(id.to_string());
+    state.event(
+        EventKind::Unlock,
+        txt!(
+            "event.department_founded",
+            name = l10n::name("department", id)
+        ),
+        None,
+        None,
+        None,
+    );
+    for g in &d.grants {
+        grant(state, g);
+    }
+    refresh(state);
+    Ok(())
+}
+
+/// At the start of a cycle: every founded department is in place, free, and its grants are open
+/// (no events: nothing new happened). No-op without unlock state.
+pub fn seat_departments(state: &mut GameState) {
+    let founded = state.org.departments.clone();
+    let Some(u) = state.cycle.unlocks.as_mut() else {
+        return;
+    };
+    for id in founded {
+        if let Some(d) = content().departments.get(&id) {
+            u.open.extend(d.grants.iter().cloned());
+        }
+    }
 }
 
 #[cfg(test)]
@@ -440,23 +510,20 @@ mod tests {
                 squad,
                 route: vec![tile, tile],
             },
+            Command::SetRoute {
+                squad,
+                route: vec![near_hq(&s)],
+            },
             Command::Collapse,
         ] {
             let sys = cmd.system().unwrap();
             let name = &content().unlocks.of_system(sys).unwrap().name;
             assert_eq!(apply(&mut s, &cmd), Err(t!("err.locked", name = name)));
         }
-        // A one-tile route stands in for the manual dispatch and is open.
+        // The manual dispatch is open and counted.
         let near = near_hq(&s);
-        apply(
-            &mut s,
-            &Command::SetRoute {
-                squad,
-                route: vec![near],
-            },
-        )
-        .unwrap();
-        assert_eq!(s.cycle.unlocks.as_ref().unwrap().done[&Action::Dispatch], 1);
+        apply(&mut s, &Command::Dispatch { squad, tile: near }).unwrap();
+        assert_eq!(s.cycle.done[&Action::Dispatch], 1);
     }
 
     #[test]
@@ -465,8 +532,9 @@ mod tests {
         let tiles = city_tiles(&s);
         assert!(!is_open(&s, "build") && !is_open(&s, "hire"));
         let n = next(&s, 2);
-        assert_eq!(n.len(), 1, "hire waits for build, the rest for grants");
+        assert_eq!(n.len(), 2, "hire waits for build, the rest for grants");
         assert_eq!((n[0].id.as_str(), n[0].have, n[0].need), ("build", 0, 3));
+        assert_eq!((n[1].id.as_str(), n[1].have, n[1].need), ("routes", 0, 1));
         own(&mut s, tiles[0]);
         own(&mut s, tiles[1]);
         refresh(&mut s);
@@ -521,10 +589,10 @@ mod tests {
         .unwrap_err();
         let research = &content().unlocks.get("research").unwrap().name;
         assert_eq!(e, t!("err.locked", name = research));
-        // A grant opens a `never` unlock, once.
-        grant(&mut s, "routes");
-        grant(&mut s, "routes");
-        assert!(system_open(&s, System::Routes));
+        // A grant opens an unlock whatever its condition, once.
+        grant(&mut s, "research");
+        grant(&mut s, "research");
+        assert!(system_open(&s, System::Research));
         assert_eq!(unlock_events(&s).len(), 5);
     }
 
@@ -532,7 +600,7 @@ mod tests {
     fn every_condition_kind_reports_progress() {
         let mut s = tutorial(7);
         let tiles = city_tiles(&s);
-        let p = |s: &GameState, c: Condition| progress(s, s.cycle.unlocks.as_ref().unwrap(), &c);
+        let p = |s: &GameState, c: Condition| progress(s, &c);
         assert_eq!(p(&s, Condition::Never), None);
         assert_eq!(p(&s, Condition::Always), Some((1, 1)));
         assert_eq!(p(&s, Condition::OwnTile { tile: tiles[0] }), Some((0, 1)));
@@ -565,7 +633,7 @@ mod tests {
             id: "dispatch_office".into(),
         };
         assert_eq!(p(&s, dept.clone()), Some((0, 1)));
-        found_department(&mut s, "dispatch_office");
+        s.org.departments.insert("dispatch_office".into());
         assert_eq!(p(&s, dept), Some((1, 1)));
     }
 
@@ -574,17 +642,132 @@ mod tests {
         let mut s = tutorial(3);
         let squad = s.cycle.squads[0].id;
         let near = near_hq(&s);
-        apply(
-            &mut s,
-            &Command::SetRoute {
-                squad,
-                route: vec![near],
-            },
-        )
-        .unwrap();
+        apply(&mut s, &Command::Dispatch { squad, tile: near }).unwrap();
         let t = s.time;
         sim::advance(&mut s, t + 6 * 3600);
         assert!(s.cycle.stats.route_wins > 0);
         assert!(s.cycle.unlocks.as_ref().unwrap().won.contains(&near));
+    }
+
+    /// The first squad's next sortie, run to its return.
+    fn dispatch_and_return(s: &mut GameState, tile: u16) {
+        let squad = s.cycle.squads[0].id;
+        apply(s, &Command::Dispatch { squad, tile }).unwrap();
+        let end = s.cycle.squads[0].trip.as_ref().unwrap().end;
+        sim::advance(s, end);
+    }
+
+    #[test]
+    fn a_dispatch_fights_once_and_the_squad_stands_by() {
+        let mut s = tutorial(3);
+        let squad = s.cycle.squads[0].id;
+        let near = near_hq(&s);
+        apply(&mut s, &Command::Dispatch { squad, tile: near }).unwrap();
+        let trip = s.cycle.squads[0].trip.clone().expect("goes right away");
+        assert_eq!(s.cycle.squads[0].route, vec![near]);
+        // Out already: a second order waits for it to come back.
+        assert!(apply(&mut s, &Command::Dispatch { squad, tile: near }).is_err());
+        sim::advance(&mut s, trip.end);
+        let sq = &s.cycle.squads[0];
+        assert!(sq.trip.is_none() && sq.route.is_empty() && !sq.once);
+        assert_eq!(sq.trips, 1);
+        assert_eq!(sq.last.as_ref().unwrap().results.len(), 1);
+        sim::advance(&mut s, trip.end + 600);
+        let sq = &s.cycle.squads[0];
+        assert!(sq.trip.is_none(), "no second trip");
+        assert_eq!(sq.trips, 1);
+        // Same validation as a one-tile route: not away from the territory.
+        let far = city_tiles(&s)
+            .into_iter()
+            .rev()
+            .find(|t| !geom::neighbors(*t).any(|n| s.cycle.tiles[n as usize].owned))
+            .unwrap();
+        let err = apply(&mut s, &Command::Dispatch { squad, tile: far }).unwrap_err();
+        let members: Vec<u32> = s.cycle.members(squad).collect();
+        assert_eq!(
+            Err(err),
+            crate::mech::routes::validate(&s, &members, &[far])
+        );
+    }
+
+    #[test]
+    fn five_dispatches_found_the_dispatch_office_and_open_routes() {
+        let mut s = tutorial(3);
+        let squad = s.cycle.squads[0].id;
+        let near = near_hq(&s);
+        let route = Command::SetRoute {
+            squad,
+            route: vec![near],
+        };
+        let routes = &content().unlocks.get("routes").unwrap().name;
+        assert_eq!(apply(&mut s, &route), Err(t!("err.locked", name = routes)));
+        let found = Command::FoundDepartment {
+            department: "dispatch_office".into(),
+        };
+        for k in 0..5 {
+            assert!(apply(&mut s, &found).is_err(), "after {k} dispatches");
+            dispatch_and_return(&mut s, near);
+        }
+        let d = content().departments.get("dispatch_office").unwrap();
+        assert_eq!(department_progress(&s, d), (5, 5));
+        s.cycle.resources.scrap = d.cost.scrap - 1;
+        assert_eq!(apply(&mut s, &found), Err(t!("err.not_enough_materials")));
+        s.cycle.resources.scrap = d.cost.scrap + 7;
+        apply(&mut s, &found).unwrap();
+        assert_eq!(s.cycle.resources.scrap, 7);
+        assert!(s.org.departments.contains("dispatch_office"));
+        assert!(system_open(&s, System::Routes));
+        assert!(apply(&mut s, &found).is_err(), "only once");
+        apply(&mut s, &route).unwrap();
+        // Manual dispatch stays available once the route is cleared and the squad is back.
+        apply(
+            &mut s,
+            &Command::SetRoute {
+                squad,
+                route: vec![],
+            },
+        )
+        .unwrap();
+        assert!(s.cycle.squads[0].trip.is_none());
+        apply(&mut s, &Command::Dispatch { squad, tile: near }).unwrap();
+    }
+
+    #[test]
+    fn founded_departments_survive_collapse_and_are_in_place_next_cycle() {
+        let mut s = sim::new_map_game(3, 1_000_000, "test", hooks::TUTORIAL_MAP).unwrap();
+        let scrap = s.cycle.resources.scrap;
+        s.org.departments.insert("dispatch_office".into());
+        grant(&mut s, "collapse");
+        apply(&mut s, &Command::Collapse).unwrap();
+        assert!(s.org.departments.contains("dispatch_office"));
+        let before = unlock_events(&s).len();
+        sim::start_map(&mut s, hooks::TUTORIAL_MAP).unwrap();
+        assert!(system_open(&s, System::Routes), "in place at the start");
+        assert_eq!(s.cycle.resources.scrap, scrap, "free");
+        assert!(s.cycle.done.is_empty(), "the counters are per cycle");
+        assert_eq!(unlock_events(&s).len(), before, "nothing new to announce");
+        assert!(next(&s, 2).iter().all(|n| n.id != "routes"));
+    }
+
+    #[test]
+    fn default_games_count_and_found_departments_but_keep_no_unlock_state() {
+        let mut s = sim::new_game(3, 1_000_000, "test");
+        apply(&mut s, &Command::ChooseMap { index: 0 }).unwrap();
+        let near = near_hq(&s);
+        for _ in 0..5 {
+            dispatch_and_return(&mut s, near);
+        }
+        assert_eq!(s.cycle.done[&Action::Dispatch], 5);
+        s.cycle.resources.scrap += 100;
+        apply(
+            &mut s,
+            &Command::FoundDepartment {
+                department: "dispatch_office".into(),
+            },
+        )
+        .unwrap();
+        assert!(s.org.departments.contains("dispatch_office"));
+        assert!(s.cycle.unlocks.is_none(), "still everything open, no state");
+        assert!(unlock_events(&s).len() == 1, "only the founding itself");
     }
 }

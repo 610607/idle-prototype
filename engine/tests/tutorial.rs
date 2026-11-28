@@ -117,9 +117,9 @@ fn the_first_fight_takes_seconds_and_the_tile_can_be_claimed() {
     let mut e = tutorial(0);
     let north = hq(&e.state) - geom::SIZE as u16;
     let sq = e.state.cycle.squads().next().unwrap().id;
-    e.command(&Command::SetRoute {
+    e.command(&Command::Dispatch {
         squad: sq,
-        route: vec![north],
+        tile: north,
     })
     .unwrap();
     let trip = e.state.cycle.squad(sq).unwrap().trip.clone().unwrap();
@@ -237,22 +237,55 @@ fn the_gate_needs_a_second_operative() {
     }
 }
 
-/// Win the fight on `tile` with the first squad (a one-tile route), then claim it.
-fn win_and_claim(e: &mut Engine, tile: u16) {
+/// One manual dispatch of the first squad to `tile`, to its return: it stands by afterwards.
+fn sortie(e: &mut Engine, tile: u16) {
     let sq = e.state.cycle.squads().next().unwrap().id;
-    e.command(&Command::SetRoute {
-        squad: sq,
-        route: vec![tile],
-    })
-    .unwrap();
+    // Wounds carry over (S4) and the lone vanguard would stop for lack of HP after a few fights;
+    // chapter one's content (S7) arranges that. These tests are about dispatching and claiming,
+    // so everyone sets out at full health.
+    let members: Vec<u32> = e.state.cycle.members(sq).collect();
+    for id in members {
+        let f = e.state.op_mut(id).unwrap().fighter_mut();
+        f.damage = 0;
+        f.down = false;
+        f.up_at = 0;
+    }
+    e.command(&Command::Dispatch { squad: sq, tile }).unwrap();
     let t = e.state.time;
     e.advance(t + 6);
+    let s = e.state.cycle.squad(sq).unwrap();
+    assert!(
+        s.trip.is_none() && s.route.is_empty(),
+        "back and standing by"
+    );
+}
+
+/// Win the fight on `tile` with manual dispatches, again until the claim is affordable (every
+/// win brings loot), then claim it at the price the view shows.
+fn win_and_claim(e: &mut Engine, tile: u16) {
+    sortie(e, tile);
     assert!(e.state.cycle.is_claimable(tile), "{}", geom::label(tile));
+    let price = e.view().claim_price.unwrap();
+    while !e.state.cycle.resources.covers(&price) {
+        sortie(e, tile);
+    }
+    let before = e.state.cycle.resources.scrap;
     e.command(&Command::Claim {
         tile,
         garrison: None,
     })
     .unwrap();
+    assert_eq!(before - e.state.cycle.resources.scrap, price.scrap);
+}
+
+fn dispatched(e: &Engine) -> i32 {
+    use idle_engine::data::unlocks::Action;
+    e.state
+        .cycle
+        .done
+        .get(&Action::Dispatch)
+        .copied()
+        .unwrap_or(0) as i32
 }
 
 /// The tutorial map starts with the tutorial unlock profile: only dispatching and claiming;
@@ -265,11 +298,12 @@ fn the_tutorial_opens_systems_as_chapter_one_goes() {
     let v = e.view();
     let open: Vec<System> = System::ALL.into_iter().filter(|s| v.shows(*s)).collect();
     assert_eq!(open, vec![System::Dispatch, System::Claim]);
-    assert_eq!(v.next.len(), 1);
+    assert_eq!(v.next.len(), 2);
     assert_eq!(
         (v.next[0].id.as_str(), v.next[0].have, v.next[0].need),
         ("build", 0, 3)
     );
+    assert_eq!(v.next[1].id, "routes", "founding the dispatch office");
     let h = hq(&e.state);
     let (x, y) = geom::xy(h);
     let at = |dx: i32, dy: i32| geom::idx(x + dx, y + dy).unwrap();
@@ -306,9 +340,10 @@ fn the_tutorial_opens_systems_as_chapter_one_goes() {
     let v = e.view();
     assert!(v.shows(System::Hire) && v.shows(System::Squad));
     assert!(e.allows(&Command::Hire { candidate: 1 }));
-    // Healing waits for a clinic; the rest waits for chapter two (never).
+    // Healing waits for a clinic, routes for the dispatch office; the rest waits for chapter
+    // two (never).
     let next: Vec<&str> = v.next.iter().map(|n| n.id.as_str()).collect();
-    assert_eq!(next, vec!["healing"]);
+    assert_eq!(next, ["healing", "routes"]);
     assert!(!v.shows(System::Research) && !v.shows(System::Routes));
 }
 
@@ -323,6 +358,8 @@ fn the_vanguard_carries_wounds_until_a_clinic_heals_them() {
     let id = e.state.cycle.members(sq).next().unwrap();
     let h = hq(&e.state);
     let north = h - geom::SIZE as u16;
+    // Repeating trips are what this test is about: open routes by hand.
+    idle_engine::mech::unlocks::grant(&mut e.state, "routes");
     e.command(&Command::SetRoute {
         squad: sq,
         route: vec![north],
@@ -399,4 +436,78 @@ fn the_vanguard_carries_wounds_until_a_clinic_heals_them() {
     .unwrap();
     let trip = e.state.cycle.squad(sq).unwrap().trip.clone().unwrap();
     assert!(trip.stopped_at.is_none() && !trip.results.is_empty());
+}
+
+/// Chapter one's opening by hand: five dispatches next to the HQ (each fights once and the
+/// squad stands by), claims, then the dispatch office is founded and the first route is set.
+#[test]
+fn chapter_one_opening_dispatches_founds_the_dispatch_office_and_sets_a_route() {
+    use idle_engine::data::unlocks::System;
+    let mut e = tutorial(0);
+    let sq = e.state.cycle.squads().next().unwrap().id;
+    let h = hq(&e.state);
+    let (x, y) = geom::xy(h);
+    let at = |dx: i32, dy: i32| geom::idx(x + dx, y + dy).unwrap();
+    let route = Command::SetRoute {
+        squad: sq,
+        route: vec![at(0, -1)],
+    };
+    assert!(!e.allows(&route), "routes wait for the dispatch office");
+    let found = Command::FoundDepartment {
+        department: "dispatch_office".into(),
+    };
+    let dept = |e: &mut Engine| {
+        e.view()
+            .departments
+            .into_iter()
+            .find(|d| d.id == "dispatch_office")
+            .unwrap()
+    };
+    assert_eq!(
+        e.view().departments.len(),
+        1,
+        "only the dispatch office in chapter one"
+    );
+    // Claims get dearer: 10, 14, 19 scrap for the first three (balance.json costs).
+    let mut prices = vec![];
+    for tile in [at(0, -1), at(-1, -1), at(-2, -1)] {
+        prices.push(e.view().claim_price.unwrap().scrap);
+        let d = dept(&mut e);
+        assert_eq!((d.have, d.need), (dispatched(&e).min(5), 5));
+        win_and_claim(&mut e, tile);
+    }
+    assert_eq!(prices, [10, 14, 19]);
+    while dispatched(&e) < 5 {
+        assert!(e.command(&found).is_err());
+        sortie(&mut e, at(1, -1));
+    }
+    let cost = content()
+        .departments
+        .get("dispatch_office")
+        .unwrap()
+        .cost
+        .clone();
+    while !e.state.cycle.resources.covers(&cost) {
+        sortie(&mut e, at(1, -1));
+    }
+    let d = dept(&mut e);
+    assert!(d.ready && d.can_found, "{:?}", e.state.cycle.resources);
+    let scrap = e.state.cycle.resources.scrap;
+    e.command(&found).unwrap();
+    assert_eq!(scrap - e.state.cycle.resources.scrap, d.cost.scrap);
+    let v = e.view();
+    assert!(v.shows(System::Routes));
+    assert!(dept(&mut e).founded);
+    assert!(v.next.iter().all(|n| n.id != "routes"));
+    let north = at(0, -2);
+    e.command(&Command::SetRoute {
+        squad: sq,
+        route: vec![at(0, -1), north],
+    })
+    .unwrap();
+    let t = e.state.time;
+    e.advance(t + 30);
+    let s = e.state.cycle.squad(sq).unwrap();
+    assert!(s.trips >= 7, "the route runs by itself: {} trips", s.trips);
+    assert_eq!(s.route, vec![at(0, -1), north]);
 }

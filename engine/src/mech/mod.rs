@@ -5,6 +5,7 @@ pub mod actions;
 pub mod armory;
 pub mod combat;
 pub mod commands;
+pub mod cost;
 pub mod defense;
 pub mod doctrine;
 pub mod economy;

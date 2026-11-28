@@ -50,6 +50,8 @@ pub struct Probes {
     medic: Medic,
     series: strength::Series,
     timeline: payoff::Timeline,
+    /// The hour each department was founded (`dept.founded_h.*`).
+    founded: BTreeMap<String, i64>,
     m: Metrics,
 }
 
@@ -63,6 +65,7 @@ impl Probes {
             medic: Medic::default(),
             series: strength::Series::new(),
             timeline: payoff::Timeline::new(),
+            founded: BTreeMap::new(),
             m: Metrics::new(),
         }
     }
@@ -82,6 +85,9 @@ impl Probes {
         self.economy.hour(e, hour);
         self.timeline.on_hour(e, hour.h, hour.issued);
         self.series.on_hour(e, hour.h, hour.issued.values().sum());
+        for id in &e.state.org.departments {
+            self.founded.entry(id.clone()).or_insert(hour.h);
+        }
         if CHECKPOINTS.contains(&hour.h) {
             self.pace.checkpoint(e, hour.h, self.deepest, &mut self.m);
             self.economy.checkpoint(hour.h, &mut self.m);
@@ -94,6 +100,25 @@ impl Probes {
     /// When the game ends after `hours` hours: every metric, and the payoff timeline.
     pub fn finish(mut self, e: &Engine, hours: i64) -> (Metrics, Vec<payoff::Ev>) {
         let m = &mut self.m;
+        // Departments: when each was founded (missing: never), manual dispatches this cycle.
+        for d in &idle_engine::data::content().departments.departments {
+            m.insert(
+                format!("dept.founded_h.{}", d.id),
+                self.founded.get(&d.id).map(|h| *h as f64),
+            );
+        }
+        let dispatched = e
+            .state
+            .cycle
+            .done
+            .get(&idle_engine::data::unlocks::Action::Dispatch)
+            .copied()
+            .unwrap_or(0);
+        m.insert("dispatch.manual".into(), Some(dispatched as f64));
+        m.insert(
+            "claim.price_final".into(),
+            Some(idle_engine::mech::cost::claim_price(&e.state).scrap as f64),
+        );
         self.economy.finish(e, hours, m);
         self.pace.finish(m);
         self.fights.finish(m);

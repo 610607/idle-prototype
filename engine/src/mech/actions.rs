@@ -41,6 +41,11 @@ pub fn claim(state: &mut GameState, tile: u16) -> ActResult {
     let first = !t.ever_owned;
     let deepest_before = crate::mech::pressure::research_level(&state.cycle);
     let frozen = t.frozen.clone();
+    let price = crate::mech::cost::claim_price(state);
+    if !state.cycle.resources.covers(&price) {
+        return Err(t!("err.claim_cost", scrap = price.scrap));
+    }
+    state.cycle.resources.sub(&price);
     {
         let t = &mut state.cycle.tiles[i];
         t.owned = true;
@@ -190,10 +195,11 @@ pub fn build(state: &mut GameState, tile: u16, facility: Option<&str>) -> ActRes
             if state.cycle.tiles[i].usage.facility() == Some(id) {
                 return Err(t!("err.same_facility"));
             }
-            if !state.cycle.resources.covers(&f.cost) {
+            let price = crate::mech::cost::build_price(state, id).unwrap_or_default();
+            if !state.cycle.resources.covers(&price) {
                 return Err(t!("err.not_enough_materials"));
             }
-            state.cycle.resources.sub(&f.cost);
+            state.cycle.resources.sub(&price);
             state.cycle.tiles[i].usage = TileUse::Facility { id: id.to_string() };
             // Turning homes into military posts costs goodwill right away.
             if was_housing && f.kind == FacilityKind::Defense {
@@ -599,6 +605,33 @@ pub fn set_route(state: &mut GameState, squad: u32, route: &[u16]) -> ActResult 
     let s = state.squad_mut(squad).unwrap();
     s.route = route.to_vec();
     s.trip = None;
+    s.once = false;
+    let now = state.time;
+    crate::mech::routes::try_start(state, squad, now);
+    Ok(())
+}
+
+/// Manual dispatch: fight `tile` once. Validated and planned exactly like a one-tile route (the
+/// squad turns back in front of a fight it would not win); when the trip comes back the route is
+/// cleared and the squad stands by.
+pub fn dispatch(state: &mut GameState, squad: u32, tile: u16) -> ActResult {
+    let s = state.cycle.squad(squad).ok_or_else(|| t!("err.no_squad"))?;
+    if s.trip.is_some() {
+        return Err(t!("err.squad_out", squad = s.name.clone()));
+    }
+    let members: Vec<u32> = state.cycle.members(squad).collect();
+    if members.is_empty() {
+        return Err(t!("err.squad_empty"));
+    }
+    crate::mech::routes::validate(state, &members, &[tile])?;
+    // Like a route, the downed stay home (`mech::medic`); with nobody standing there is no trip.
+    if state.cycle.member_ops(squad).all(|o| o.fighter().down) {
+        let name = state.cycle.squad(squad).map(|s| s.name.clone());
+        return Err(t!("err.squad_all_down", squad = name.unwrap_or_default()));
+    }
+    let s = state.squad_mut(squad).unwrap();
+    s.route = vec![tile];
+    s.once = true;
     let now = state.time;
     crate::mech::routes::try_start(state, squad, now);
     Ok(())

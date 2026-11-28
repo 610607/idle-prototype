@@ -27,6 +27,7 @@
     "districts": [{ "name": 0, "flavor": "street_smart" }],
     "crew": ["vanguard"],
     "unlocks": "tutorial",
+    "costs": { "claim_base": { "scrap": 10 }, "claim_mult_bp": 13500, "build_mult_bp": 15000 },
     "resources": { "scrap": 20, "parts": 0, "intel": 0, "crystal": 0 },
     "pace": {
       "travel_owned": 1,

@@ -430,6 +430,8 @@ fn hands_off_the_medicine_settles_and_the_squad_stops() {
         .rules
         .insert(hooks::RULE_AUTO_MEDICATE.into(), true);
     e.state.org.med_line.reserve = 20;
+    // A route that keeps going out (routes wait for the dispatch office in the tutorial).
+    idle_engine::mech::unlocks::grant(&mut e.state, "routes");
     e.command(&Command::SetRoute {
         squad: sq,
         route: vec![north],
@@ -494,4 +496,25 @@ fn a_garrison_keeps_its_wounds() {
         return;
     }
     panic!("no seed's garrison took a hit");
+}
+
+/// S5 with S4: a dispatch leaves the downed at home, and with nobody standing it is refused.
+#[test]
+fn a_dispatch_with_everyone_down_is_refused() {
+    let mut e = Engine::new_map(0, 1_700_000_000, "test", hooks::TUTORIAL_MAP).unwrap();
+    let sq = squad(&e.state);
+    let north = fronts(&e.state)[0];
+    for id in members(&e.state) {
+        e.state.op_mut(id).unwrap().fighter_mut().down = true;
+    }
+    let err = e
+        .command(&Command::Dispatch {
+            squad: sq,
+            tile: north,
+        })
+        .unwrap_err();
+    let name = e.state.cycle.squad(sq).unwrap().name.clone();
+    assert_eq!(err, idle_engine::t!("err.squad_all_down", squad = name));
+    let s = e.state.cycle.squad(sq).unwrap();
+    assert!(s.trip.is_none() && s.route.is_empty() && !s.once);
 }

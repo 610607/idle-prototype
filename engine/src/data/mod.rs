@@ -1111,6 +1111,8 @@ pub struct Balance {
     pub org_perks: OrgPerks,
     /// Surge forecast (tide table, pending warnings, previews), seconds ahead.
     pub tide_horizon: i64,
+    /// Claim and building prices (`mech::cost`); a fixed map may bring its own.
+    pub costs: maps::Costs,
     /// Full warden: a tile can be claimed, counter-attacks restore towards it.
     pub warden_max: i32,
     /// Talent gain per retired instructor of that profession in the district, x10000.
@@ -1355,6 +1357,8 @@ pub struct Content {
     pub balance: Balance,
     /// The unlock registry (`unlocks.json`).
     pub unlocks: unlocks::Registry,
+    /// Departments (`departments.json`).
+    pub departments: unlocks::Departments,
 }
 
 impl Content {
@@ -1443,6 +1447,10 @@ const FILES: &[(&str, &str)] = &[
         include_str!("../../content/armory_tracks.json"),
     ),
     ("unlocks.json", include_str!("../../content/unlocks.json")),
+    (
+        "departments.json",
+        include_str!("../../content/departments.json"),
+    ),
     ("maps.json", include_str!("../../content/maps.json")),
 ];
 
@@ -1507,6 +1515,7 @@ fn load() -> Content {
     let armory: Vec<ArmoryDef> = parse("armory_tracks.json");
     let defenders: Vec<defs::DefenderDef> = parse("defenders.json");
     let unlocks: unlocks::Registry = parse("unlocks.json");
+    let departments: unlocks::Departments = parse("departments.json");
     let maps: Vec<maps::MapDef> = parse("maps.json");
     let table = defs::table(
         classes
@@ -1556,6 +1565,7 @@ fn load() -> Content {
         def_clashes: table.clashes,
         balance,
         unlocks,
+        departments,
     };
     localize(&mut c);
     c
@@ -1650,6 +1660,10 @@ fn localize(c: &mut Content) {
     for u in &mut c.unlocks.unlocks {
         u.name = text("unlock", &u.id, "name");
         u.hint = text("unlock", &u.id, "hint");
+    }
+    for d in &mut c.departments.departments {
+        d.name = text("department", &d.id, "name");
+        d.desc = text("department", &d.id, "desc");
     }
     for m in &mut c.maps {
         m.name = text("map", &m.id, "name");
@@ -1755,6 +1769,7 @@ pub fn validate() -> Vec<String> {
         c.unlocks
             .check(|f| c.facility(f).is_some(), |r| c.rule(r).is_some()),
     );
+    errs.extend(c.departments.check(&c.unlocks, |f| c.facility(f).is_some()));
     for p in &c.professions {
         if !c.classes.contains_key(&p.class) {
             errs.push(format!("profession {}: unknown class {}", p.id, p.class));

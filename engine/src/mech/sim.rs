@@ -127,6 +127,7 @@ fn empty_cycle(number: u32, previews: Vec<MapPreview>) -> Cycle {
         med_short: false,
         unlocks: None,
         map: None,
+        done: Default::default(),
     }
 }
 
@@ -157,6 +158,7 @@ pub fn new_game(seed: u64, now: i64, device: &str) -> GameState {
             codex: Default::default(),
             tasks_done: vec![],
             med_line: Default::default(),
+            departments: Default::default(),
         },
         cycle: empty_cycle(1, pv),
         events: vec![],
@@ -252,6 +254,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
             last: None,
             trips: 0,
             force: false,
+            once: false,
         });
     }
     for op in ops.iter_mut() {
@@ -267,6 +270,7 @@ pub fn choose_map(state: &mut GameState, index: usize) -> Result<(), String> {
     // Sealed equipment comes back out; filed doctrines start held.
     state.cycle.inventory = state.org.sealed.clone();
     state.cycle.doctrines = state.org.archive.clone();
+    crate::mech::unlocks::seat_departments(state);
     let n = state.cycle.number;
     state.event(
         EventKind::Info,
@@ -306,6 +310,8 @@ pub fn start_map(state: &mut GameState, map: &str) -> Result<(), String> {
     cy.modifier = String::new();
     cy.map = Some(m.id.clone());
     cy.unlocks = crate::mech::unlocks::start(&m.unlocks);
+    crate::mech::unlocks::seat_departments(state);
+    let cy = &mut state.cycle;
     cy.started_at = state.time;
     cy.tiles = g.tiles;
     cy.districts = g.districts;
@@ -349,6 +355,7 @@ pub fn start_map(state: &mut GameState, map: &str) -> Result<(), String> {
         last: None,
         trips: 0,
         force: false,
+        once: false,
     }];
     state.cycle.roster = ops.iter().map(|o| o.id).collect();
     for op in ops {
@@ -618,7 +625,7 @@ fn self_sufficiency_tick(state: &mut GameState) {
     }
 }
 
-fn run_rules(state: &mut GameState) {
+pub(crate) fn run_rules(state: &mut GameState) {
     let rules = state.org.rules.clone();
     if rules
         .get(hooks::RULE_AUTO_MEDICATE)
@@ -629,6 +636,14 @@ fn run_rules(state: &mut GameState) {
     }
     if rules.get(hooks::RULE_AUTO_CLAIM).copied().unwrap_or(false) {
         for tile in actions::claimable_tiles(state) {
+            // Claims cost (`mech::cost`): nothing to weigh while the next one is unaffordable.
+            if !state
+                .cycle
+                .resources
+                .covers(&crate::mech::cost::claim_price(state))
+            {
+                break;
+            }
             let t = &state.cycle.tiles[tile as usize];
             if t.terrain != Terrain::City {
                 continue;
