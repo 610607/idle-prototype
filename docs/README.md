@@ -14,6 +14,7 @@
 
 ## 工程规范与测试
 
+- [architecture.md](architecture.md)：引擎分层——本地化 → 引擎 → 数据 → 机制 → 客户端五层，每层放什么、什么时候改、新词条和新机制各改哪里；`tests/layers.rs` 拦往上引用。图标的格式和画法见 [../icons/README.md](../icons/README.md)。本仓库直接写成。
 - [i18n.md](i18n.md)：文字与图像资源规范——玩家看得到的文字只放在 `locales/`，内容数据只放 id，图标按 id 引用，存档不存成品句子；棘轮测试和迁移进度。本仓库直接写成。
 - [llm-playtest.md](llm-playtest.md)：LLM 试玩——文字版 `agent_cli` 让 Haiku 和脚本玩家并排玩 72 小时，研究组对照组、结果和新玩家看不懂的地方。本仓库直接写成。
 
@@ -34,4 +35,4 @@
 - [research/commercial-design.md](research/commercial-design.md)：商业挂机游戏的设计与爽点。原文档：[商业挂机游戏调研：设计与爽点](https://claude.ai/artifact/JfdF2fb3JqAx4s52vScEii)
 - [research/prestige-design.md](research/prestige-design.md)：轮回（prestige）重置与保留的设计。原文档：[轮回设计调研](https://claude.ai/artifact/6HNysvA7QmhUMKHvZViEKU)
 
-导出日期：2026-11-26。
+原文档导出日期：2026-11-26；“本仓库直接写成”的文件随代码一起更新。
